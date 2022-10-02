@@ -230,6 +230,14 @@ class GameBoard(gym.Env):
         return self.board, reward, done, {}
 
     def render(self, mode="human"):
+        """
+        Render game board.
+
+        Parameters
+        ----------
+        mode: str
+            Mode
+        """
         if mode == "human":
             for row in self.board.tolist():
                 print(" \t".join(map(str, row)))
