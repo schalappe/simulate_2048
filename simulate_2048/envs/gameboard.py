@@ -2,41 +2,33 @@
 """
 Classe décrivant le jeu 2048 pour un agent
 """
+from typing import Any, List, Tuple
+
 import gym
 import numpy as np
 from gym import spaces
 from gym.utils import seeding
-from typing import Tuple, Optional, Union, List, Any
 
 
 class GameBoard(gym.Env):
     """
     2048 game environment.
     """
+
     # ##: Available actions.
     LEFT = 0
     UP = 1
     RIGHT = 2
     DOWN = 3
 
-    ACTIONS_STRING = {
-        LEFT: 'left',
-        UP: 'up',
-        RIGHT: 'right',
-        DOWN: 'down'
-    }
+    ACTIONS_STRING = {LEFT: "left", UP: "up", RIGHT: "right", DOWN: "down"}
 
     # ##: All Actions.
     ACTIONS = [LEFT, UP, RIGHT, DOWN]
 
     def __init__(self, size: int = 4):
         self.size = size  # ##: The size of the square grid.
-        self.observation_space = spaces.Box(
-            low=2,
-            high=2 ** 32,
-            shape=(size, size),
-            dtype=np.int64
-        )
+        self.observation_space = spaces.Box(low=2, high=2**32, shape=(size, size), dtype=np.int64)
         self.action_space = spaces.Discrete(4)  # ##: 4 actions possible.
 
         # ## ----> Initialize variables.
@@ -61,11 +53,7 @@ class GameBoard(gym.Env):
         list
             List of chosen value
         """
-        return self.random.choice(
-            [2, 4],
-            size=number_cell,
-            p=[0.9, 0.1]
-        ).tolist()
+        return self.random.choice([2, 4], size=number_cell, p=[0.9, 0.1]).tolist()
 
     def __random_position(self, number_cell: int) -> Tuple:
         """
@@ -82,11 +70,7 @@ class GameBoard(gym.Env):
             List of chosen cells
         """
         available_cells = np.argwhere(self.board == 0)
-        chosen_cells = self.random.choice(
-            len(available_cells),
-            size=number_cell,
-            replace=False
-        )
+        chosen_cells = self.random.choice(len(available_cells), size=number_cell, replace=False)
         cell_positions = available_cells[chosen_cells]
         return tuple(map(tuple, cell_positions))
 
@@ -143,7 +127,7 @@ class GameBoard(gym.Env):
             row = np.extract(row > 0, row)
             _score, _result_row = self.__merge(row)
             score += _score
-            row = np.pad(np.array(_result_row), (0, self.size - len(_result_row)), 'constant', constant_values=(0,))
+            row = np.pad(np.array(_result_row), (0, self.size - len(_result_row)), "constant", constant_values=(0,))
             result.append(row)
 
         return score, np.array(result, dtype=np.int64)
@@ -191,6 +175,9 @@ class GameBoard(gym.Env):
         return True
 
     def seed(self, seed=None):
+        """
+        Generate a random number generator
+        """
         self.random, seed = seeding.np_random(seed)
         return seed
 
@@ -232,7 +219,7 @@ class GameBoard(gym.Env):
 
         # ## ----> Fill new cell only if the board has evolved.
         if not np.array_equal(rotated_board, updated_board):
-            self.board = np.rot90(updated_board, k=4-action)
+            self.board = np.rot90(updated_board, k=4 - action)
 
             # ## ----> Fill randomly one cell
             self._fill_cells(number_tile=1)
@@ -242,8 +229,7 @@ class GameBoard(gym.Env):
 
         return self.board, reward, done, {}
 
-    def render(self, mode='human'):
-        if mode == 'human':
+    def render(self, mode="human"):
+        if mode == "human":
             for row in self.board.tolist():
-                print(' \t'.join(map(str, row)))
-
+                print(" \t".join(map(str, row)))
