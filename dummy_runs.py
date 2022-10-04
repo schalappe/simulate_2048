@@ -1,8 +1,13 @@
-import simulate_2048
+# -*- coding: utf-8 -*-
+"""
+Play 2048 Game
+"""
 import gym
 
-if __name__ == '__main__':
-    env = gym.make('GameBoard')
+import simulate_2048
+
+if __name__ == "__main__":
+    env = gym.make("GameBoard")
     env.seed()
 
     print("New game:")
@@ -20,4 +25,4 @@ if __name__ == '__main__':
         print('Next Action: "{}"\n\nReward: {}'.format(simulate_2048.GameBoard.ACTIONS_STRING[action], reward))
         env.render()
 
-    print('\nTotal Moves: {}'.format(moves))
+    print("\nTotal Moves: {}".format(moves))

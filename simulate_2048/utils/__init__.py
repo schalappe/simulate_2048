@@ -1,2 +1,2 @@
 """..."""
-from .windows import Window
+from .windows import WindowBoard

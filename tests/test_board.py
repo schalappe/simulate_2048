@@ -3,42 +3,19 @@
 Set of test for GameBoard
 """
 import unittest
+
 import numpy as np
+
 from simulate_2048 import GameBoard
 
 
 class GameBoardTest(unittest.TestCase):
     # ## ----> Board and update board.
-    BOARD = np.array([
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-        [0, 0, 0, 4],
-        [2, 0, 4, 2]
-    ])
-    UP_BOARD = np.array([
-        [2, 0, 4, 4],
-        [0, 0, 0, 2],
-        [0, 0, 0, 0],
-        [0, 0, 0, 0]
-    ])
-    DOWN_BOARD = np.array([
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-        [0, 0, 0, 4],
-        [2, 0, 4, 2]
-    ])
-    LEFT_BOARD = np.array([
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-        [4, 0, 0, 0],
-        [2, 4, 2, 0]
-    ])
-    RIGHT_BOARD = np.array([
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-        [0, 0, 0, 4],
-        [0, 2, 4, 2]
-    ])
+    BOARD = np.array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 4], [2, 0, 4, 2]])
+    UP_BOARD = np.array([[2, 0, 4, 4], [0, 0, 0, 2], [0, 0, 0, 0], [0, 0, 0, 0]])
+    DOWN_BOARD = np.array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 4], [2, 0, 4, 2]])
+    LEFT_BOARD = np.array([[0, 0, 0, 0], [0, 0, 0, 0], [4, 0, 0, 0], [2, 4, 2, 0]])
+    RIGHT_BOARD = np.array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 4], [0, 2, 4, 2]])
 
     # ## ----> Actions possible.
     LEFT = 0
@@ -96,11 +73,11 @@ class GameBoardTest(unittest.TestCase):
             # ## ----> Applied action.
             rotated_board = np.rot90(self.BOARD, k=action)
             _, updated_board = game._slide_and_merge(rotated_board)
-            next_board = np.rot90(updated_board, k=4-action)
+            next_board = np.rot90(updated_board, k=4 - action)
 
             # ## ----> Compare boards.
             self.assertTrue(np.array_equal(expected_board, next_board))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

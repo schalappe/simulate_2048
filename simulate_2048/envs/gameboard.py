@@ -32,7 +32,7 @@ class GameBoard(gym.Env):
         self.action_space = spaces.Discrete(4)  # ##: 4 actions possible.
 
         # ## ----> Initialize variables.
-        self.board = None
+        self._board = None
         self.random = None
 
         # ## ----> Reset game.
@@ -147,7 +147,7 @@ class GameBoard(gym.Env):
             cells = self.__random_position(number_cell=number_tile)
 
             for cell, value in zip(cells, values):
-                self.board[cell] = value
+                self._board[cell] = value
 
     def _is_done(self) -> bool:
         """
@@ -161,7 +161,7 @@ class GameBoard(gym.Env):
         """
         board = self.board.copy()
 
-        # ## ----> Check if all cells if filled.
+        # ## ----> Check if all cells is filled.
         if not board.all():
             return False
 
@@ -194,7 +194,7 @@ class GameBoard(gym.Env):
         ndarray
             New game board
         """
-        self.board = np.zeros(shape=[self.size, self.size], dtype=np.int64)
+        self._board = np.zeros(shape=[self.size, self.size], dtype=np.int64)
         self._fill_cells(number_tile=2)
 
         return self.board
@@ -219,7 +219,7 @@ class GameBoard(gym.Env):
 
         # ## ----> Fill new cell only if the board has evolved.
         if not np.array_equal(rotated_board, updated_board):
-            self.board = np.rot90(updated_board, k=4 - action)
+            self._board = np.rot90(updated_board, k=4 - action)
 
             # ## ----> Fill randomly one cell
             self._fill_cells(number_tile=1)
@@ -241,3 +241,15 @@ class GameBoard(gym.Env):
         if mode == "human":
             for row in self.board.tolist():
                 print(" \t".join(map(str, row)))
+
+    @property
+    def board(self):
+        """
+        Return game board.
+
+        Returns
+        -------
+        np.ndarray:
+            Game board
+        """
+        return self._board
