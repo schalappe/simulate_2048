@@ -181,7 +181,7 @@ class GameBoard(gym.Env):
         self.random, seed = seeding.np_random(seed)
         return seed
 
-    def reset(self, **kwargs) -> np.ndarray:
+    def reset(self, **kwargs) -> Tuple:
         """
         Initialize empty board then add randomly two tiles.
 
@@ -191,13 +191,13 @@ class GameBoard(gym.Env):
 
         Returns
         -------
-        ndarray
-            New game board
+        Tuple
+            New game board and informations
         """
         self._board = np.zeros(shape=[self.size, self.size], dtype=np.int64)
         self._fill_cells(number_tile=2)
 
-        return self.board
+        return self.board, {}
 
     def step(self, action: int) -> Tuple[Any, int, bool, dict]:
         """
