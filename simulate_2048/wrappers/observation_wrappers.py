@@ -11,6 +11,7 @@ class FlattenObservation(gym.ObservationWrapper):
     """
     Class for flatten observation.
     """
+
     def __init__(self, env):
         super().__init__(env)
         self.observation_space = spaces.Box(low=2, high=2**32, shape=(env.size * env.size,), dtype=np.int64)
@@ -36,6 +37,7 @@ class LogObservation(gym.ObservationWrapper):
     """
     Class for simplifying observation.
     """
+
     def __init__(self, env):
         super().__init__(env)
         self.observation_space = spaces.Box(low=1, high=32, shape=(env.size, env.size), dtype=np.int64)
@@ -64,6 +66,7 @@ class FlattenLogObservation(gym.ObservationWrapper):
     """
     Class for flatten and simplifying the observation.
     """
+
     def __init__(self, env):
         super().__init__(env)
         self.observation_space = spaces.Box(low=1, high=32, shape=(env.size * env.size,), dtype=np.int64)
