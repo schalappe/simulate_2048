@@ -2,7 +2,7 @@
 """
 Classe décrivant le jeu 2048 pour un agent
 """
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Union, Optional
 
 import gym
 import numpy as np
@@ -26,18 +26,41 @@ class GameBoard(gym.Env):
     # ##: All Actions.
     ACTIONS = [LEFT, UP, RIGHT, DOWN]
 
-    def __init__(self, size: int = 4):
+    # ##: Availabe rewards.
+    SUM_REWARD = "sum"
+    MAX_REWARD = "max"
+    AFFINE_REWARD = "affine"
+
+    # ##: All rewards.
+    REWARDS = [SUM_REWARD, MAX_REWARD, AFFINE_REWARD]
+
+    def __init__(self, size: int = 4, type_reward: str = "sum"):
         self.size = size  # ##: The size of the square grid.
         self.observation_space = spaces.Box(low=2, high=2**32, shape=(size, size), dtype=np.int64)
         self.action_space = spaces.Discrete(4)  # ##: 4 actions possible.
 
         # ## ----> Initialize variables.
         self._board = None
+        self._old_board = None
         self.random = None
+        self.__initialize_reward(type_reward)
 
         # ## ----> Reset game.
         self.seed()
         self.reset()
+
+    def __initialize_reward(self, type_reward: str):
+        """
+        Initialize the type of reward.
+
+        Parameters
+        ----------
+        type_reward: str
+            Type of reward to initialize
+        """
+        if not isinstance(type_reward, str) or type_reward not in self.REWARDS:
+            raise ValueError(f"{type_reward} is not a valid reward.")
+        self.type_reward = type_reward
 
     def __random_cell_value(self, number_cell: int) -> List:
         """
@@ -89,12 +112,12 @@ class GameBoard(gym.Env):
         tuple
             score and new column
         """
-        result, score = [], 0
+        result, score = [], []
 
         i = 1
         while i < len(column):
             if column[i] == column[i - 1]:
-                score += column[i] + column[i - 1]
+                score.append(column[i] + column[i - 1])
                 result.append(column[i] + column[i - 1])
                 i += 2
             else:
@@ -105,6 +128,28 @@ class GameBoard(gym.Env):
             result.append(column[i - 1])
 
         return score, result
+
+    def __compute_reward(self, merged_value: tuple) -> Optional[int]:
+        """
+        Compute the reward to return.
+
+        Parameters
+        ----------
+        merged_value: tuple
+            List of all merged values
+
+        Returns
+        -------
+        int
+            computed reward
+        """
+        if self.type_reward == self.SUM_REWARD:
+            return sum(merged_value)
+        if self.type_reward == self.MAX_REWARD:
+            return max(merged_value) if merged_value else 0
+        if self.type_reward == self.AFFINE_REWARD:
+            return 10 * np.max(self._old_board) + sum(merged_value)
+        return None
 
     def _slide_and_merge(self, board: np.ndarray) -> Tuple:
         """
@@ -120,13 +165,13 @@ class GameBoard(gym.Env):
         tuple
             score and next board
         """
-        result, score = [], 0
+        result, score = [], []
 
         # ## ----> Loop over board
         for row in board:
             row = np.extract(row > 0, row)
             _score, _result_row = self.__merge(row)
-            score += _score
+            score.extend(_score)
             row = np.pad(np.array(_result_row), (0, self.size - len(_result_row)), "constant", constant_values=(0,))
             result.append(row)
 
@@ -181,7 +226,7 @@ class GameBoard(gym.Env):
         self.random, seed = seeding.np_random(seed)
         return seed
 
-    def reset(self, **kwargs) -> np.ndarray:
+    def reset(self, **kwargs) -> Tuple:
         """
         Initialize empty board then add randomly two tiles.
 
@@ -191,15 +236,16 @@ class GameBoard(gym.Env):
 
         Returns
         -------
-        ndarray
-            New game board
+        Tuple
+            New game board and information
         """
         self._board = np.zeros(shape=[self.size, self.size], dtype=np.int64)
+        self._old_board = None
         self._fill_cells(number_tile=2)
 
-        return self.board
+        return self.board, {}
 
-    def step(self, action: int) -> Tuple[Any, int, bool, dict]:
+    def step(self, action: int) -> Tuple[Any, Union[int, Tuple], bool, bool, dict]:
         """
         Applied the selected action to the board.
 
@@ -213,21 +259,27 @@ class GameBoard(gym.Env):
         tuple
             Update board, reward, state of the game and info
         """
-        # ## ----> Applied action
-        rotated_board = np.rot90(self.board, k=action)
-        reward, updated_board = self._slide_and_merge(rotated_board)
+        reward = -10
+
+        # ## ----> Save old board.
+        self._old_board = self._board.copy()
+
+        # ## ----> Applied action.
+        rotated_board = np.rot90(self._board, k=action)
+        score, updated_board = self._slide_and_merge(rotated_board)
 
         # ## ----> Fill new cell only if the board has evolved.
         if not np.array_equal(rotated_board, updated_board):
             self._board = np.rot90(updated_board, k=4 - action)
+            reward = self.__compute_reward(score)
 
-            # ## ----> Fill randomly one cell
+            # ## ----> Fill randomly one cell.
             self._fill_cells(number_tile=1)
 
-        # ## ----> Check if game is finished
+        # ## ----> Check if game is finished.
         done = self._is_done()
 
-        return self.board, reward, done, {}
+        return self.board, reward, done, False, {}
 
     def render(self, mode="human"):
         """
@@ -239,11 +291,11 @@ class GameBoard(gym.Env):
             Mode
         """
         if mode == "human":
-            for row in self.board.tolist():
+            for row in self._board.tolist():
                 print(" \t".join(map(str, row)))
 
     @property
-    def board(self):
+    def board(self) -> np.ndarray:
         """
         Return game board.
 
@@ -253,3 +305,27 @@ class GameBoard(gym.Env):
             Game board
         """
         return self._board
+
+    @board.setter
+    def board(self, board: np.ndarray):
+        """
+        Change the current game board.
+
+        Parameters
+        ----------
+        board: np.ndarray
+            New game board
+        """
+        self._board = board
+
+    @property
+    def old_board(self) -> np.ndarray:
+        """
+        Return the old board.
+
+        Returns
+        -------
+        np.ndarray:
+            Old game board
+        """
+        return self._old_board
