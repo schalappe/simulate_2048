@@ -60,7 +60,7 @@ def step(envs: gym.Env, window: WindowBoard, action: int):
     action: int
         Action to apply
     """
-    obs, reward, terminated, info = envs.step(action)
+    obs, reward, terminated, _, info = envs.step(action)
     print(f"reward={reward:.2f}")
 
     if terminated:
