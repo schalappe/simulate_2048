@@ -6,8 +6,8 @@ from os.path import abspath, dirname, join
 
 import gym
 from module import Agent
-from simulate_2048 import GameBoard
 
+from simulate_2048 import GameBoard
 
 STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "models")
 

@@ -4,10 +4,10 @@ Proximal Policy Agent.
 """
 from numpy import ndarray
 
-from .agent import TrainingAgent
-from reinforce.addons import AgentConfigurationPPO, GCAdam
-
+from reinforce.addons import AgentConfigurationPPO
 from reinforce.models import dense_policy
+
+from .agent import TrainingAgent
 
 
 class ReplayBuffer:

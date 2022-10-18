@@ -20,7 +20,7 @@ def dense_hidden_layers(head: tf.keras.layers.Layer, units: int) -> tf.keras.lay
 
     Returns
     -------
-    Layer:
+    Layer
         New layer
     """
     block = tf.keras.layers.Dense(units=units, kernel_initializer="he_uniform", activation="relu")(head)
@@ -29,6 +29,25 @@ def dense_hidden_layers(head: tf.keras.layers.Layer, units: int) -> tf.keras.lay
 
 
 def conv_hidden_layers(head: tf.keras.layers.Layer, filters: int, kernel: int, strides: int) -> tf.keras.layers.Layer:
+    """
+    Add convolution layer.
+
+    Parameters
+    ----------
+    head: Layer
+        Previous layer
+    filters: int
+        Filter's size
+    kernel: int
+        Kernel's size
+    strides: int
+        Stride's size
+
+    Returns
+    -------
+    Layer
+        New layer
+    """
     block = tf.keras.layers.Conv2D(filters=filters, kernel_size=kernel, strides=strides, padding="same")(head)
     block = tf.keras.layers.BatchNormalization()(block)
     block = tf.keras.layers.ReLU()(block)
@@ -46,7 +65,7 @@ def dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
 
     Returns
     -------
-    Model:
+    Model
         New model
     """
     # ## ----> Create input layer.
@@ -64,6 +83,19 @@ def dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
 
 
 def conv_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
+    """
+    Create Q-Network for Q-Learning.
+
+    Parameters
+    ----------
+    input_size: list or tuple
+        Input dimension
+
+    Returns
+    -------
+    Model
+        New model
+    """
 
     # ## ----> Create input layer.
     inputs = tf.keras.layers.Input(shape=input_size)

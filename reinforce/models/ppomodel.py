@@ -2,7 +2,7 @@
 """
 Set of function for Proximal Policy Optimization
 """
-from typing import Union, Tuple, Any
+from typing import Any, Tuple, Union
 
 import tensorflow as tf
 
@@ -65,4 +65,3 @@ def dense_policy(input_size: Union[list or tuple]) -> Tuple[tf.keras.Model, tf.k
     critic = tf.keras.Model(inputs=inputs, outputs=tf.squeeze(output_critic, axis=1))
 
     return actor, critic
-

@@ -2,16 +2,11 @@
 """
 Proximal Policy Optimization Algorithm.
 """
-import pickle
-from collections import Counter
 from itertools import count
-from os.path import join
 
 import gym
-from numpy import max as max_array_values
-from numpy import sum as sum_array_values
 
-from reinforce.addons import Experience, TrainingConfigurationPPO
+from reinforce.addons import TrainingConfigurationPPO
 from reinforce.module import AgentPPO
 from simulate_2048 import LogObservation
 
@@ -49,4 +44,3 @@ class PPOTraining:
             for move in count():
                 # ## ----> Select and perform action.
                 logits, action = self._agent.select_action(board)
-

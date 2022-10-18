@@ -2,63 +2,50 @@
 """
 Q-Learning Agent.
 """
-import math
 import random
-from collections import deque
 from os.path import join
 
 import numpy as np
 import tensorflow as tf
 from numpy import ndarray
+from numpy.random import choice
 
-from reinforce.addons import AgentConfigurationDQN, Experience, GCAdam
+from reinforce.addons import AgentConfigurationDQN, Experience
 from reinforce.models import conv_learning, dense_learning
 
-from .agent import TrainingAgent
+from .agent import Agent, TrainingAgent
 
 
-class ReplayMemory:
+class AgentDQN(Agent):
     """
-    Memory buffer for Experience Replay.
+    Agent to play 2048 Game.
     """
-
-    def __init__(self, buffer_length: int):
-        self.memory = deque(maxlen=buffer_length)
-
-    def __len__(self) -> int:
-        return len(self.memory)
-
-    def append(self, experience: Experience):
+    def select_action(self, state: ndarray) -> int:
         """
-        Add experience to the buffer.
+        Select an action given the state.
 
         Parameters
         ----------
-        experience: Experience
-            Experience to add to the buffer
-        """
-        self.memory.append(experience)
-
-    def sample(self, batch_size: int) -> list:
-        """
-        Sample a batch of experiences from the buffer.
-
-        Parameters
-        ----------
-        batch_size: int
-            Number of experiences to randomly select
+        state: ndarray
+            State of the game
 
         Returns
         -------
-        list
-            List of selected experiences
+        int
+            Selected action
         """
-        # ## ----> Choose randomly indice.
-        indices = np.random.choice(len(self.memory), batch_size, replace=False)
-        return [self.memory[indice] for indice in indices]
+        if random.random() < self.epsilon:
+            return choice(4)
+        state_tensor = tf.expand_dims(tf.convert_to_tensor(tf.reshape(state, (4, 4, 1))), 0)
+        action_prob = self.policy(state_tensor, training=False)
+        action = tf.argmax(action_prob[0]).numpy()
+        return action
 
 
-class AgentDQN(TrainingAgent):
+class TrainingAgentDQN(TrainingAgent):
+    """
+    Train an agent to play 2048 Game with DQN algorithm.
+    """
     def __initialize_model(self, type_model: str):
         if type_model == "conv":
             func_model = conv_learning
@@ -68,39 +55,67 @@ class AgentDQN(TrainingAgent):
         # ## ----> Create networks
         self._policy = func_model(input_size=(4, 4, 1))
         self._target = func_model(input_size=(4, 4, 1))
+        self.update_target()
 
-    def __initialize_optimizer(self, learning_rate: float, batch_size: int):
-        self._batch_size = batch_size
-        self._optimizer = GCAdam(learning_rate=learning_rate)
+    def __initialize_optimizer(self, learning_rate: float):
+        self._optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
         self._loss_function = tf.keras.losses.Huber()
+        self._policy.compile(optimizer=self._optimizer, loss_weights=self._loss_function)
 
     def __initialize_dqn_parameters(self, config: AgentConfigurationDQN):
-        self._step_done = 0
         self._store_model = config.store_model
         self._discount = config.discount
-        self._memory = ReplayMemory(config.memory_size)
-        self._epsilon = {"min": config.epsilon_min, "max": config.epsilon_max, "decay": config.epsilon_decay}
+        self._epsilon = {"min": config.epsilon_min, "value": config.epsilon_max, "decay": config.epsilon_decay}
 
     def _initialize_agent(self, config: AgentConfigurationDQN, observation_type: str, reward_type: str):
+        """
+        Initialize agent.
+
+        Parameters
+        ----------
+        config: AgentConfiguration
+            Configuration for agent
+        observation_type: str
+            Type of observation give by the environment
+        reward_type: str
+            Type of reward give by the environment.
+        """
         # ## ----> Initialization network.
         self.__initialize_model(config.type_model)
 
         # ## ----> Initialization optimizer.
-        self.__initialize_optimizer(config.learning_rate, config.batch_size)
+        self.__initialize_optimizer(config.learning_rate)
 
         # ## ----> Initialization DQN parameters.
         self.__initialize_dqn_parameters(config)
         self._name = "_".join([config.type_model, observation_type, reward_type])
 
+    def reduce_epsilon(self):
+        """
+        Reduce the epsilon value.
+        """
+        epsilon = self._epsilon["value"] * self._epsilon["decay"]
+        self._epsilon["value"] = max(self._epsilon["min"], epsilon)
+
     def select_action(self, state: ndarray) -> int:
-        # ## ----> Compute the threshold for choosing random action.
-        thresh = self._epsilon["min"] + (self._epsilon["max"] - self._epsilon["min"]) * math.exp(
-            -1.0 * (self._step_done / self._epsilon["decay"])
-        )
-        self._step_done += 1
+        """
+        Select an action given the state.
+
+        Parameters
+        ----------
+        state: ndarray
+            State of the game
+
+        Returns
+        -------
+        int
+            Selected action
+        """
+        # ## ----> Reduce epsilon.
+        self.reduce_epsilon()
 
         # ## ----> Choose a random action.
-        if random.random() < thresh:
+        if random.random() < self._epsilon["value"]:
             return np.random.choice(4)
 
         # ## ----> Choose an optimal action.
@@ -110,26 +125,21 @@ class AgentDQN(TrainingAgent):
         return tf.argmax(action_prob[0]).numpy()
 
     def save_model(self):
-        self._policy.compile(optimizer=self._optimizer, loss_weights=self._loss_function)
+        """
+        Save policy model.
+        """
         self._policy.save(join(self._store_model, f"dqn_model_{self._name}"))
 
-    def remember(self, experience: Experience):
-        self._memory.append(experience)
-
     def update_target(self):
+        """
+        Update the weight of target model with the weight of policy model.
+        """
         self._target.set_weights(self._policy.get_weights())
 
-    def optimize_model(self):
+    def optimize_model(self, sample: list):
         """
         Optimize the policy network.
         """
-        # ## ----> Train if enough data.
-        if len(self._memory) <= self._batch_size:
-            return
-
-        # ## ----> Get sample for training.
-        sample = self._memory.sample(self._batch_size)
-
         # ## ----> Unpack training sample.
         batch = Experience(*zip(*sample))
         state_sample = np.array(list(batch.state))
