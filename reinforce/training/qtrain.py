@@ -63,8 +63,8 @@ class DQNTraining:
     """
 
     def __init__(
-        self,
-        config: TrainingConfigurationDQN,
+            self,
+            config: TrainingConfigurationDQN,
     ):
         # ## ----> Create game.
         self.__initialize_game(config.observation_type, config.reward_type)

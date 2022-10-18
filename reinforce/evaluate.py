@@ -47,12 +47,12 @@ if __name__ == "__main__":
                 board = next_board
 
                 # ## ----> store max element.
-                print(f"Game: {i+1} - Score: {max_array_values(board)} - move: {t}", end="\r")
+                print(f"Game: {i + 1} - Score: {max_array_values(board)} - move: {t}", end="\r")
                 if done:
                     score.append(max_array_values(game.board))
                     break
 
-            print(f"Game: {i+1} is finished, score egal {score[-1]}.")
+            print(f"Game: {i + 1} is finished, score egal {score[-1]}.")
 
         # ## ----> Print score.
         print("Evaluation is finished.")

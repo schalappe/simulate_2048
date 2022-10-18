@@ -20,6 +20,7 @@ class AgentDQN(Agent):
     """
     Agent to play 2048 Game.
     """
+
     def select_action(self, state: ndarray) -> int:
         """
         Select an action given the state.
@@ -46,6 +47,7 @@ class TrainingAgentDQN(TrainingAgent):
     """
     Train an agent to play 2048 Game with DQN algorithm.
     """
+
     def __initialize_model(self, type_model: str):
         if type_model == "conv":
             func_model = conv_learning

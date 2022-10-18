@@ -9,7 +9,6 @@ from training import DQNTraining
 
 STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "zoo")
 
-
 if __name__ == "__main__":
     import argparse
 
