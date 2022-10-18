@@ -1,2 +1,4 @@
 """..."""
-from .q_learn import ConfigurationDQN, DQNTraining
+from .agent import Agent, TrainingAgent
+from .qlearn import AgentDQN
+from .ppoagent import AgentPPO
