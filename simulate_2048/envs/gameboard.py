@@ -148,8 +148,33 @@ class GameBoard(gym.Env):
         if self.type_reward == self.MAX_REWARD:
             return max(merged_value) if merged_value else 0
         if self.type_reward == self.AFFINE_REWARD:
-            return 10 * np.max(self._old_board) + sum(merged_value)
+            return 2 * np.max(self._old_board) + sum(merged_value)
         return None
+
+    @classmethod
+    def __compute_penalties(cls, board: np.ndarray) -> float:
+        """
+        Compute penalties for moved cells.
+
+        Parameters
+        ----------
+        board: np.ndarray
+            Game board
+
+        Returns
+        -------
+        float
+            Penalties
+        """
+        penalties = .0
+        for row in board:
+            idx = 0
+            for iv, v in enumerate(row):
+                if v != 0:
+                    if iv != idx:
+                        penalties += .1 * v
+                    idx += 1
+        return penalties
 
     def _slide_and_merge(self, board: np.ndarray) -> Tuple:
         """
@@ -266,12 +291,13 @@ class GameBoard(gym.Env):
 
         # ## ----> Applied action.
         rotated_board = np.rot90(self._board, k=action)
+        penalty = self.__compute_penalties(rotated_board)
         score, updated_board = self._slide_and_merge(rotated_board)
 
         # ## ----> Fill new cell only if the board has evolved.
         if not np.array_equal(rotated_board, updated_board):
             self._board = np.rot90(updated_board, k=4 - action)
-            reward = self.__compute_reward(score)
+            reward = self.__compute_reward(score) - penalty
 
             # ## ----> Fill randomly one cell.
             self._fill_cells(number_tile=1)
