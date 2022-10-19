@@ -113,14 +113,3 @@ class TrainingAgent(ABC):
         """
         Save policy model.
         """
-
-    @abstractmethod
-    def optimize_model(self, sample: Any):
-        """
-        Optimize the policy network.
-
-        Parameters
-        ----------
-        sample: Any
-            Sample of data for training model
-        """

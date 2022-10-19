@@ -43,8 +43,8 @@ class AgentConfigurationPPO(AgentConfiguration):
     """
     Agent configuration for PPO.
     """
-    batch_size: int
     second_learning_rate: float
+    clip_ratio: float
 
 
 @dataclass

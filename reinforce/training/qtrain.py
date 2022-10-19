@@ -170,7 +170,7 @@ class DQNTraining:
             # ## ----> Update the target network.
             if step % self._update == 0:
                 self._agent.update_target()
-            print(f"Max cell: {max_cell} at episode {step}")
+            print(f"Max cell: {max_cell} at episode {step+1}")
 
         # ## ----> End of training.
         self.save_history(history)

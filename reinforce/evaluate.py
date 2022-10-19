@@ -5,11 +5,11 @@ Script for evaluate an agent.
 from os.path import abspath, dirname, join
 
 import gym
-from module import Agent
+from module import AgentDQN
 
-from simulate_2048 import GameBoard
+from simulate_2048 import LogObservation
 
-STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "models")
+STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "zoo")
 
 if __name__ == "__main__":
     import argparse
@@ -20,18 +20,23 @@ if __name__ == "__main__":
 
     # ## ----> Get arguments.
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo", help="Which model to warn-up", required=True, type=str)
+    parser.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
+    parser.add_argument("--model", help="Which type of model tu use", required=True, type=str)
+    parser.add_argument("--reward", help="Which reward to implement", required=True, type=str)
+    parser.add_argument("--obs", help="Which observation to implement", required=True, type=str)
     args = parser.parse_args()
 
     # ## ----> Evaluation with specific algorithm.
     if args.algo == "dqn":
         # ## ----> Create agent.
-        model_path = join(STORAGE_MODEL, "dqn_model_dense_classic_affine")
-        agent = Agent(model_path, 0.05)
+        model_path = join(STORAGE_MODEL, f"dqn_model_{args.model}_{args.obs}_{args.reward}")
+        agent = AgentDQN(model_path, 0.05)
 
         # ## ----> Create environment.
-        game = gym.make("GameBoard", size=4, type_reward="affine")
-        # game = GameBoard(size=4, type_reward="affine")
+        if args.obs == "log":
+            game = LogObservation(gym.make("GameBoard", size=4, type_reward=args.reward))
+        else:
+            game = gym.make("GameBoard", size=4, type_reward=args.reward)
 
         # ## ----> Loop over 100 parties.
         score = []

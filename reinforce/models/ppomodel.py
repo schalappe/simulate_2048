@@ -2,12 +2,12 @@
 """
 Set of function for Proximal Policy Optimization
 """
-from typing import Any, Tuple, Union
+from typing import Tuple, Union
 
 import tensorflow as tf
 
 
-def dense_hidden_layers(head: tf.keras.layers.Layer, units: int, activation: Any) -> tf.keras.layers.Layer:
+def dense_hidden_layers(head: tf.keras.layers.Layer, units: int, activation: str) -> tf.keras.layers.Layer:
     """
     Add dense layer.
 
@@ -17,6 +17,8 @@ def dense_hidden_layers(head: tf.keras.layers.Layer, units: int, activation: Any
         Previous layer
     units: int
         Number of neurons in this layer
+    activation: str
+        Activation function to add to layer
 
     Returns
     -------
@@ -30,7 +32,7 @@ def dense_hidden_layers(head: tf.keras.layers.Layer, units: int, activation: Any
 
 def hidden_mlp(hidden_layers):
     for _ in range(4):
-        hidden_layers = dense_hidden_layers(head=hidden_layers, units=256, activation=tf.tanh)
+        hidden_layers = dense_hidden_layers(head=hidden_layers, units=256, activation="relu")
     return hidden_layers
 
 
@@ -56,12 +58,12 @@ def dense_policy(input_size: Union[list or tuple]) -> Tuple[tf.keras.Model, tf.k
 
     # ## ----> Actor model.
     logit = hidden_mlp(hidden)
-    output_actor = tf.keras.layers.Dense(units=4, activation=None)(logit)
+    output_actor = tf.keras.layers.Dense(units=4, activation="softmax")(logit)
     actor = tf.keras.Model(inputs=inputs, outputs=output_actor)
 
     # ## ----> Critic model.
     value = hidden_mlp(hidden)
-    output_critic = tf.keras.layers.Dense(units=1, activation=None)(value)
+    output_critic = tf.keras.layers.Dense(units=1, activation="linear")(value)
     critic = tf.keras.Model(inputs=inputs, outputs=tf.squeeze(output_critic, axis=1))
 
     return actor, critic
