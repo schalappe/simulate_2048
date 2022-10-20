@@ -67,14 +67,14 @@ class DQNTraining:
             config: TrainingConfigurationDQN,
     ):
         # ## ----> Create game.
-        self.__initialize_game(config.observation_type, config.reward_type)
+        self.__initialize_game(config.observation_type)
 
         # ## ----> Create agent.
-        self._agent = TrainingAgentDQN(config.agent_configuration, config.observation_type, config.reward_type)
+        self._agent = TrainingAgentDQN(config.agent_configuration, config.observation_type)
 
         # ## ----> Directory for history.
         self._store_history = config.store_history
-        self._name = "_".join([config.agent_configuration.type_model, config.observation_type, config.reward_type])
+        self._name = "_".join([config.agent_configuration.type_model, config.observation_type])
 
         # ## ----> Parameters for training
         self._epoch = config.epoch
@@ -82,11 +82,11 @@ class DQNTraining:
         self._update = config.update_target
         self._memory = ReplayMemory(config.memory_size)
 
-    def __initialize_game(self, observation_type, reward_type):
+    def __initialize_game(self, observation_type):
         if observation_type == "log":
-            self.game = LogObservation(gym.make("GameBoard", size=4, type_reward=reward_type))
+            self.game = LogObservation(gym.make("GameBoard", size=4))
         else:
-            self.game = gym.make("GameBoard", size=4, type_reward=reward_type)
+            self.game = gym.make("GameBoard", size=4)
 
     def save_history(self, data: list):
         """
@@ -140,8 +140,9 @@ class DQNTraining:
         """
         Train the policy network.
         """
-        max_cell, history, total_reward = 0, [], 0
+        max_cell, history,  = 0, []
         for step in range(self._epoch):
+            total_reward = 0
             # ## ----> Initialize environment and state.
             board, _ = self.game.reset()
 
@@ -157,6 +158,7 @@ class DQNTraining:
                 total_reward += reward
 
                 # ## ----> Save game history
+                print(f"Game: {step + 1} - Score: {sum_array_values(self.game.board)}", end="\r")
                 if done:
                     max_cell = max_array_values(self.game.board)
                     history.append(
@@ -170,7 +172,7 @@ class DQNTraining:
             # ## ----> Update the target network.
             if step % self._update == 0:
                 self._agent.update_target()
-            print(f"Max cell: {max_cell} at episode {step+1}")
+            print(f"Max cell: {max_cell}, Total reward: {total_reward} at episode {step+1}")
 
         # ## ----> End of training.
         self.save_history(history)

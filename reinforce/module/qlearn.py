@@ -69,7 +69,7 @@ class TrainingAgentDQN(TrainingAgent):
         self._discount = config.discount
         self._epsilon = {"min": config.epsilon_min, "value": config.epsilon_max, "decay": config.epsilon_decay}
 
-    def _initialize_agent(self, config: AgentConfigurationDQN, observation_type: str, reward_type: str):
+    def _initialize_agent(self, config: AgentConfigurationDQN, observation_type: str):
         """
         Initialize agent.
 
@@ -79,8 +79,6 @@ class TrainingAgentDQN(TrainingAgent):
             Configuration for agent
         observation_type: str
             Type of observation give by the environment
-        reward_type: str
-            Type of reward give by the environment.
         """
         # ## ----> Initialization network.
         self.__initialize_model(config.type_model)
@@ -90,7 +88,7 @@ class TrainingAgentDQN(TrainingAgent):
 
         # ## ----> Initialization DQN parameters.
         self.__initialize_dqn_parameters(config)
-        self._name = "_".join([config.type_model, observation_type, reward_type])
+        self._name = "_".join([config.type_model, observation_type])
 
     def reduce_epsilon(self):
         """
@@ -138,6 +136,7 @@ class TrainingAgentDQN(TrainingAgent):
         """
         self._target.set_weights(self._policy.get_weights())
 
+    # ##: TODO: Extraire le training et faire un tf.function.
     def optimize_model(self, sample: list):
         """
         Optimize the policy network.

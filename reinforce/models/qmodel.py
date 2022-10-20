@@ -73,8 +73,8 @@ def dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
 
     # ## ----> All hidden layers.
     hidden = tf.keras.layers.Flatten()(inputs)
-    for _ in range(5):
-        hidden = dense_hidden_layers(head=hidden, units=256)
+    for _ in range(4):
+        hidden = dense_hidden_layers(head=hidden, units=1024)
 
     # ## ----> Create output layer.
     outputs = tf.keras.layers.Dense(units=4, activation="linear")(hidden)

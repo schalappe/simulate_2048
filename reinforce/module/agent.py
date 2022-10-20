@@ -5,7 +5,6 @@ Agent definition.
 from abc import ABC, abstractmethod
 from os import listdir
 from os.path import exists, isdir, isfile, sep
-from typing import Any
 
 import tensorflow as tf
 from numpy import ndarray
@@ -74,11 +73,11 @@ class TrainingAgent(ABC):
     Train an agent to play 2048 Game.
     """
 
-    def __init__(self, config: AgentConfiguration, observation_type: str, reward_type: str):
-        self._initialize_agent(config, observation_type, reward_type)
+    def __init__(self, config: AgentConfiguration, observation_type: str):
+        self._initialize_agent(config, observation_type)
 
     @abstractmethod
-    def _initialize_agent(self, config: AgentConfiguration, observation_type: str, reward_type: str):
+    def _initialize_agent(self, config: AgentConfiguration, observation_type: str):
         """
         Initialize agent.
 
@@ -88,8 +87,6 @@ class TrainingAgent(ABC):
             Configuration for agent
         observation_type: str
             Type of observation give by the environment
-        reward_type: str
-            Type of reward give by the environment.
         """
 
     @abstractmethod

@@ -52,7 +52,6 @@ class TrainingConfigurationDQN:
     """
     Training configuration for DQN
     """
-    reward_type: str
     observation_type: str
     store_history: str
     epoch: int
@@ -67,7 +66,6 @@ class TrainingConfigurationPPO:
     """
     Training configuration for PPO.
     """
-    reward_type: str
     observation_type: str
     store_history: str
     epoch: int
