@@ -132,9 +132,8 @@ class DQNTraining:
         """
         Use experience to train policy network.
         """
-        for _ in range(10):
-            sample = self._memory.sample(self._batch_size)
-            self._agent.optimize_model(sample)
+        sample = self._memory.sample(self._batch_size)
+        self._agent.optimize_model(sample)
 
     def train_model(self):
         """
@@ -160,17 +159,16 @@ class DQNTraining:
                 board = next_board
                 total_reward += reward
 
+                # ## ----> Perform one step of the optimization on the policy network.
+                if len(self._memory) >= self._batch_size:
+                    self.replay()
+
                 # ## ----> Save game history
-                print(f"Game: {step + 1} - Score: {sum_array_values(self.game.board)}", end="\r")
                 if done:
                     max_cell = max_array_values(self.game.board)
                     history.append(
                         [sum_array_values(self.game.board), max_array_values(self.game.board), total_reward]
                     )
-
-            # ## ----> Perform one step of the optimization on the policy network.
-            if len(self._memory) >= self._batch_size:
-                self.replay()
 
             # ## ----> Update the target network.
             if step % self._update == 0:

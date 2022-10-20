@@ -73,7 +73,7 @@ class TrainingAgentDQN(TrainingAgent):
         # ## ----> Initialization optimizer.
         self._optimizer = tf.keras.optimizers.Adam(learning_rate=config.learning_rate)
         self._loss_function = tf.keras.losses.Huber()
-        self._policy.compile(optimizer=self._optimizer, loss_weights=self._loss_function)
+        self._policy.compile(optimizer=self._optimizer, loss=self._loss_function)
 
         # ## ----> Initialization DQN parameters.
         self._store_model = config.store_model
@@ -127,7 +127,6 @@ class TrainingAgentDQN(TrainingAgent):
         """
         self._target.set_weights(self._policy.get_weights())
 
-    # ##: TODO: Extraire le training et faire un tf.function.
     def optimize_model(self, sample: list):
         """
         Optimize the policy network.
@@ -137,11 +136,12 @@ class TrainingAgentDQN(TrainingAgent):
         state_sample = np.array(list(batch.state))
         state_next_sample = np.array(list(batch.next_state))
         reward_sample = np.array(list(batch.reward))
-        action_sample = np.array(list(batch.reward))
+        action_sample = np.array(list(batch.action))
+        done_sample = np.array(list(batch.done))
 
         # ## ----> Update Q-value.
         future_rewards = self._target.predict(state_next_sample)
-        updated_q_values = reward_sample + self._discount * tf.reduce_max(future_rewards, axis=1)
+        updated_q_values = reward_sample + (1 - done_sample) * self._discount * tf.reduce_max(future_rewards, axis=1)
 
         # ## ----> Calculate loss.
         masks = tf.one_hot(action_sample, 4)
