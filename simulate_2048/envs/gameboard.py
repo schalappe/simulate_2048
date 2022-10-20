@@ -26,15 +26,7 @@ class GameBoard(gym.Env):
     # ##: All Actions.
     ACTIONS = [LEFT, UP, RIGHT, DOWN]
 
-    # ##: Availabe rewards.
-    SUM_REWARD = "sum"
-    MAX_REWARD = "max"
-    AFFINE_REWARD = "affine"
-
-    # ##: All rewards.
-    REWARDS = [SUM_REWARD, MAX_REWARD, AFFINE_REWARD]
-
-    def __init__(self, size: int = 4, type_reward: str = "sum"):
+    def __init__(self, size: int = 4):
         self.size = size  # ##: The size of the square grid.
         self.observation_space = spaces.Box(low=2, high=2**32, shape=(size, size), dtype=np.int64)
         self.action_space = spaces.Discrete(4)  # ##: 4 actions possible.
@@ -43,24 +35,10 @@ class GameBoard(gym.Env):
         self._board = None
         self._old_board = None
         self.random = None
-        self.__initialize_reward(type_reward)
 
         # ## ----> Reset game.
         self.seed()
         self.reset()
-
-    def __initialize_reward(self, type_reward: str):
-        """
-        Initialize the type of reward.
-
-        Parameters
-        ----------
-        type_reward: str
-            Type of reward to initialize
-        """
-        if not isinstance(type_reward, str) or type_reward not in self.REWARDS:
-            raise ValueError(f"{type_reward} is not a valid reward.")
-        self.type_reward = type_reward
 
     def __random_cell_value(self, number_cell: int) -> List:
         """
@@ -129,7 +107,8 @@ class GameBoard(gym.Env):
 
         return score, result
 
-    def __compute_reward(self, merged_value: tuple) -> Optional[int]:
+    @classmethod
+    def __compute_reward(cls, merged_value: tuple) -> int:
         """
         Compute the reward to return.
 
@@ -143,13 +122,7 @@ class GameBoard(gym.Env):
         int
             computed reward
         """
-        if self.type_reward == self.SUM_REWARD:
-            return sum(merged_value)
-        if self.type_reward == self.MAX_REWARD:
-            return max(merged_value) if merged_value else 0
-        if self.type_reward == self.AFFINE_REWARD:
-            return 2 * np.max(self._old_board) + sum(merged_value)
-        return None
+        return sum(merged_value) if merged_value else 0
 
     @classmethod
     def __compute_penalties(cls, board: np.ndarray) -> float:
