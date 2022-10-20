@@ -22,6 +22,7 @@ class AgentConfiguration:
     """
     Agent configuration.
     """
+
     type_model: str
     store_model: str
     learning_rate: float
@@ -32,6 +33,7 @@ class AgentConfigurationDQN(AgentConfiguration):
     """
     Agent configuration for DQN.
     """
+
     discount: float
     epsilon_max: float
     epsilon_min: float
@@ -43,6 +45,7 @@ class AgentConfigurationPPO(AgentConfiguration):
     """
     Agent configuration for PPO.
     """
+
     second_learning_rate: float
     clip_ratio: float
 
@@ -52,6 +55,7 @@ class TrainingConfigurationDQN:
     """
     Training configuration for DQN
     """
+
     observation_type: str
     store_history: str
     epoch: int
@@ -66,6 +70,7 @@ class TrainingConfigurationPPO:
     """
     Training configuration for PPO.
     """
+
     observation_type: str
     store_history: str
     epoch: int

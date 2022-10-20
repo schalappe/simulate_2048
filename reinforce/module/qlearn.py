@@ -48,27 +48,6 @@ class TrainingAgentDQN(TrainingAgent):
     Train an agent to play 2048 Game with DQN algorithm.
     """
 
-    def __initialize_model(self, type_model: str):
-        if type_model == "conv":
-            func_model = conv_learning
-        else:
-            func_model = dense_learning
-
-        # ## ----> Create networks
-        self._policy = func_model(input_size=(4, 4, 1))
-        self._target = func_model(input_size=(4, 4, 1))
-        self.update_target()
-
-    def __initialize_optimizer(self, learning_rate: float):
-        self._optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-        self._loss_function = tf.keras.losses.Huber()
-        self._policy.compile(optimizer=self._optimizer, loss_weights=self._loss_function)
-
-    def __initialize_dqn_parameters(self, config: AgentConfigurationDQN):
-        self._store_model = config.store_model
-        self._discount = config.discount
-        self._epsilon = {"min": config.epsilon_min, "value": config.epsilon_max, "decay": config.epsilon_decay}
-
     def _initialize_agent(self, config: AgentConfigurationDQN, observation_type: str):
         """
         Initialize agent.
@@ -81,13 +60,25 @@ class TrainingAgentDQN(TrainingAgent):
             Type of observation give by the environment
         """
         # ## ----> Initialization network.
-        self.__initialize_model(config.type_model)
+        if config.type_model == "conv":
+            func_model = conv_learning
+        else:
+            func_model = dense_learning
+
+        # ## ----> Create networks
+        self._policy = func_model(input_size=(4, 4, 1))
+        self._target = func_model(input_size=(4, 4, 1))
+        self.update_target()
 
         # ## ----> Initialization optimizer.
-        self.__initialize_optimizer(config.learning_rate)
+        self._optimizer = tf.keras.optimizers.Adam(learning_rate=config.learning_rate)
+        self._loss_function = tf.keras.losses.Huber()
+        self._policy.compile(optimizer=self._optimizer, loss_weights=self._loss_function)
 
         # ## ----> Initialization DQN parameters.
-        self.__initialize_dqn_parameters(config)
+        self._store_model = config.store_model
+        self._discount = config.discount
+        self._epsilon = {"min": config.epsilon_min, "value": config.epsilon_max, "decay": config.epsilon_decay}
         self._name = "_".join([config.type_model, observation_type])
 
     def reduce_epsilon(self):

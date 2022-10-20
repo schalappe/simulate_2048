@@ -2,7 +2,7 @@
 """
 Classe décrivant le jeu 2048 pour un agent
 """
-from typing import Any, List, Tuple, Union, Optional
+from typing import Any, List, Tuple, Union
 
 import gym
 import numpy as np
@@ -139,13 +139,13 @@ class GameBoard(gym.Env):
         float
             Penalties
         """
-        penalties = .0
+        penalties = 0.0
         for row in board:
             idx = 0
-            for iv, v in enumerate(row):
-                if v != 0:
-                    if iv != idx:
-                        penalties += .1 * v
+            for idx_v, valeur in enumerate(row):
+                if valeur != 0:
+                    if idx_v != idx:
+                        penalties += 0.1 * valeur
                     idx += 1
         return penalties
 

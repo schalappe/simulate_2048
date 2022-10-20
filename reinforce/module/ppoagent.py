@@ -2,8 +2,8 @@
 """
 Proximal Policy Agent.
 """
-from numpy import ndarray
 import tensorflow as tf
+from numpy import ndarray
 
 from reinforce.addons import AgentConfigurationPPO
 from reinforce.models import dense_policy
@@ -15,6 +15,7 @@ class TrainingAgentPPO(TrainingAgent):
     """
     Train an agent to play 2048 Game with Proximal policy algorithm.
     """
+
     def __initialize_optimizer(self, actor_learning_rate: float, critic_learning_rate: float):
         self._optimizer_actor = tf.keras.optimizers.Adam(learning_rate=actor_learning_rate)
         self._optimizer_critic = tf.keras.optimizers.Adam(learning_rate=critic_learning_rate)
@@ -71,9 +72,7 @@ class TrainingAgentPPO(TrainingAgent):
             new_probabilities = tf.reduce_sum(tf.math.log(self._actor(observations)) * actions, axis=1)
             ratio = tf.exp(new_probabilities - probabilities)
             min_advantages = tf.where(
-                advantages > 0,
-                (1 + self._clip_ratio) * advantages,
-                (1 - self._clip_ratio) * advantages
+                advantages > 0, (1 + self._clip_ratio) * advantages, (1 - self._clip_ratio) * advantages
             )
             policy_loss = -tf.reduce_mean(tf.minimum(ratio * advantages, min_advantages))
 

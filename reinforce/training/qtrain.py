@@ -63,8 +63,8 @@ class DQNTraining:
     """
 
     def __init__(
-            self,
-            config: TrainingConfigurationDQN,
+        self,
+        config: TrainingConfigurationDQN,
     ):
         # ## ----> Create game.
         self.__initialize_game(config.observation_type)
@@ -140,7 +140,10 @@ class DQNTraining:
         """
         Train the policy network.
         """
-        max_cell, history,  = 0, []
+        max_cell, history, = (
+            0,
+            [],
+        )
         for step in range(self._epoch):
             total_reward = 0
             # ## ----> Initialize environment and state.
