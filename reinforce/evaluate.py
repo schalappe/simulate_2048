@@ -22,21 +22,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
     parser.add_argument("--model", help="Which type of model tu use", required=True, type=str)
-    parser.add_argument("--reward", help="Which reward to implement", required=True, type=str)
     parser.add_argument("--obs", help="Which observation to implement", required=True, type=str)
     args = parser.parse_args()
 
     # ## ----> Evaluation with specific algorithm.
     if args.algo == "dqn":
         # ## ----> Create agent.
-        model_path = join(STORAGE_MODEL, f"dqn_model_{args.model}_{args.obs}_{args.reward}")
-        agent = AgentDQN(model_path, 0.05)
+        model_path = join(STORAGE_MODEL, f"dqn_model_{args.model}_{args.obs}")
+        agent = AgentDQN(model_path)
 
         # ## ----> Create environment.
         if args.obs == "log":
-            game = LogObservation(gym.make("GameBoard", size=4, type_reward=args.reward))
+            game = LogObservation(gym.make("GameBoard", size=4))
         else:
-            game = gym.make("GameBoard", size=4, type_reward=args.reward)
+            game = gym.make("GameBoard", size=4)
 
         # ## ----> Loop over 100 parties.
         score = []

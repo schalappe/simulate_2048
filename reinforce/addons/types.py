@@ -35,9 +35,7 @@ class AgentConfigurationDQN(AgentConfiguration):
     """
 
     discount: float
-    epsilon_max: float
-    epsilon_min: float
-    epsilon_decay: float
+    epsilon: float
 
 
 @dataclass

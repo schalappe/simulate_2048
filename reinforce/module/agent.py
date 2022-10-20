@@ -44,10 +44,9 @@ class Agent:
     Agent to play 2048 Game.
     """
 
-    def __init__(self, model_path: str, epsilon):
+    def __init__(self, model_path: str):
         if check_model(model_path):
             self.policy = tf.keras.models.load_model(model_path)
-            self.epsilon = epsilon
         else:
             raise TypeError(f"The directory or file `{model_path}` isn't a keras model.")
 

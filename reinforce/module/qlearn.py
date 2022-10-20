@@ -35,8 +35,9 @@ class AgentDQN(Agent):
         int
             Selected action
         """
-        if random.random() < self.epsilon:
-            return choice(4)
+        # ## ----> Choose a random action.
+        if random.random() < 0.05:
+            return np.random.choice(4)
         state_tensor = tf.expand_dims(tf.convert_to_tensor(tf.reshape(state, (4, 4, 1))), 0)
         action_prob = self.policy(state_tensor, training=False)
         action = tf.argmax(action_prob[0]).numpy()
@@ -78,15 +79,8 @@ class TrainingAgentDQN(TrainingAgent):
         # ## ----> Initialization DQN parameters.
         self._store_model = config.store_model
         self._discount = config.discount
-        self._epsilon = {"min": config.epsilon_min, "value": config.epsilon_max, "decay": config.epsilon_decay}
+        self._epsilon = config.epsilon
         self._name = "_".join([config.type_model, observation_type])
-
-    def reduce_epsilon(self):
-        """
-        Reduce the epsilon value.
-        """
-        epsilon = self._epsilon["value"] * self._epsilon["decay"]
-        self._epsilon["value"] = max(self._epsilon["min"], epsilon)
 
     def select_action(self, state: ndarray) -> int:
         """
@@ -102,11 +96,8 @@ class TrainingAgentDQN(TrainingAgent):
         int
             Selected action
         """
-        # ## ----> Reduce epsilon.
-        self.reduce_epsilon()
-
         # ## ----> Choose a random action.
-        if random.random() < self._epsilon["value"]:
+        if random.random() < self._epsilon:
             return np.random.choice(4)
 
         # ## ----> Choose an optimal action.
