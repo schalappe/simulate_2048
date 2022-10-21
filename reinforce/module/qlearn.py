@@ -11,7 +11,7 @@ from numpy import ndarray
 from numpy.random import choice
 
 from reinforce.addons import AgentConfigurationDQN, Experience
-from reinforce.models import conv_learning, dense_learning
+from reinforce.models import dense_learning, dueling_dense_learning
 
 from .agent import Agent, TrainingAgent
 
@@ -61,10 +61,12 @@ class TrainingAgentDQN(TrainingAgent):
             Type of observation give by the environment
         """
         # ## ----> Initialization network.
-        if config.type_model == "conv":
-            func_model = conv_learning
-        else:
+        if config.type_model == "dense":
             func_model = dense_learning
+        elif config.type_model == "dueling":
+            func_model = dueling_dense_learning
+        else:
+            raise ValueError("The model isn't implemented yet.")
 
         # ## ----> Create networks
         self._policy = func_model(input_size=(4, 4, 1))
@@ -142,5 +144,6 @@ class TrainingAgentDQN(TrainingAgent):
             loss = self._loss_function(updated_q_values, q_action)
 
         # ## ----> Backpropagation.
+        print(f"Loss: {loss}")
         grads = tape.gradient(loss, self._policy.trainable_variables)
         self._optimizer.apply_gradients(zip(grads, self._policy.trainable_variables))
