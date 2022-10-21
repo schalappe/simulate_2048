@@ -7,3 +7,4 @@ from .types import (
     TrainingConfigurationDQN,
     TrainingConfigurationPPO,
 )
+from .optimizer import GCAdam
