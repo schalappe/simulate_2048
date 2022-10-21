@@ -122,7 +122,7 @@ class GameBoard(gym.Env):
         int
             computed reward
         """
-        return sum(merged_value) if merged_value else 0
+        return sum(np.log2(merged_value)) if merged_value else 0
 
     @classmethod
     def __compute_penalties(cls, board: np.ndarray) -> float:
@@ -257,7 +257,7 @@ class GameBoard(gym.Env):
         tuple
             Update board, reward, state of the game and info
         """
-        reward = -1000
+        reward = -10
 
         # ## ----> Save old board.
         self._old_board = self._board.copy()

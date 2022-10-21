@@ -1,4 +1,5 @@
 """..."""
+from .optimizer import GCAdam
 from .types import (
     AgentConfiguration,
     AgentConfigurationDQN,
@@ -7,4 +8,3 @@ from .types import (
     TrainingConfigurationDQN,
     TrainingConfigurationPPO,
 )
-from .optimizer import GCAdam

@@ -63,11 +63,10 @@ def step(envs: gym.Env, window: WindowBoard, action: int):
     obs, reward, terminated, _, info = envs.step(action)
     print(f"reward={reward:.2f}")
 
+    board = envs.board
+    redraw(window, board)
     if terminated:
         print("terminated!")
-    else:
-        board = envs.board
-        redraw(window, board)
 
 
 def key_handler(envs: gym.Env, window: WindowBoard, event: Any):
