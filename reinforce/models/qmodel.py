@@ -35,7 +35,7 @@ def dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
 
     Parameters
     ----------
-    input_size: int
+    input_size: list or tuple
         Input dimension
 
     Returns
@@ -63,7 +63,7 @@ def dueling_dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
 
     Parameters
     ----------
-    input_size: int
+    input_size: list or tuple
         Input dimension
 
     Returns

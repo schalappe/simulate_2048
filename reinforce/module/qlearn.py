@@ -10,7 +10,7 @@ import tensorflow as tf
 from numpy import ndarray
 from numpy.random import choice
 
-from reinforce.addons import AgentConfigurationDQN, Experience
+from reinforce.addons import AgentConfigurationDQN, Experience, GCAdam
 from reinforce.models import dense_learning, dueling_dense_learning
 
 from .agent import Agent, TrainingAgent
@@ -74,15 +74,22 @@ class TrainingAgentDQN(TrainingAgent):
         self.update_target()
 
         # ## ----> Initialization optimizer.
-        self._optimizer = tf.keras.optimizers.Adam(learning_rate=config.learning_rate)
+        self._optimizer = GCAdam(learning_rate=config.learning_rate)
         self._loss_function = tf.keras.losses.Huber()
         self._policy.compile(optimizer=self._optimizer, loss=self._loss_function)
 
         # ## ----> Initialization DQN parameters.
         self._store_model = config.store_model
         self._discount = config.discount
-        self._epsilon = config.epsilon
+        self._epsilon = {"min": config.epsilon_min, "value": config.epsilon_max, "decay": config.epsilon_decay}
         self._name = "_".join([config.type_model, observation_type])
+
+    def reduce_epsilon(self):
+        """
+        Reduce the epsilon value.
+        """
+        epsilon = self._epsilon["value"] * self._epsilon["decay"]
+        self._epsilon["value"] = max(self._epsilon["min"], epsilon)
 
     def select_action(self, state: ndarray) -> int:
         """
@@ -98,8 +105,11 @@ class TrainingAgentDQN(TrainingAgent):
         int
             Selected action
         """
+        # ## ----> Reduce epsilon.
+        self.reduce_epsilon()
+
         # ## ----> Choose a random action.
-        if random.random() < self._epsilon:
+        if random.random() < self._epsilon["value"]:
             return np.random.choice(4)
 
         # ## ----> Choose an optimal action.
