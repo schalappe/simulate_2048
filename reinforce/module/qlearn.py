@@ -143,17 +143,43 @@ class TrainingAgentDQN(TrainingAgent):
         done_sample = np.array(list(batch.done))
 
         # ## ----> Update Q-value.
-        future_rewards = self._target.predict(state_next_sample)
-        updated_q_values = reward_sample + (1 - done_sample) * self._discount * tf.reduce_max(future_rewards, axis=1)
+        targets = self._target.predict(state_sample)
+        next_q_values = self._target.predict(state_next_sample).max(axis=1)
+        targets[range(len(sample)), action_sample] = reward_sample + (1 - done_sample) * next_q_values * self._discount
 
-        # ## ----> Calculate loss.
-        masks = tf.one_hot(action_sample, 4)
-        with tf.GradientTape() as tape:
-            q_values = self._policy(state_sample)
-            q_action = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
-            loss = self._loss_function(updated_q_values, q_action)
+        # ## ----> Optimize policy.
+        self._policy.fit(state_sample, targets, epochs=1)
 
-        # ## ----> Backpropagation.
-        print(f"Loss: {loss}")
-        grads = tape.gradient(loss, self._policy.trainable_variables)
-        self._optimizer.apply_gradients(zip(grads, self._policy.trainable_variables))
+
+class TrainingAgentDDQN(TrainingAgentDQN):
+    """
+    Train an agent to play 2048 Game with DQN algorithm.
+    """
+
+    def save_model(self):
+        """
+        Save policy model.
+        """
+        self._policy.save(join(self._store_model, f"ddqn_model_{self._name}"))
+
+    def optimize_model(self, sample: list):
+        """
+        Optimize the policy network.
+        """
+        # ## ----> Unpack training sample.
+        batch = Experience(*zip(*sample))
+        state_sample = np.array(list(batch.state))
+        state_next_sample = np.array(list(batch.next_state))
+        reward_sample = np.array(list(batch.reward))
+        action_sample = np.array(list(batch.action))
+        done_sample = np.array(list(batch.done))
+
+        # ## ----> Update Q-value.
+        targets = self._target.predict(state_sample)
+        next_q_values = self._target.predict(state_next_sample)[
+            range(len(sample)), np.argmax(self._policy.predict(state_next_sample), axis=1)
+        ]
+        targets[range(len(sample)), action_sample] = reward_sample + (1 - done_sample) * next_q_values * self._discount
+
+        # ## ----> Optimize policy.
+        self._policy.fit(state_sample, targets, epochs=1)

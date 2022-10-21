@@ -4,6 +4,7 @@ Q-Learning Algorithm.
 """
 import pickle
 from collections import Counter, deque
+from itertools import count
 from os.path import join
 
 import gym
@@ -12,7 +13,7 @@ from numpy import sum as sum_array_values
 from numpy.random import choice
 
 from reinforce.addons import Experience, TrainingConfigurationDQN
-from reinforce.module import TrainingAgentDQN
+from reinforce.module import TrainingAgentDDQN, TrainingAgentDQN
 from simulate_2048 import LogObservation
 
 
@@ -70,7 +71,10 @@ class DQNTraining:
         self.__initialize_game(config.observation_type)
 
         # ## ----> Create agent.
-        self._agent = TrainingAgentDQN(config.agent_configuration, config.observation_type)
+        if config.agent_type == "double":
+            self._agent = TrainingAgentDDQN(config.agent_configuration, config.observation_type)
+        else:
+            self._agent = TrainingAgentDQN(config.agent_configuration, config.observation_type)
 
         # ## ----> Directory for history.
         self._store_history = config.store_history
@@ -139,17 +143,14 @@ class DQNTraining:
         """
         Train the policy network.
         """
-        max_cell, history, = (
-            0,
-            [],
-        )
+        max_cell, history = 0, []
         for step in range(self._epoch):
-            total_reward = 0
+            done, total_reward = False, 0
+
             # ## ----> Initialize environment and state.
             board, _ = self.game.reset()
 
-            done = False
-            while not done:
+            for timestep in count():
                 # ## ----> Select and perform action.
                 action = self._agent.select_action(board)
                 next_board, reward, done, _, _ = self.game.step(action)
@@ -160,20 +161,21 @@ class DQNTraining:
                 total_reward += reward
 
                 # ## ----> Perform one step of the optimization on the policy network.
-                if len(self._memory) >= self._batch_size:
+                if len(self._memory) >= 2 * self._batch_size and timestep % 50:
                     self.replay()
 
                 # ## ----> Save game history
-                if done:
+                if done or timestep > 5000:
                     max_cell = max_array_values(self.game.board)
                     history.append(
                         [sum_array_values(self.game.board), max_array_values(self.game.board), total_reward]
                     )
+                    break
 
             # ## ----> Update the target network.
             if step % self._update == 0:
                 self._agent.update_target()
-            print(f"Max cell: {max_cell}, Total reward: {total_reward} at episode {step+1}")
+            print(f"Max cell: {max_cell}, Total reward: {total_reward:.2f} at episode {step+1}")
 
         # ## ----> End of training.
         self.save_history(history)

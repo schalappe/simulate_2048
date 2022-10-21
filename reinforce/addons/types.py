@@ -63,6 +63,7 @@ class TrainingConfigurationDQN:
     update_target: int
     memory_size: int
     agent_configuration: AgentConfiguration
+    agent_type: str
 
 
 @dataclass
