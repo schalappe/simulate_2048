@@ -123,7 +123,7 @@ class TrainingAgentDQN(TrainingAgent):
         """
         Save policy model.
         """
-        self._policy.save(join(self._store_model, f"dqn_model_{self._name}"))
+        self._policy.save(join(self._store_model, f"model_simple_dqn_{self._name}"))
 
     def update_target(self):
         """
@@ -161,7 +161,7 @@ class TrainingAgentDDQN(TrainingAgentDQN):
         """
         Save policy model.
         """
-        self._policy.save(join(self._store_model, f"ddqn_model_{self._name}"))
+        self._policy.save(join(self._store_model, f"model_double_dqn_{self._name}"))
 
     def optimize_model(self, sample: list):
         """

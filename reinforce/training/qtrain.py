@@ -78,7 +78,7 @@ class DQNTraining:
 
         # ## ----> Directory for history.
         self._store_history = config.store_history
-        self._name = "_".join([config.agent_configuration.type_model, config.observation_type])
+        self._name = "_".join([config.agent_type, "dqn", config.agent_configuration.type_model, config.observation_type])
 
         # ## ----> Parameters for training
         self._epoch = config.epoch
@@ -100,7 +100,7 @@ class DQNTraining:
         data: list
             History of training
         """
-        with open(join(self._store_history, f"dqn_history_{self._name}.pkl"), "wb") as file_h:
+        with open(join(self._store_history, f"history_{self._name}.pkl"), "wb") as file_h:
             pickle.dump(data, file_h)
 
     def evaluate(self):
