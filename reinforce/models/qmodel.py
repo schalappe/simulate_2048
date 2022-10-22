@@ -1,35 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Set of function for Q-Learning
+Set of function for Q-Learning.
 """
 from typing import Union
 
 import tensorflow as tf
+from .core import hidden_block
 
 
-def dense_hidden_layers(head: tf.keras.layers.Layer, units: int) -> tf.keras.layers.Layer:
-    """
-    Add dense layer.
-
-    Parameters
-    ----------
-    head: Layer
-        Previous layer
-    units: int
-        Number of neurons in this layer
-
-    Returns
-    -------
-    Layer
-        New layer
-    """
-    block = tf.keras.layers.Dense(units=units, activation="relu")(head)
-    # block = tf.keras.layers.Dense(units=units, kernel_initializer="he_uniform", activation="relu")(head)
-    # block = tf.keras.layers.Dropout(rate=0.2)(block)
-    return block
-
-
-def dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
+def dense_learning(input_size: Union[list or tuple], dtype: str = "conv") -> tf.keras.Model:
     """
     Create Q-Network for Q-Learning.
 
@@ -37,6 +16,8 @@ def dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
     ----------
     input_size: list or tuple
         Input dimension
+    dtype: str
+        Type of layer to use
 
     Returns
     -------
@@ -47,17 +28,15 @@ def dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
     inputs = tf.keras.layers.Input(shape=input_size)
 
     # ## ----> All hidden layers.
-    hidden = tf.keras.layers.Flatten()(inputs)
-    for _ in range(4):
-        hidden = dense_hidden_layers(head=hidden, units=256)
+    hidden = hidden_block(head=inputs, size=256, dtype=dtype)
 
     # ## ----> Create output layer.
-    outputs = tf.keras.layers.Dense(units=4, activation="linear")(hidden)
+    outputs = tf.keras.layers.Dense(units=4)(hidden)
 
     return tf.keras.Model(inputs=inputs, outputs=outputs)
 
 
-def dueling_dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
+def dueling_dense_learning(input_size: Union[list or tuple], dtype: str = "conv") -> tf.keras.Model:
     """
     Create Q-Network for Q-Learning.
 
@@ -65,6 +44,8 @@ def dueling_dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
     ----------
     input_size: list or tuple
         Input dimension
+    dtype: str
+        Type of layer to use
 
     Returns
     -------
@@ -75,15 +56,13 @@ def dueling_dense_learning(input_size: Union[list or tuple]) -> tf.keras.Model:
     inputs = tf.keras.layers.Input(shape=input_size)
 
     # ## ----> All hidden layers.
-    hidden = tf.keras.layers.Flatten()(inputs)
-    for _ in range(4):
-        hidden = dense_hidden_layers(head=hidden, units=256)
+    hidden = hidden_block(head=inputs, size=256, dtype=dtype)
 
     # ## ----> Value state.
-    value_output = tf.keras.layers.Dense(units=1, activation="linear")(hidden)
+    value_output = tf.keras.layers.Dense(units=1)(hidden)
 
     # ## ----> Advantage.
-    advantage_output = tf.keras.layers.Dense(units=4, activation="linear")(hidden)
+    advantage_output = tf.keras.layers.Dense(units=4)(hidden)
 
     # ## ----> Create output layer.
     outputs = tf.keras.layers.Add()([value_output, advantage_output])
