@@ -69,6 +69,7 @@ class TrainingAgentDQN(TrainingAgent):
             raise ValueError("The model isn't implemented yet.")
 
         # ## ----> Create networks
+        tf.keras.backend.clear_session()
         self._policy = func_model(input_size=(4, 4, 1))
         self._target = func_model(input_size=(4, 4, 1))
         self.update_target()

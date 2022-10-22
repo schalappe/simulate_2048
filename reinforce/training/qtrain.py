@@ -145,6 +145,7 @@ class DQNTraining:
         """
         max_cell, history = 0, []
         for step in range(self._epoch):
+            print(f"Start game {step + 1}")
             done, total_reward = False, 0
 
             # ## ----> Initialize environment and state.
@@ -161,6 +162,7 @@ class DQNTraining:
                 total_reward += reward
 
                 # ## ----> Perform one step of the optimization on the policy network.
+                print(f"Game: {step + 1} - Reward: {total_reward}")
                 if len(self._memory) >= 2 * self._batch_size and timestep % 50:
                     self.replay()
 
