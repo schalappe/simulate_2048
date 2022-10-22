@@ -14,31 +14,72 @@ if __name__ == "__main__":
 
     # ## ----> Get arguments.
     parser = argparse.ArgumentParser()
-    parser.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
-    parser.add_argument("--model", help="Which type of model tu use", required=True, type=str)
-    parser.add_argument("--obs", help="Which observation to implement", required=True, type=str)
+    subparsers = parser.add_subparsers(dest="task")
+    subparsers.required = True
+
+    # ## ----> Sub-parser for training.
+    parser_train = subparsers.add_parser("train", help="Aide de la commande `train`")
+    parser_train.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
+    parser_train.add_argument("--model", help="Which type of model tu use", required=True, type=str)
+    parser_train.add_argument("--obs", help="Which observation to implement", required=True, type=str)
+    parser_train.add_argument("--style", required=False, type=str, default="simple")
+
+    # ## ----> Sub-parser for multiple training.
+    parser_multi = subparsers.add_parser("multi-train", help="Aide de la commande `multi-train`")
+    parser_multi.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
+    parser_multi.add_argument("--obs", help="Which observation to implement", required=True, type=str)
+
     args = parser.parse_args()
 
-    # ## ----> Training with specific algorithm.
-    if args.algo == "dqn":
-        config_agent = AgentConfigurationDQN(
-            type_model=args.model,
-            store_model=STORAGE_MODEL,
-            learning_rate=5e-3,
-            discount=0.95,
-            epsilon_max=0.5,
-            epsilon_min=0.01,
-            epsilon_decay=0.999,
-        )
-        config = TrainingConfigurationDQN(
-            observation_type=args.obs,
-            store_history=STORAGE_MODEL,
-            agent_configuration=config_agent,
-            epoch=1000,
-            batch_size=1024,
-            update_target=10,
-            memory_size=100000,
-        )
-        dqn = DQNTraining(config)
-        dqn.train_model()
+    # ## ----> Train specific algorithm.
+    if args.task == "train":
+        if args.algo == "dqn":
+            config_agent = AgentConfigurationDQN(
+                type_model=args.model,
+                store_model=STORAGE_MODEL,
+                learning_rate=5e-3,
+                discount=0.99,
+                epsilon_max=1.0,
+                epsilon_min=0.01,
+                epsilon_decay=0.995,
+            )
+            config = TrainingConfigurationDQN(
+                observation_type=args.obs,
+                store_history=STORAGE_MODEL,
+                agent_configuration=config_agent,
+                epoch=100,
+                batch_size=32,
+                update_target=1,
+                memory_size=10000,
+                agent_type=args.style,
+            )
+            dqn = DQNTraining(config)
+            dqn.train_model()
+    # ## -----> Train multiple model.
+    elif args.task == "multi-train":
+        if args.algo == "dqn":
+            for model in ["dense", "dueling"]:
+                for style in ["simple", "double"]:
+                    print(f"Training of {model} - {style}")
+                    config_agent = AgentConfigurationDQN(
+                        type_model=model,
+                        store_model=STORAGE_MODEL,
+                        learning_rate=5e-3,
+                        discount=0.99,
+                        epsilon_max=0.5,
+                        epsilon_min=0.01,
+                        epsilon_decay=0.995,
+                    )
+                    config = TrainingConfigurationDQN(
+                        observation_type=args.obs,
+                        store_history=STORAGE_MODEL,
+                        agent_configuration=config_agent,
+                        epoch=100,
+                        batch_size=32,
+                        update_target=1,
+                        memory_size=10000,
+                        agent_type=style,
+                    )
+                dqn = DQNTraining(config)
+                dqn.train_model()
     print("Finish!")
