@@ -51,14 +51,22 @@ class AgentConfigurationPPO(AgentConfiguration):
 
 
 @dataclass
-class TrainingConfigurationDQN:
+class TrainingConfiguration:
     """
-    Training configuration for DQN
+    Train configuration.
     """
 
     observation_type: str
     store_history: str
     epoch: int
+
+
+@dataclass
+class TrainingConfigurationDQN(TrainingConfiguration):
+    """
+    Training configuration for DQN
+    """
+
     batch_size: int
     update_target: int
     memory_size: int
@@ -67,19 +75,16 @@ class TrainingConfigurationDQN:
 
 
 @dataclass
-class TrainingConfigurationA2C:
-    observation_type: str
-    store_history: str
-    epoch: int
+class TrainingConfigurationA2C(TrainingConfiguration):
+    """
+    Training configuration for A2C.
+    """
+
     agent_configuration: AgentConfiguration
 
 
 @dataclass
-class TrainingConfigurationPPO:
+class TrainingConfigurationPPO(TrainingConfiguration):
     """
     Training configuration for PPO.
     """
-
-    observation_type: str
-    store_history: str
-    epoch: int

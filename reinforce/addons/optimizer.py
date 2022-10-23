@@ -1,17 +1,33 @@
 # -*- coding: utf-8 -*-
 """
-    Custom optimizers
+Custom optimizers
 """
 import tensorflow as tf
 
 
 class GCAdam(tf.keras.optimizers.Adam):
-    def get_gradients(self, loss, params):
-        # We here just provide a modified get_gradients() function since we are
-        # trying to just compute the centralized gradients.
+    """
+    Centralized Adam optimizer.
+    """
+    def get_gradients(self, loss: tf.Tensor, params: list) -> list:
+        """
+        Returns gradients of `loss` with respect to `params`.
+        Then centralized gradients.
 
+        Parameters
+        ----------
+        loss: Tensor
+            Loss tensor.
+        params: list
+            Variables
+
+        Returns
+        -------
+        list
+            List of gradient tensors
+        """
         grads = []
-        gradients = super().get_gradients()
+        gradients = super().get_gradients(loss, params)
         for grad in gradients:
             grad_len = len(grad.shape)
             if grad_len > 1:
