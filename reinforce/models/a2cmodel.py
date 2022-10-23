@@ -32,7 +32,7 @@ def actor_and_critic_model(input_size: Union[list or tuple], dtype: str = "conv"
     hidden = hidden_block(head=inputs, size=256, dtype=dtype)
 
     # ## ----> Actor output.
-    actor = tf.keras.layers.Dense(4, activation="softmax")(hidden)
+    actor = tf.keras.layers.Dense(4)(hidden)
 
     # ## ----> Critic output.
     critic = tf.keras.layers.Dense(1)(hidden)

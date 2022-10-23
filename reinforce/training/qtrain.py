@@ -124,7 +124,7 @@ class DQNTraining:
                 board = next_board
 
                 # ## ----> store max element.
-                print(f"Game: {i + 1} - Score: {sum_array_values(board)}", end="\r")
+                print(f"Game: {i + 1} - Score: {sum_array_values(self.game.board)}", end="\r")
                 if done:
                     score.append(max_array_values(self.game.board))
 

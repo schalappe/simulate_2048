@@ -4,7 +4,7 @@ Agent definition.
 """
 from abc import ABC, abstractmethod
 from os import listdir
-from os.path import exists, isdir, isfile, sep
+from os.path import exists, isdir, isfile, sep, join
 
 import tensorflow as tf
 from numpy import ndarray
@@ -43,15 +43,34 @@ class Agent:
     """
     Agent to play 2048 Game.
     """
+    _name: str
 
-    def __init__(self, model_path: str):
-        if check_model(model_path):
-            self.policy = tf.keras.models.load_model(
-                model_path,
-                custom_objects={"GCAdam": GCAdam},
-            )
+    def __init__(self, model_path: str = None):
+        # ## ----> if model path
+        if model_path:
+            if check_model(model_path):
+                self.policy = tf.keras.models.load_model(
+                    model_path,
+                    custom_objects={"GCAdam": GCAdam},
+                )
+            else:
+                raise TypeError(f"The directory or file `{model_path}` isn't a keras model.")
         else:
-            raise TypeError(f"The directory or file `{model_path}` isn't a keras model.")
+            self.initialize_agent()
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = value
+
+    @abstractmethod
+    def initialize_agent(self) -> None:
+        """
+        Initialize the policy for training.
+        """
 
     @abstractmethod
     def select_action(self, state: ndarray) -> int:
@@ -68,6 +87,12 @@ class Agent:
         int
             Selected action
         """
+
+    def save_model(self, store_model: str):
+        """
+        Save policy model.
+        """
+        self.policy.save(join(store_model, f"model_{self.name}"))
 
 
 class TrainingAgent(ABC):

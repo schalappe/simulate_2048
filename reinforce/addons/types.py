@@ -80,7 +80,8 @@ class TrainingConfigurationA2C(TrainingConfiguration):
     Training configuration for A2C.
     """
 
-    agent_configuration: AgentConfiguration
+    discount: float
+    learning_rate: float
 
 
 @dataclass
