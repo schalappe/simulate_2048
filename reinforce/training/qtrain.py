@@ -78,7 +78,9 @@ class DQNTraining:
 
         # ## ----> Directory for history.
         self._store_history = config.store_history
-        self._name = "_".join([config.agent_type, "dqn", config.agent_configuration.type_model, config.observation_type])
+        self._name = "_".join(
+            [config.agent_type, "dqn", config.agent_configuration.type_model, config.observation_type]
+        )
 
         # ## ----> Parameters for training
         self._epoch = config.epoch
@@ -162,7 +164,6 @@ class DQNTraining:
                 total_reward += reward
 
                 # ## ----> Perform one step of the optimization on the policy network.
-                print(f"Game: {step + 1} - Reward: {total_reward}")
                 if len(self._memory) >= 2 * self._batch_size and timestep % 50:
                     self.replay()
 

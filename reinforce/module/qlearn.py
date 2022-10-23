@@ -111,7 +111,7 @@ class TrainingAgentDQN(TrainingAgent):
 
         # ## ----> Choose a random action.
         if random.random() < self._epsilon["value"]:
-            return np.random.choice(4)
+            return choice(4)
 
         # ## ----> Choose an optimal action.
         state_tensor = tf.convert_to_tensor(tf.reshape(state, (4, 4, 1)))

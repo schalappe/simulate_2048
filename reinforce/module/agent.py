@@ -46,7 +46,10 @@ class Agent:
 
     def __init__(self, model_path: str):
         if check_model(model_path):
-            self.policy = tf.keras.models.load_model(model_path, custom_objects={"GCAdam": GCAdam},)
+            self.policy = tf.keras.models.load_model(
+                model_path,
+                custom_objects={"GCAdam": GCAdam},
+            )
         else:
             raise TypeError(f"The directory or file `{model_path}` isn't a keras model.")
 

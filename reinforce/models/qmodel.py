@@ -5,6 +5,7 @@ Set of function for Q-Learning.
 from typing import Union
 
 import tensorflow as tf
+
 from .core import hidden_block
 
 
