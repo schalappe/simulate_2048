@@ -5,6 +5,7 @@ from .types import (
     AgentConfigurationDQN,
     AgentConfigurationPPO,
     Experience,
+    TrainingConfigurationA2C,
     TrainingConfigurationDQN,
     TrainingConfigurationPPO,
 )

@@ -23,7 +23,7 @@ class AgentConfiguration:
     Agent configuration.
     """
 
-    type_model: str
+    discount: float
     store_model: str
     learning_rate: float
 
@@ -34,7 +34,7 @@ class AgentConfigurationDQN(AgentConfiguration):
     Agent configuration for DQN.
     """
 
-    discount: float
+    type_model: str
     epsilon_max: float
     epsilon_min: float
     epsilon_decay: float
@@ -62,8 +62,16 @@ class TrainingConfigurationDQN:
     batch_size: int
     update_target: int
     memory_size: int
-    agent_configuration: AgentConfiguration
+    agent_configuration: AgentConfigurationDQN
     agent_type: str
+
+
+@dataclass
+class TrainingConfigurationA2C:
+    observation_type: str
+    store_history: str
+    epoch: int
+    agent_configuration: AgentConfiguration
 
 
 @dataclass
