@@ -17,18 +17,20 @@ if __name__ == "__main__":
     from itertools import count
 
     from numpy import max as max_array_values
+    from numpy import sum as sum_array_values
 
     # ## ----> Get arguments.
     parser = argparse.ArgumentParser()
     parser.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
     parser.add_argument("--model", help="Which type of model tu use", required=True, type=str)
     parser.add_argument("--obs", help="Which observation to implement", required=True, type=str)
+    parser.add_argument("--style", required=False, type=str, default="simple")
     args = parser.parse_args()
 
     # ## ----> Evaluation with specific algorithm.
     if args.algo == "dqn":
         # ## ----> Create agent.
-        model_path = join(STORAGE_MODEL, f"dqn_model_{args.model}_{args.obs}")
+        model_path = join(STORAGE_MODEL, "conv", f"model_{args.style}_{args.algo}_{args.model}_{args.obs}")
         agent = AgentDQN(model_path)
 
         # ## ----> Create environment.
@@ -51,8 +53,8 @@ if __name__ == "__main__":
                 board = next_board
 
                 # ## ----> store max element.
-                print(f"Game: {i + 1} - Score: {max_array_values(board)} - move: {t}", end="\r")
-                if done:
+                print(f"Game: {i + 1} - Score: {sum_array_values(game.board)} - move: {t}", end="\r")
+                if done or t > 5000:
                     score.append(max_array_values(game.board))
                     break
 

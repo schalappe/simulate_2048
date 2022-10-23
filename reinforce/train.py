@@ -4,8 +4,13 @@ Script for training an agent.
 """
 from os.path import abspath, dirname, join
 
-from addons import AgentConfigurationDQN, TrainingConfigurationDQN
-from training import DQNTraining
+from addons import (
+    AgentConfiguration,
+    AgentConfigurationDQN,
+    TrainingConfigurationA2C,
+    TrainingConfigurationDQN,
+)
+from training import A2CTraining, DQNTraining
 
 STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "zoo")
 
@@ -20,7 +25,7 @@ if __name__ == "__main__":
     # ## ----> Sub-parser for training.
     parser_train = subparsers.add_parser("train", help="Aide de la commande `train`")
     parser_train.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
-    parser_train.add_argument("--model", help="Which type of model tu use", required=True, type=str)
+    parser_train.add_argument("--model", help="Which type of model tu use", type=str, default="dueling")
     parser_train.add_argument("--obs", help="Which observation to implement", required=True, type=str)
     parser_train.add_argument("--style", required=False, type=str, default="simple")
 
@@ -39,7 +44,7 @@ if __name__ == "__main__":
                 store_model=STORAGE_MODEL,
                 learning_rate=5e-3,
                 discount=0.99,
-                epsilon_max=1.0,
+                epsilon_max=0.5,
                 epsilon_min=0.01,
                 epsilon_decay=0.995,
             )
@@ -47,19 +52,26 @@ if __name__ == "__main__":
                 observation_type=args.obs,
                 store_history=STORAGE_MODEL,
                 agent_configuration=config_agent,
-                epoch=100,
+                epoch=1000,
                 batch_size=32,
                 update_target=1,
-                memory_size=10000,
+                memory_size=5000,
                 agent_type=args.style,
             )
             dqn = DQNTraining(config)
             dqn.train_model()
+        elif args.algo == "a2c":
+            config_agent = AgentConfiguration(store_model=STORAGE_MODEL, learning_rate=5e-3, discount=0.99)
+            config = TrainingConfigurationA2C(
+                observation_type=args.obs, store_history=STORAGE_MODEL, agent_configuration=config_agent, epoch=100
+            )
+            a2c = A2CTraining(config)
+            a2c.train_model()
     # ## -----> Train multiple model.
     elif args.task == "multi-train":
         if args.algo == "dqn":
             for model in ["dense", "dueling"]:
-                for style in ["simple", "double"]:
+                for style in ["simple"]:
                     print(f"Training of {model} - {style}")
                     config_agent = AgentConfigurationDQN(
                         type_model=model,
