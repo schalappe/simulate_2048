@@ -8,6 +8,7 @@ from itertools import count
 from os.path import join
 
 import gym
+import tqdm
 from numpy import max as max_array_values
 from numpy import sum as sum_array_values
 from numpy.random import choice
@@ -146,39 +147,40 @@ class DQNTraining:
         Train the policy network.
         """
         max_cell, history = 0, []
-        for step in range(self._epoch):
-            print(f"Start game {step + 1}")
-            done, total_reward = False, 0
+        with tqdm.trange(self._epoch) as period:
+            for step in period:
+                done, total_reward = False, 0
 
-            # ## ----> Initialize environment and state.
-            board, _ = self.game.reset()
+                # ## ----> Initialize environment and state.
+                board, _ = self.game.reset()
 
-            for timestep in count():
-                # ## ----> Select and perform action.
-                action = self._agent.select_action(board)
-                next_board, reward, done, _, _ = self.game.step(action)
+                for timestep in count():
+                    # ## ----> Select and perform action.
+                    action = self._agent.select_action(board)
+                    next_board, reward, done, _, _ = self.game.step(action)
 
-                # ## ----> Store in memory.
-                self._memory.append(Experience(board, next_board, action, reward, done))
-                board = next_board
-                total_reward += reward
+                    # ## ----> Store in memory.
+                    self._memory.append(Experience(board, next_board, action, reward, done))
+                    board = next_board
+                    total_reward += reward
 
-                # ## ----> Perform one step of the optimization on the policy network.
-                if len(self._memory) >= 2 * self._batch_size and timestep % 50:
-                    self.replay()
+                    # ## ----> Perform one step of the optimization on the policy network.
+                    if len(self._memory) >= 2 * self._batch_size and timestep % 50:
+                        self.replay()
 
-                # ## ----> Save game history
-                if done or timestep > 5000:
-                    max_cell = max_array_values(self.game.board)
-                    history.append(
-                        [sum_array_values(self.game.board), max_array_values(self.game.board), total_reward]
-                    )
-                    break
+                    # ## ----> Save game history
+                    if done or timestep > 5000:
+                        max_cell = max_array_values(self.game.board)
+                        history.append(
+                            [sum_array_values(self.game.board), max_array_values(self.game.board), total_reward]
+                        )
+                        break
 
-            # ## ----> Update the target network.
-            if step % self._update == 0:
-                self._agent.update_target()
-            print(f"Max cell: {max_cell}, Total reward: {total_reward:.2f} at episode {step+1}")
+                # ## ----> Update the target network.
+                if step % self._update == 0:
+                    self._agent.update_target()
+                period.set_description(f"Episode {step+1}")
+                period.set_postfix(max_cell=max_cell, total_reward=total_reward)
 
         # ## ----> End of training.
         self.save_history(history)

@@ -9,6 +9,7 @@ class GCAdam(tf.keras.optimizers.Adam):
     """
     Centralized Adam optimizer.
     """
+
     def get_gradients(self, loss: tf.Tensor, params: list) -> list:
         """
         Returns gradients of `loss` with respect to `params`.

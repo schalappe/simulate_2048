@@ -131,25 +131,44 @@ class TrainingAgentDQN(TrainingAgent):
         """
         self._target.set_weights(self._policy.get_weights())
 
+    @classmethod
+    def unpack_sample(cls, sample: list) -> tuple:
+        """
+        Unpack sample.
+
+        Parameters
+        ----------
+        sample: list
+            Sample of experience
+
+        Returns
+        -------
+        tuple
+            Unpack sample
+        """
+        # ## ----> Unpack training sample.
+        batch = Experience(*zip(*sample))
+        states = np.array(list(batch.state))
+        states_next = np.array(list(batch.next_state))
+        rewards = np.array(list(batch.reward))
+        actions = np.array(list(batch.action))
+        dones = np.array(list(batch.done))
+        return states, states_next, rewards, actions, dones
+
     def optimize_model(self, sample: list):
         """
         Optimize the policy network.
         """
         # ## ----> Unpack training sample.
-        batch = Experience(*zip(*sample))
-        state_sample = np.array(list(batch.state))
-        state_next_sample = np.array(list(batch.next_state))
-        reward_sample = np.array(list(batch.reward))
-        action_sample = np.array(list(batch.action))
-        done_sample = np.array(list(batch.done))
+        state_sample, state_next_sample, reward_sample, action_sample, done_sample = self.unpack_sample(sample)
 
         # ## ----> Update Q-value.
-        targets = self._target.predict(state_sample)
-        next_q_values = self._target.predict(state_next_sample).max(axis=1)
+        targets = self._target.predict(state_sample, verbose=0)
+        next_q_values = self._target.predict(state_next_sample, verbose=0).max(axis=1)
         targets[range(len(sample)), action_sample] = reward_sample + (1 - done_sample) * next_q_values * self._discount
 
         # ## ----> Optimize policy.
-        self._policy.fit(state_sample, targets, epochs=1)
+        self._policy.fit(state_sample, targets, epochs=1, verbose=0)
 
 
 class TrainingAgentDDQN(TrainingAgentDQN):
@@ -168,19 +187,14 @@ class TrainingAgentDDQN(TrainingAgentDQN):
         Optimize the policy network.
         """
         # ## ----> Unpack training sample.
-        batch = Experience(*zip(*sample))
-        state_sample = np.array(list(batch.state))
-        state_next_sample = np.array(list(batch.next_state))
-        reward_sample = np.array(list(batch.reward))
-        action_sample = np.array(list(batch.action))
-        done_sample = np.array(list(batch.done))
+        state_sample, state_next_sample, reward_sample, action_sample, done_sample = self.unpack_sample(sample)
 
         # ## ----> Update Q-value.
-        targets = self._target.predict(state_sample)
-        next_q_values = self._target.predict(state_next_sample)[
-            range(len(sample)), np.argmax(self._policy.predict(state_next_sample), axis=1)
+        targets = self._target.predict(state_sample, verbose=0)
+        next_q_values = self._target.predict(state_next_sample, verbose=0)[
+            range(len(sample)), np.argmax(self._policy.predict(state_next_sample, verbose=0), axis=1)
         ]
         targets[range(len(sample)), action_sample] = reward_sample + (1 - done_sample) * next_q_values * self._discount
 
         # ## ----> Optimize policy.
-        self._policy.fit(state_sample, targets, epochs=1)
+        self._policy.fit(state_sample, targets, verbose=0)
