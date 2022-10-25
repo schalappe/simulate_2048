@@ -1,48 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Set of function for Proximal Policy Optimization
+Set of function for Proximal Policy Optimization.
 """
-from typing import Tuple, Union
+from typing import Tuple
 
 import tensorflow as tf
 
-
-def dense_hidden_layers(head: tf.keras.layers.Layer, units: int, activation: str) -> tf.keras.layers.Layer:
-    """
-    Add dense layer.
-
-    Parameters
-    ----------
-    head: Layer
-        Previous layer
-    units: int
-        Number of neurons in this layer
-    activation: str
-        Activation function to add to layer
-
-    Returns
-    -------
-    Layer:
-        New layer
-    """
-    block = tf.keras.layers.Dense(units=units, activation=activation)(head)
-    block = tf.keras.layers.Dropout(rate=0.2)(block)
-    return block
+from .core import dense_hidden_block
 
 
-def hidden_mlp(hidden_layers):
-    for _ in range(4):
-        hidden_layers = dense_hidden_layers(head=hidden_layers, units=256, activation="relu")
-    return hidden_layers
-
-
-def dense_policy(input_size: Union[list or tuple]) -> Tuple[tf.keras.Model, tf.keras.Model]:
+def dense_policy(input_size: int) -> Tuple[tf.keras.Model, tf.keras.Model]:
     """
     Create Q-Network for Q-Learning.
 
     Parameters
     ----------
-    input_size: tuple or list
+    input_size: int
         Input dimension
 
     Returns
@@ -50,19 +23,19 @@ def dense_policy(input_size: Union[list or tuple]) -> Tuple[tf.keras.Model, tf.k
     Model:
         New model
     """
-    # ## ----> Create input layer.
+    # ##: Create input layer.
     inputs = tf.keras.layers.Input(shape=input_size)
 
-    # ## ----> All hidden layers.
+    # ##: All hidden layers.
     hidden = tf.keras.layers.Flatten()(inputs)
 
-    # ## ----> Actor model.
-    logit = hidden_mlp(hidden)
+    # ##: Actor model.
+    logit = dense_hidden_block(hidden, size=256)
     output_actor = tf.keras.layers.Dense(units=4, activation="softmax")(logit)
     actor = tf.keras.Model(inputs=inputs, outputs=output_actor)
 
-    # ## ----> Critic model.
-    value = hidden_mlp(hidden)
+    # ##: Critic model.
+    value = dense_hidden_block(hidden, size=256)
     output_critic = tf.keras.layers.Dense(units=1, activation="linear")(value)
     critic = tf.keras.Model(inputs=inputs, outputs=tf.squeeze(output_critic, axis=1))
 

@@ -11,7 +11,7 @@ from simulate_2048 import FlattenLogObservation, FlattenObservation, LogObservat
 
 
 class ObservationWrappersTest(unittest.TestCase):
-    # ## ----> Game board
+    # ##: Game board
     BOARD = np.array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 4], [2, 0, 4, 2]])
 
     def test_flatten_observation(self):
