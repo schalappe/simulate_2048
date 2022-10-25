@@ -28,7 +28,7 @@ class GameBoard(gym.Env):
 
     def __init__(self, size: int = 4):
         self.size = size  # ##: The size of the square grid.
-        self.observation_space = spaces.Box(low=2, high=2**32, shape=(size, size), dtype=np.int64)
+        self.observation_space = spaces.Box(low=0, high=2**32, shape=(size, size), dtype=np.int64)
         self.action_space = spaces.Discrete(4)  # ##: 4 actions possible.
 
         # ## ----> Initialize variables.

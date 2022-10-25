@@ -90,3 +90,34 @@ class FlattenLogObservation(gym.ObservationWrapper):
         obs[obs == 0] = 1
         obs = np.log2(obs)
         return obs.astype(int)
+
+
+class FlattenOneHotObservation(gym.ObservationWrapper):
+    """
+    Class for flatten then encode the observation.
+    """
+
+    def __init__(self, env):
+        super().__init__(env)
+        self.observation_space = spaces.Box(low=0, high=1, shape=(env.size * env.size * 31,), dtype=np.int64)
+
+    def observation(self, observation: np.ndarray) -> np.ndarray:
+        """
+        Flatten the observation given by the environment than encode it.
+
+        Parameters
+        ----------
+        observation: np.ndarray
+            Observation given by the environment
+
+        Returns
+        -------
+        np.ndarray:
+            Encode observation
+        """
+        obs = observation.copy()
+        obs = np.reshape(obs, -1)
+        obs[obs == 0] = 1
+        obs = np.log2(obs)
+        obs = obs.astype(int)
+        return np.reshape(np.eye(31)[obs], -1)
