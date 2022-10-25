@@ -2,10 +2,11 @@
 """
 Actor-critic methods.
 """
+from typing import Union
+
 import numpy as np
 import tensorflow as tf
 from numpy import ndarray
-from typing import Union
 
 from reinforce.models import actor_and_critic_model
 

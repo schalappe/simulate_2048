@@ -5,7 +5,6 @@ Script for training an agent.
 from os.path import abspath, dirname, join
 
 from addons import (
-    AgentConfiguration,
     AgentConfigurationDQN,
     TrainingConfigurationA2C,
     TrainingConfigurationDQN,
@@ -52,18 +51,17 @@ if __name__ == "__main__":
                 observation_type=args.obs,
                 store_history=STORAGE_MODEL,
                 agent_configuration=config_agent,
-                epoch=1000,
-                batch_size=32,
+                epoch=100,
+                batch_size=16,
                 update_target=1,
-                memory_size=5000,
+                memory_size=10000,
                 agent_type=args.style,
             )
             dqn = DQNTraining(config)
             dqn.train_model()
         elif args.algo == "a2c":
-            config_agent = AgentConfiguration(store_model=STORAGE_MODEL, learning_rate=5e-3, discount=0.99)
             config = TrainingConfigurationA2C(
-                observation_type=args.obs, store_history=STORAGE_MODEL, agent_configuration=config_agent, epoch=100
+                observation_type=args.obs, store_history=STORAGE_MODEL, epoch=5000, learning_rate=5e-3, discount=0.99
             )
             a2c = A2CTraining(config)
             a2c.train_model()

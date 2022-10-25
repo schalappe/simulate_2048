@@ -4,7 +4,7 @@ Agent definition.
 """
 from abc import ABC, abstractmethod
 from os import listdir
-from os.path import exists, isdir, isfile, sep, join
+from os.path import exists, isdir, isfile, join, sep
 
 import tensorflow as tf
 from numpy import ndarray
@@ -43,6 +43,7 @@ class Agent:
     """
     Agent to play 2048 Game.
     """
+
     _name: str
 
     def __init__(self, model_path: str = None):

@@ -122,7 +122,7 @@ class GameBoard(gym.Env):
         int
             computed reward
         """
-        return sum(np.log2(merged_value)) if merged_value else 0
+        return sum(merged_value) if merged_value else 0
 
     @classmethod
     def __compute_penalties(cls, board: np.ndarray) -> float:

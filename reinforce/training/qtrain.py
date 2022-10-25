@@ -64,10 +64,7 @@ class DQNTraining:
     The Deep Q Learning algorithm
     """
 
-    def __init__(
-        self,
-        config: TrainingConfigurationDQN,
-    ):
+    def __init__(self, config: TrainingConfigurationDQN):
         # ## ----> Create game.
         self.__initialize_game(config.observation_type)
 

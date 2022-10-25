@@ -3,22 +3,21 @@
 A2C Training.
 """
 import pickle
+import statistics
 from collections import Counter
 from itertools import count
 from os.path import join
+from typing import List, Tuple
 
 import gym
-import statistics
 import numpy as np
 import tensorflow as tf
-from numpy import max as max_array_values
-from numpy import sum as sum_array_values
-from numpy import ndarray
-from typing import List, Tuple
-from reinforce.addons import GCAdam
 import tqdm
+from numpy import max as max_array_values
+from numpy import ndarray
+from numpy import sum as sum_array_values
 
-from reinforce.addons import TrainingConfigurationA2C
+from reinforce.addons import GCAdam, TrainingConfigurationA2C
 from reinforce.module import AgentA2C
 from simulate_2048 import LogObservation
 
@@ -96,10 +95,12 @@ class A2CTraining:
 
     def environment_step(self, action: tf.Tensor) -> List[tf.Tensor]:
         """Returns state, reward and done flag given an action."""
+
         def _env_step(_action) -> Tuple[ndarray, ndarray, ndarray]:
             state, reward, done, _, _ = self.game.step(_action)
             return state.astype(np.int32), np.array(reward, np.float32), np.array(done, np.int32)
-        return tf.numpy_function(_env_step, [action],  [tf.int32, tf.float32, tf.int32])
+
+        return tf.numpy_function(_env_step, [action], [tf.int32, tf.float32, tf.int32])
 
     def run_episode(self, initial_state: tf.Tensor, max_steps: int = 5000) -> Tuple:
         """Runs a single episode to collect training data."""
@@ -162,7 +163,7 @@ class A2CTraining:
 
         # ## ----> Standardize for training stability.
         if standardize:
-            returns = ((returns - tf.math.reduce_mean(returns)) / (tf.math.reduce_std(returns) + self._epsilon))
+            returns = (returns - tf.math.reduce_mean(returns)) / (tf.math.reduce_std(returns) + self._epsilon)
 
         return returns
 
@@ -217,13 +218,17 @@ class A2CTraining:
                 initial_state = tf.constant(board, dtype=tf.int32)
 
                 # ## ----> Train model.
-                episode_reward = int(self.train_step(initial_state, max_steps=1000))
+                episode_reward = int(self.train_step(initial_state, max_steps=5000))
 
                 # ## ----> Log.
                 histories.append(episode_reward)
                 running_reward = statistics.mean(histories)
                 period.set_description(f"Episode {step + 1}")
                 period.set_postfix(episode_reward=episode_reward, running_reward=running_reward)
+
+                # ## ----> Save model
+                if step % 500 == 0:
+                    self._agent.save_model(self._store_history)
 
         # ## ----> End of training.
         self.save_history(histories)
