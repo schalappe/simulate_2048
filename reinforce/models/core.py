@@ -21,7 +21,8 @@ def dense_hidden_layers(head: tf.keras.layers.Layer, units: int) -> tf.keras.lay
     Layer
         New layer
     """
-    block = tf.keras.layers.Dense(units=units, activation="relu")(head)
+    initializer = tf.keras.initializers.HeUniform()
+    block = tf.keras.layers.Dense(units=units, activation="relu", kernel_initializer=initializer)(head)
     block = tf.keras.layers.Dropout(rate=0.1)(block)
     return block
 
@@ -42,7 +43,8 @@ def dense_hidden_block(head: tf.keras.layers.Layer, size: int) -> tf.keras.layer
     Layer
         Dense block
     """
-    hidden = tf.keras.layers.Dense(units=size, activation="relu")(head)
+    initializer = tf.keras.initializers.HeUniform()
+    hidden = tf.keras.layers.Dense(units=size, activation="relu", kernel_initializer=initializer)(head)
     for _ in range(9):
         hidden = dense_hidden_layers(head=hidden, units=size)
     return hidden
