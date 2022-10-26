@@ -103,4 +103,7 @@ class AgentDDQN(AgentDQN):
 
 
 class AgentDDQNDueling(AgentDQNDueling):
+    """
+    Train an agent to play 2048 Game with Double Dueling DQN algorithm.
+    """
     _name = "double-dqn-dueling"

@@ -36,7 +36,21 @@ class A2CTraining(Training):
         self._config = config
 
     def run_episode(self, initial_state: tf.Tensor, max_steps: int = 5000) -> Tuple:
-        """Runs a single episode to collect training data."""
+        """
+        Runs a single episode to collect training data.
+
+        Parameters
+        ----------
+        initial_state: Tensor
+            Initial state
+        max_steps: int
+            Max steps for one episode
+
+        Returns
+        -------
+        tuple
+            Action probabilities, values and rewards
+        """
 
         # ##: Buffer of experience
         action_probs = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
@@ -77,7 +91,21 @@ class A2CTraining(Training):
         return action_probs, values, rewards
 
     def get_expected_return(self, rewards: tf.Tensor, standardize: bool = True) -> tf.Tensor:
-        """Compute expected returns per timestep."""
+        """
+        Compute expected returns per timestep.
+
+        Parameters
+        ----------
+        rewards: Tensor
+            A lot of reward
+        standardize: bool
+            Standardize for stability
+
+        Returns
+        -------
+        Tensor
+            Expected reward
+        """
 
         # ##: Initialize returns.
         size = tf.shape(rewards)[0]
@@ -101,7 +129,23 @@ class A2CTraining(Training):
         return returns
 
     def compute_loss(self, action_probs: tf.Tensor, values: tf.Tensor, returns: tf.Tensor) -> tf.Tensor:
-        """Computes the combined actor-critic loss."""
+        """
+        Computes the combined actor-critic loss.
+
+        Parameters
+        ----------
+        action_probs: Tensor
+            Action of probabilities
+        values: Tensor
+            Value produced by network
+        returns: Tensor
+            Expected reward
+
+        Returns
+        -------
+        Tensor
+            Computed loss
+        """
 
         # ##: Compute advantage.
         advantage = returns - values

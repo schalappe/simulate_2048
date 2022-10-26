@@ -9,7 +9,7 @@ import tensorflow as tf
 import tqdm
 
 from reinforce.addons import Experience, GCAdam, ReplayMemory, TrainingConfigurationDQN
-from reinforce.module import AgentDQN, AgentDQNDueling, AgentDDQN, AgentDDQNDueling
+from reinforce.module import AgentDDQN, AgentDDQNDueling, AgentDQN, AgentDQNDueling
 
 from .core import Training
 
@@ -52,7 +52,9 @@ class DQNTraining(Training):
         dones = tf.stack(list(float(t) for t in batch.done), 0)
         return states, states_next, rewards, actions, dones
 
-    def get_expected_values(self, sample_reward: tf.Tensor, sample_next_states: tf.Tensor, sample_dones: tf.Tensor) -> tf.Tensor:
+    def get_expected_values(
+        self, sample_reward: tf.Tensor, sample_next_states: tf.Tensor, sample_dones: tf.Tensor
+    ) -> tf.Tensor:
         """
         Compute expected Q-values.
 
@@ -135,7 +137,13 @@ class DQNTraining(Training):
                     # ##: Perform one step of the optimization on the policy network.
                     if len(self._memory) >= self._config.batch_size and timestep % self._config.replay_step:
                         # ##: Unpack training sample.
-                        state_sample, state_next_sample, reward_sample, action_sample, done_sample = self.unpack_sample()
+                        (
+                            state_sample,
+                            state_next_sample,
+                            reward_sample,
+                            action_sample,
+                            done_sample,
+                        ) = self.unpack_sample()
 
                         # ##: Compute next Q-value.
                         target_values = self.get_expected_values(reward_sample, state_next_sample, done_sample)
@@ -185,7 +193,9 @@ class DDQNTraining(DQNTraining):
     def _initialize_agent(self):
         self._agent = AgentDDQN()
 
-    def get_expected_values(self, sample_reward: tf.Tensor, sample_next_states: tf.Tensor, sample_dones: tf.Tensor) -> tf.Tensor:
+    def get_expected_values(
+        self, sample_reward: tf.Tensor, sample_next_states: tf.Tensor, sample_dones: tf.Tensor
+    ) -> tf.Tensor:
         """
         Compute expected Q-values.
 
@@ -204,7 +214,10 @@ class DDQNTraining(DQNTraining):
             Expected Q-values
         """
         # ##: Update Q-value.
-        targets = self._agent.target.predict(sample_next_states, verbose=0)[range(self._config.batch_size), tf.argmax(self._agent.policy.predict(sample_next_states, verbose=0), axis=1)]
+        targets = self._agent.target.predict(sample_next_states, verbose=0)[
+            range(self._config.batch_size),
+            tf.argmax(self._agent.policy.predict(sample_next_states, verbose=0), axis=1),
+        ]
         next_q_values = sample_reward + (1 - sample_dones) * self._config.discount * targets
 
         return next_q_values
