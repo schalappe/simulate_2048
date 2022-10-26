@@ -9,7 +9,7 @@ from os.path import exists, isdir, isfile, join, sep
 import tensorflow as tf
 from numpy import ndarray
 
-from reinforce.addons import AgentConfiguration, GCAdam
+from reinforce.addons import GCAdam
 
 
 def check_model(model_path: str) -> bool:
@@ -39,7 +39,7 @@ def check_model(model_path: str) -> bool:
     return False
 
 
-class Agent:
+class Agent(ABC):
     """
     Agent to play 2048 Game.
     """
@@ -61,10 +61,20 @@ class Agent:
 
     @property
     def name(self):
+        """
+        Name of agent.
+        """
         return self._name
 
     @name.setter
-    def name(self, value):
+    def name(self, value: str):
+        """
+        Change the name of agent.
+        Parameters
+        ----------
+        value: str
+            New name of agent
+        """
         self._name = value
 
     @abstractmethod
@@ -94,47 +104,3 @@ class Agent:
         Save policy model.
         """
         self.policy.save(join(store_model, f"model_{self.name}"))
-
-
-class TrainingAgent(ABC):
-    """
-    Train an agent to play 2048 Game.
-    """
-
-    def __init__(self, config: AgentConfiguration, observation_type: str):
-        self._initialize_agent(config, observation_type)
-
-    @abstractmethod
-    def _initialize_agent(self, config: AgentConfiguration, observation_type: str):
-        """
-        Initialize agent.
-
-        Parameters
-        ----------
-        config: AgentConfiguration
-            Configuration for agent
-        observation_type: str
-            Type of observation give by the environment
-        """
-
-    @abstractmethod
-    def select_action(self, state: ndarray) -> int:
-        """
-        Select an action given the state.
-
-        Parameters
-        ----------
-        state: ndarray
-            State of the game
-
-        Returns
-        -------
-        int
-            Selected action
-        """
-
-    @abstractmethod
-    def save_model(self):
-        """
-        Save policy model.
-        """

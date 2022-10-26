@@ -22,7 +22,7 @@ def dense_hidden_layers(head: tf.keras.layers.Layer, units: int) -> tf.keras.lay
         New layer
     """
     block = tf.keras.layers.Dense(units=units, activation="relu")(head)
-    block = tf.keras.layers.Dropout(rate=0.1)
+    block = tf.keras.layers.Dropout(rate=0.1)(block)
     return block
 
 

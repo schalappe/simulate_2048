@@ -4,12 +4,8 @@ Script for training an agent.
 """
 from os.path import abspath, dirname, join
 
-from addons import (
-    AgentConfigurationDQN,
-    TrainingConfigurationA2C,
-    TrainingConfigurationDQN,
-)
-from training import A2CTraining, DQNTraining
+from addons import TrainingConfigurationA2C, TrainingConfigurationDQN
+from training import A2CTraining, DQNDuelingTraining, DQNTraining
 
 STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "zoo")
 
@@ -24,72 +20,109 @@ if __name__ == "__main__":
     # ## ----> Sub-parser for training.
     parser_train = subparsers.add_parser("train", help="Aide de la commande `train`")
     parser_train.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
-    parser_train.add_argument("--model", help="Which type of model tu use", type=str, default="dueling")
-    parser_train.add_argument("--obs", help="Which observation to implement", required=True, type=str)
-    parser_train.add_argument("--style", required=False, type=str, default="simple")
 
     # ## ----> Sub-parser for multiple training.
     parser_multi = subparsers.add_parser("multi-train", help="Aide de la commande `multi-train`")
-    parser_multi.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
-    parser_multi.add_argument("--obs", help="Which observation to implement", required=True, type=str)
 
     args = parser.parse_args()
 
     # ## ----> Train specific algorithm.
     if args.task == "train":
+
+        # ##: Get configuration.
         if args.algo == "dqn":
-            config_agent = AgentConfigurationDQN(
-                type_model=args.model,
-                store_model=STORAGE_MODEL,
-                learning_rate=5e-3,
-                discount=0.99,
-                epsilon_max=0.5,
-                epsilon_min=0.01,
-                epsilon_decay=0.995,
-            )
             config = TrainingConfigurationDQN(
-                observation_type=args.obs,
                 store_history=STORAGE_MODEL,
-                agent_configuration=config_agent,
-                epoch=100,
-                batch_size=16,
-                update_target=1,
+                training_steps=10,
+                learning_rate=3e-4,
+                batch_size=64,
+                discount=0.99,
+                save_steps=101,
+                replay_step=50,
+                update_step=300,
+                decay=0.995,
+                max_steps=5000,
                 memory_size=10000,
-                agent_type=args.style,
             )
-            dqn = DQNTraining(config)
-            dqn.train_model()
+            train = DQNTraining(config)
+        elif args.algo == "dqn-dueling":
+            config = TrainingConfigurationDQN(
+                store_history=STORAGE_MODEL,
+                training_steps=10,
+                learning_rate=3e-4,
+                batch_size=64,
+                discount=0.99,
+                save_steps=101,
+                replay_step=50,
+                update_step=300,
+                decay=0.995,
+                max_steps=5000,
+                memory_size=10000,
+            )
+            train = DQNDuelingTraining(config)
         elif args.algo == "a2c":
             config = TrainingConfigurationA2C(
-                observation_type=args.obs, store_history=STORAGE_MODEL, epoch=5000, learning_rate=5e-3, discount=0.99
+                store_history=STORAGE_MODEL,
+                training_steps=500,
+                learning_rate=3e-4,
+                discount=0.99,
+                save_steps=101,
+                max_steps=5000,
             )
-            a2c = A2CTraining(config)
-            a2c.train_model()
+            train = A2CTraining(config)
+        else:
+            raise ValueError(f"This `{args.algo}` isn't implemented yet.")
+
+        # ##: Train agent.
+        train.train_model()
     # ## -----> Train multiple model.
     elif args.task == "multi-train":
-        if args.algo == "dqn":
-            for model in ["dense", "dueling"]:
-                for style in ["simple"]:
-                    print(f"Training of {model} - {style}")
-                    config_agent = AgentConfigurationDQN(
-                        type_model=model,
-                        store_model=STORAGE_MODEL,
-                        learning_rate=5e-3,
-                        discount=0.99,
-                        epsilon_max=0.5,
-                        epsilon_min=0.01,
-                        epsilon_decay=0.995,
-                    )
-                    config = TrainingConfigurationDQN(
-                        observation_type=args.obs,
-                        store_history=STORAGE_MODEL,
-                        agent_configuration=config_agent,
-                        epoch=100,
-                        batch_size=32,
-                        update_target=1,
-                        memory_size=10000,
-                        agent_type=style,
-                    )
-                dqn = DQNTraining(config)
-                dqn.train_model()
+        # ##: A2C
+        config = TrainingConfigurationA2C(
+            store_history=STORAGE_MODEL,
+            training_steps=3000,
+            learning_rate=3e-4,
+            discount=0.99,
+            save_steps=101,
+            max_steps=5000,
+        )
+        train = A2CTraining(config)
+        train.train_model()
+
+        # ##: DQN Training.
+        del train
+        config = TrainingConfigurationDQN(
+            store_history=STORAGE_MODEL,
+            training_steps=1000,
+            learning_rate=3e-4,
+            batch_size=64,
+            discount=0.99,
+            save_steps=101,
+            replay_step=50,
+            update_step=300,
+            decay=0.995,
+            max_steps=5000,
+            memory_size=10000,
+        )
+        train = DQNTraining(config)
+        train.train_model()
+
+        # ##: DQN dueling.
+        del train
+        config = TrainingConfigurationDQN(
+            store_history=STORAGE_MODEL,
+            training_steps=1000,
+            learning_rate=3e-4,
+            batch_size=64,
+            discount=0.99,
+            save_steps=101,
+            replay_step=50,
+            update_step=300,
+            decay=0.995,
+            max_steps=5000,
+            memory_size=10000,
+        )
+        train = DQNDuelingTraining(config)
+        train.train_model()
+
     print("Finish!")

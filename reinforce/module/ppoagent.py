@@ -8,7 +8,7 @@ from numpy import ndarray
 from reinforce.addons import AgentConfigurationPPO
 from reinforce.models import dense_policy
 
-from .agent import TrainingAgent
+from .core import TrainingAgent
 
 
 class TrainingAgentPPO(TrainingAgent):
