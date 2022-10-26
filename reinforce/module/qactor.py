@@ -92,3 +92,15 @@ class AgentDQNDueling(AgentDQN):
         self.policy = dueling_dense_learning(input_size=INPUT_SIZE)
         self.target = dueling_dense_learning(input_size=INPUT_SIZE)
         self.update_target()
+
+
+class AgentDDQN(AgentDQN):
+    """
+    Train an agent to play 2048 Game with Double DQN algorithm.
+    """
+
+    _name = "double-dqn"
+
+
+class AgentDDQNDueling(AgentDQNDueling):
+    _name = "double-dqn-dueling"
