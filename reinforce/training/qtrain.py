@@ -19,6 +19,8 @@ class DQNTraining(Training):
     The Deep Q Learning algorithm
     """
 
+    _name = "dqn"
+
     def _initialize_agent(self):
         self._agent = AgentDQN()
 
@@ -31,7 +33,6 @@ class DQNTraining(Training):
 
     def __init__(self, config: TrainingConfigurationDQN):
         super().__init__(config)
-        self._name = "dqn"
         self._config = config
 
     def unpack_sample(self) -> tuple:
@@ -78,6 +79,7 @@ class DQNTraining(Training):
 
         return next_q_values
 
+    @tf.function
     def train_step(self, sample_action: tf.Tensor, sample_state: tf.Tensor, expected_values: tf.Tensor):
         """
         Runs a model training step.
@@ -181,6 +183,8 @@ class DQNDuelingTraining(DQNTraining):
     The Deep Q Learning Dueling algorithm
     """
 
+    _name = "dqn-dueling"
+
     def _initialize_agent(self):
         self._agent = AgentDQNDueling()
 
@@ -189,6 +193,8 @@ class DDQNTraining(DQNTraining):
     """
     The Double Deep Q Learning algorithm.
     """
+
+    _name = "double-dqn"
 
     def _initialize_agent(self):
         self._agent = AgentDDQN()
@@ -227,6 +233,8 @@ class DDQNDuelingTraining(DDQNTraining):
     """
     The Double Deep Q Learning Dueling algorithm.
     """
+
+    _name = "double-dqn-dueling"
 
     def _initialize_agent(self):
         self._agent = AgentDDQNDueling()
