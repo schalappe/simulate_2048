@@ -9,7 +9,7 @@ import tensorflow as tf
 import tqdm
 
 from reinforce.addons import Experience, GCAdam, ReplayMemory, TrainingConfigurationDQN
-from reinforce.module import AgentDQN, AgentDQNDueling
+from reinforce.module import AgentDQN, AgentDQNDueling, AgentDDQN, AgentDDQNDueling
 
 from .core import Training
 
@@ -52,29 +52,55 @@ class DQNTraining(Training):
         dones = tf.stack(list(float(t) for t in batch.done), 0)
         return states, states_next, rewards, actions, dones
 
-    def train_step(self):
+    def get_expected_values(self, sample_reward: tf.Tensor, sample_next_states: tf.Tensor, sample_dones: tf.Tensor) -> tf.Tensor:
+        """
+        Compute expected Q-values.
+
+        Parameters
+        ----------
+        sample_reward: Tensor
+            Batch of rewards
+        sample_next_states: Tensor
+            Batch of next states
+        sample_dones: Tensor
+            Batch of dones
+
+        Returns
+        -------
+        Tensor
+            Expected Q-values
+        """
+        # ##: Update Q-value.
+        targets = self._agent.target.predict(sample_next_states, verbose=0)
+        next_q_values = sample_reward + (1 - sample_dones) * self._config.discount * tf.reduce_max(targets, axis=1)
+
+        return next_q_values
+
+    def train_step(self, sample_action: tf.Tensor, sample_state: tf.Tensor, expected_values: tf.Tensor):
         """
         Runs a model training step.
+
+        Parameters
+        ----------
+        sample_action: Tensor
+            Batch of actions
+        sample_state: Tensor
+            Batch of states
+        expected_values: Tensor
+            Expected Q-values
         """
-        # ##: Unpack training sample.
-        state_sample, state_next_sample, reward_sample, action_sample, done_sample = self.unpack_sample()
-
-        # ##: Update Q-value.
-        targets = self._agent.target.predict(state_next_sample, verbose=0)
-        next_q_values = reward_sample + (1 - done_sample) * self._config.discount * tf.reduce_max(targets, axis=1)
-
         # ##: Create a mask to calculate loss on the updated Q-values.
-        masks = tf.one_hot(action_sample, 4)
+        masks = tf.one_hot(sample_action, 4)
 
         with tf.GradientTape() as tape:
             # ##: Train the model on the states and updated Q-values
-            q_values = self._agent.policy(state_sample)
+            q_values = self._agent.policy(sample_state)
 
             # ##: Apply the masks to the Q-values to get the Q-value for action taken.
             q_action = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
 
             # Calculate loss between new Q-value and old Q-value
-            loss = self._loss_function(next_q_values, q_action)
+            loss = self._loss_function(expected_values, q_action)
 
         # ##: Backpropagation
         grads = tape.gradient(loss, self._agent.policy.trainable_variables)
@@ -108,7 +134,14 @@ class DQNTraining(Training):
 
                     # ##: Perform one step of the optimization on the policy network.
                     if len(self._memory) >= self._config.batch_size and timestep % self._config.replay_step:
-                        self.train_step()
+                        # ##: Unpack training sample.
+                        state_sample, state_next_sample, reward_sample, action_sample, done_sample = self.unpack_sample()
+
+                        # ##: Compute next Q-value.
+                        target_values = self.get_expected_values(reward_sample, state_next_sample, done_sample)
+
+                        # ##: Train the policy network.
+                        self.train_step(action_sample, state_sample, target_values)
 
                     # ##: Update the target network.
                     if timestep % self._config.update_step == 0:
@@ -142,3 +175,45 @@ class DQNDuelingTraining(DQNTraining):
 
     def _initialize_agent(self):
         self._agent = AgentDQNDueling()
+
+
+class DDQNTraining(DQNTraining):
+    """
+    The Double Deep Q Learning algorithm.
+    """
+
+    def _initialize_agent(self):
+        self._agent = AgentDDQN()
+
+    def get_expected_values(self, sample_reward: tf.Tensor, sample_next_states: tf.Tensor, sample_dones: tf.Tensor) -> tf.Tensor:
+        """
+        Compute expected Q-values.
+
+        Parameters
+        ----------
+        sample_reward: Tensor
+            Batch of rewards
+        sample_next_states: Tensor
+            Batch of next states
+        sample_dones: Tensor
+            Batch of dones
+
+        Returns
+        -------
+        Tensor
+            Expected Q-values
+        """
+        # ##: Update Q-value.
+        targets = self._agent.target.predict(sample_next_states, verbose=0)[range(self._config.batch_size), tf.argmax(self._agent.policy.predict(sample_next_states, verbose=0), axis=1)]
+        next_q_values = sample_reward + (1 - sample_dones) * self._config.discount * targets
+
+        return next_q_values
+
+
+class DDQNDuelingTraining(DDQNTraining):
+    """
+    The Double Deep Q Learning Dueling algorithm.
+    """
+
+    def _initialize_agent(self):
+        self._agent = AgentDDQNDueling()
