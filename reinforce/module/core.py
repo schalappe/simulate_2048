@@ -57,7 +57,7 @@ class Agent:
             else:
                 raise TypeError(f"The directory or file `{model_path}` isn't a keras model.")
         else:
-            self.initialize_agent()
+            self._initialize_agent()
 
     @property
     def name(self):
@@ -68,7 +68,7 @@ class Agent:
         self._name = value
 
     @abstractmethod
-    def initialize_agent(self) -> None:
+    def _initialize_agent(self):
         """
         Initialize the policy for training.
         """

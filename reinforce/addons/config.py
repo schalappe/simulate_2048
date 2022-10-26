@@ -4,17 +4,27 @@ Set of types for this project.
 """
 from collections import namedtuple
 from dataclasses import dataclass
+import tensorflow as tf
 
-Experience = namedtuple(
-    typename="Experience",
-    field_names=[
-        "state",
-        "next_state",
-        "action",
-        "reward",
-        "done",
-    ],
-)
+INPUT_SIZE = 496
+
+
+# Experience = namedtuple(
+#    typename="Experience",
+#    field_names=[
+#        "state",
+#        "next_state",
+#        "action",
+#        "reward",
+#        "done",
+#    ],
+# )
+class Experience(namedtuple):
+    state: tf.Tensor
+    next_state: tf.Tensor
+    action: int
+    reward: tf.float32
+    done: tf.bool
 
 
 @dataclass
@@ -56,9 +66,8 @@ class TrainingConfiguration:
     Train configuration.
     """
 
-    observation_type: str
     store_history: str
-    epoch: int
+    training_steps: int
 
 
 @dataclass
@@ -82,6 +91,7 @@ class TrainingConfigurationA2C(TrainingConfiguration):
 
     discount: float
     learning_rate: float
+    save_steps: int
 
 
 @dataclass

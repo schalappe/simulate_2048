@@ -257,7 +257,7 @@ class GameBoard(gym.Env):
         tuple
             Update board, reward, state of the game and info
         """
-        reward = -10
+        reward = -2048
 
         # ## ----> Save old board.
         self._old_board = self._board.copy()
