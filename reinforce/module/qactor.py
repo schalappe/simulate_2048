@@ -19,7 +19,7 @@ class AgentDQN(Agent):
     Train an agent to play 2048 Game with DQN algorithm.
     """
 
-    _epsilon, _min_epsilon = 0.01, 0.01
+    _epsilon = 0.05
     _name = "dqn"
 
     def _initialize_agent(self):
@@ -33,24 +33,35 @@ class AgentDQN(Agent):
         self.target = dense_learning(input_size=INPUT_SIZE)
         self.update_target()
 
+    @property
+    def epsilon(self) -> float:
+        """
+        Return value of epsilon.
+
+        Returns
+        -------
+        float
+            Epsilon
+        """
+        return self._epsilon
+
+    @epsilon.setter
+    def epsilon(self, value: float):
+        """
+        Set a new value for epsilon.
+
+        Parameters
+        ----------
+        value: float
+            New value of epsilon
+        """
+        self._epsilon = value
+
     def update_target(self):
         """
         Update the weight of target model with the weight of policy model.
         """
         self.target.set_weights(self.policy.get_weights())
-
-    def reduce_epsilon(self, decay: float):
-        """
-        Reduce the epsilon value.
-
-        Parameters
-        ----------
-        decay: float
-            Percentage discount
-
-        """
-        epsilon = self._epsilon * decay
-        self._epsilon = max(self._min_epsilon, epsilon)
 
     def select_action(self, state: ndarray) -> int:
         """

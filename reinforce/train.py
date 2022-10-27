@@ -5,7 +5,7 @@ Script for training an agent.
 from os.path import abspath, dirname, join
 
 from addons import TrainingConfigurationA2C, TrainingConfigurationDQN
-from training import A2CTraining, DQNDuelingTraining, DQNTraining
+from training import A2CTraining, DQNDuelingTraining, DQNTraining, DDQNTraining, DDQNDuelingTraining
 
 STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "zoo")
 
@@ -40,7 +40,7 @@ if __name__ == "__main__":
                 save_steps=101,
                 replay_step=50,
                 update_step=300,
-                decay=0.995,
+                greedy_step=5,
                 max_steps=5000,
                 memory_size=10000,
             )
@@ -55,11 +55,41 @@ if __name__ == "__main__":
                 save_steps=101,
                 replay_step=50,
                 update_step=300,
-                decay=0.995,
+                greedy_step=5,
                 max_steps=5000,
                 memory_size=10000,
             )
             train = DQNDuelingTraining(config)
+        elif args.algo == "double-dqn":
+            config = TrainingConfigurationDQN(
+                store_history=STORAGE_MODEL,
+                training_steps=10,
+                learning_rate=3e-4,
+                batch_size=64,
+                discount=0.99,
+                save_steps=101,
+                replay_step=50,
+                update_step=300,
+                greedy_step=5,
+                max_steps=5000,
+                memory_size=10000,
+            )
+            train = DDQNTraining(config)
+        elif args.algo == "double-dqn-dueling":
+            config = TrainingConfigurationDQN(
+                store_history=STORAGE_MODEL,
+                training_steps=30000,
+                learning_rate=3e-4,
+                batch_size=64,
+                discount=0.99,
+                save_steps=101,
+                replay_step=50,
+                update_step=300,
+                greedy_step=10000,
+                max_steps=5000,
+                memory_size=10000,
+            )
+            train = DDQNDuelingTraining(config)
         elif args.algo == "a2c":
             config = TrainingConfigurationA2C(
                 store_history=STORAGE_MODEL,
@@ -80,7 +110,7 @@ if __name__ == "__main__":
         # ##: A2C
         config = TrainingConfigurationA2C(
             store_history=STORAGE_MODEL,
-            training_steps=3000,
+            training_steps=1000,
             learning_rate=3e-4,
             discount=0.99,
             save_steps=101,
@@ -100,7 +130,7 @@ if __name__ == "__main__":
             save_steps=101,
             replay_step=50,
             update_step=300,
-            decay=0.995,
+            greedy_step=5000,
             max_steps=5000,
             memory_size=10000,
         )
@@ -118,7 +148,7 @@ if __name__ == "__main__":
             save_steps=101,
             replay_step=50,
             update_step=300,
-            decay=0.995,
+            greedy_step=5000,
             max_steps=5000,
             memory_size=10000,
         )

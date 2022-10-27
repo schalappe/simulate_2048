@@ -27,10 +27,10 @@ class TrainingConfigurationDQN(TrainingConfiguration):
     Training configuration for DQN
     """
 
-    decay: float
     batch_size: int
     replay_step: int
     update_step: int
+    greedy_step: int
     memory_size: int
 
 

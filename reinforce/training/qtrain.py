@@ -126,8 +126,10 @@ class DQNTraining(Training):
 
                 for _ in range(self._config.max_steps):
                     # ##: Select and perform action.
-                    action = self._agent.select_action(board)
-                    self._agent.reduce_epsilon(self._config.decay)
+                    if timestep < self._config.greedy_step:
+                        action = np.random.choice(4)
+                    else:
+                        action = self._agent.select_action(board)
                     next_board, reward, done = self.environment_step(action)
 
                     # ##: Store in memory.
