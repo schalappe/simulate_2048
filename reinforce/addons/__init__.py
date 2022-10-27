@@ -4,7 +4,6 @@ from .config import (
     TrainingConfiguration,
     TrainingConfigurationA2C,
     TrainingConfigurationDQN,
-    TrainingConfigurationPPO,
 )
 from .optimizer import GCAdam
 from .replay import Experience, ReplayMemory

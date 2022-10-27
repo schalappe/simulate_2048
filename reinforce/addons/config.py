@@ -39,10 +39,3 @@ class TrainingConfigurationA2C(TrainingConfiguration):
     """
     Training configuration for A2C.
     """
-
-
-@dataclass
-class TrainingConfigurationPPO(TrainingConfiguration):
-    """
-    Training configuration for PPO.
-    """
