@@ -7,7 +7,7 @@ from os.path import abspath, dirname, join
 import gym
 from module import AgentA2C, AgentDQN
 
-from simulate_2048 import LogObservation
+from simulate_2048 import FlattenOneHotObservation
 
 STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "zoo")
 
@@ -23,24 +23,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
     parser.add_argument("--model", help="Which type of model tu use", required=True, type=str)
-    parser.add_argument("--obs", help="Which observation to implement", required=True, type=str)
     parser.add_argument("--style", required=False, type=str, default="simple")
     args = parser.parse_args()
 
     # ## ----> Evaluation with specific algorithm.
     if args.algo == "dqn":
         # ## ----> Create agent.
-        model_path = join(STORAGE_MODEL, f"model_{args.style}_{args.algo}_{args.model}_{args.obs}")
+        model_path = join(STORAGE_MODEL, f"model_{args.style}-{args.algo}-{args.model}")
         agent = AgentDQN(model_path)
     elif args.algo == "a2c":
         model_path = join(STORAGE_MODEL, f"model_{args.algo}")
         agent = AgentA2C(model_path)
 
     # ## ----> Create environment.
-    if args.obs == "log":
-        game = LogObservation(gym.make("GameBoard", size=4))
-    else:
-        game = gym.make("GameBoard", size=4)
+    game = FlattenOneHotObservation(gym.make("GameBoard", size=4))
 
     # ## ----> Loop over 100 parties.
     score = []
