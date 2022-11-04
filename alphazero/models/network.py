@@ -3,7 +3,10 @@
 Set of class for network use by Alpha Zero.
 """
 from typing import Tuple
-from muzero.addons import LatentState, AfterState, Outcome, NetworkOutput
+
+from numpy import ndarray
+
+from alphazero.addons.types import NetworkOutput
 
 
 # ##: TODO: Complete ...
@@ -12,17 +15,13 @@ class Network:
     An instance of the network used by Alpha Zero.
     """
 
-    def representation(self, observation) -> LatentState:
-        """Representation function maps from observation to latent state."""
-        return []
-
-    def predictions(self, state: LatentState) -> NetworkOutput:
+    def predictions(self, state: ndarray) -> NetworkOutput:
         """
         Returns the network predictions for a state.
 
         Parameters
         ----------
-        state: LatentState
+        state: ndarray
             The current state of the game
 
         Returns
@@ -31,42 +30,13 @@ class Network:
             The value of given state and the probabilities distribution over all moves
         """
         return NetworkOutput(0, {})
-
-    def afterstate_dynamics(self, state: LatentState, action: int) -> AfterState:
-        """Implements the dynamics from latent state and action to after-state."""
-        return []
-
-    def afterstate_predictions(self, state: AfterState) -> NetworkOutput:
-        """
-        Returns the network predictions for an after-state.
-
-        Parameters
-        ----------
-        state: AfterState
-            The current state of the game
-
-        Returns
-        -------
-        NetworkOutput
-            The value of given state and the probabilities distribution over all moves
-        """
-
-        # No reward for after-state transitions.
-        return NetworkOutput(0, {})
-
-    def dynamics(self, state: AfterState, action: Outcome) -> LatentState:
-        """Implements the dynamics from afterstate and chance outcome to
-        state."""
-        return []
-
-    def encoder(self, observation) -> Outcome:
-        """An encoder maps an observation to an outcome."""
 
 
 class NetworkCacher:
     """
     An object to share the network between the self-play and training jobs.
     """
+
     def __init__(self):
         self._networks = {}
 

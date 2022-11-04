@@ -15,8 +15,8 @@ import tensorflow as tf
 from numpy import max as max_array_values
 from numpy import ndarray
 from numpy import sum as sum_array_values
-
 from reinforce.addons import TrainingConfiguration
+
 from simulate_2048 import FlattenOneHotObservation
 
 

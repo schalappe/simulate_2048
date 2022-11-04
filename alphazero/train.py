@@ -5,7 +5,13 @@ Script for training an agent.
 from os.path import abspath, dirname, join
 
 from addons import TrainingConfigurationA2C, TrainingConfigurationDQN
-from training import A2CTraining, DQNDuelingTraining, DQNTraining, DDQNTraining, DDQNDuelingTraining
+from training import (
+    A2CTraining,
+    DDQNDuelingTraining,
+    DDQNTraining,
+    DQNDuelingTraining,
+    DQNTraining,
+)
 
 STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "zoo")
 

@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Set of config for MuZero.
+Set of config for AlphaZero.
 """
 from dataclasses import dataclass
-
 
 INPUT_SIZE = 496
 
@@ -13,6 +12,7 @@ class BufferConfig:
     """
     Configuration for the replay buffer.
     """
+
     td_steps: int
     batch_size: int
     num_unroll_steps: int
@@ -40,10 +40,11 @@ class MonteCarlosConfig:
 
 
 @dataclass
-class StochasticMuZeroConfig:
+class StochasticAlphaZeroConfig:
     """
-    Configuration for MuZero.
+    Configuration for AlphaZero.
     """
+
     noise: NoiseConfig
     search: MonteCarlosConfig
     replay: BufferConfig

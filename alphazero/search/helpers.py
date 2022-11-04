@@ -2,9 +2,9 @@
 """
 Helper for Tree search
 """
-from typing import Optional, NamedTuple
+from typing import NamedTuple, Optional
 
-MAXIMUM_FLOAT_VALUE = float('inf')
+MAXIMUM_FLOAT_VALUE = float("inf")
 
 
 class KnownBounds(NamedTuple):
@@ -18,7 +18,7 @@ class MinMaxStats(object):
     """
 
     def __init__(self, known_bounds: Optional[KnownBounds]):
-        self.maximum = known_bounds.max if known_bounds else - MAXIMUM_FLOAT_VALUE
+        self.maximum = known_bounds.max if known_bounds else -MAXIMUM_FLOAT_VALUE
         self.minimum = known_bounds.min if known_bounds else MAXIMUM_FLOAT_VALUE
 
     def update(self, value: float):

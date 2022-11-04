@@ -4,10 +4,10 @@ Class used to hold experience.
 """
 from collections import deque
 from typing import Sequence
+
 from numpy.random import choice
 
-from muzero.addons import BufferConfig
-from muzero.addons import Trajectory
+from alphazero.addons import BufferConfig, Trajectory
 
 
 # ##: TODO: Check and implements sampling
@@ -79,7 +79,7 @@ class ReplayBuffer:
         limit = max([self._config.num_unroll_steps, self._config.td_steps])
 
         # ##: Returns a trajectory of experiment.
-        return trajectory[state_idx:state_idx + limit]
+        return trajectory[state_idx : state_idx + limit]
 
     def sample(self) -> Sequence[Trajectory]:
         """

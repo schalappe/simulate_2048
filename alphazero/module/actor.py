@@ -3,11 +3,20 @@
 Set of class for Self-play.
 """
 from abc import ABCMeta, abstractmethod
-from muzero.addons import Action, SearchStats, StochasticMuZeroConfig
-from muzero.models import NetworkCacher, NetworkOutput
-from muzero.search import Node, run_mcts, backpropagate, add_exploration_noise, expand_node, ActionOutcomeHistory, MinMaxStats
 
 import numpy as np
+
+from alphazero.addons.config import StochasticAlphaZeroConfig
+from alphazero.addons.types import Action, SearchStats
+from alphazero.models.network import NetworkCacher, NetworkOutput
+from alphazero.search.mcts import (
+    MinMaxStats,
+    add_exploration_noise,
+    backpropagate,
+    expand_node,
+    run_mcts,
+)
+from alphazero.search.node import Node
 
 
 class Actor(metaclass=ABCMeta):
@@ -54,11 +63,12 @@ class StochasticMuZeroActor(Actor):
     A MuZero actor for self-play.
     """
 
-    def __int__(self, config: StochasticMuZeroConfig, cacher: NetworkCacher):
+    def __int__(self, config: StochasticAlphaZeroConfig, cacher: NetworkCacher):
         self.config = config
         self.cacher = cacher
         self.training_step = -1
         self.network = None
+        self.simulator = None
 
     def reset(self):
         """
@@ -123,7 +133,7 @@ class StochasticMuZeroActor(Actor):
         temperature = self.config.visit_softmax_temperature_fn(self.training_step)
 
         # ##: Compute the search policy.
-        search_policy = [v ** (1. / temperature) for v in visit_counts]
+        search_policy = [v ** (1.0 / temperature) for v in visit_counts]
         norm = sum(search_policy)
         search_policy = [v / norm for v in search_policy]
 
@@ -168,7 +178,7 @@ class StochasticMuZeroActor(Actor):
         add_exploration_noise(self.config.noise, root)
 
         # ##: Run a Monte Carlo Tree Search using only action sequences and the model learned by the network.
-        run_mcts(self.config.search, root, ActionOutcomeHistory(env.to_play()), self.network, min_max_stats)
+        run_mcts(self.config.search, root, self.network, self.simulator, min_max_stats)
 
         # ##: Keep track of the root to return the stats.
         self.root = root
@@ -187,8 +197,8 @@ class StochasticMuZeroActor(Actor):
         """
 
         if self.root is None:
-            raise ValueError('No search was executed.')
+            raise ValueError("No search was executed.")
         return SearchStats(
             search_policy={action: node.visit_counts for action, node in self.root.children.items()},
-            search_value=self.root.value()
+            search_value=self.root.value(),
         )
