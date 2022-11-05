@@ -8,11 +8,15 @@ MAXIMUM_FLOAT_VALUE = float("inf")
 
 
 class KnownBounds(NamedTuple):
+    """
+    Bounds for MinMax in Tree Search.
+    """
+
     min: float
     max: float
 
 
-class MinMaxStats(object):
+class MinMaxStats:
     """
     A class that holds the min-max values of the tree.
     """

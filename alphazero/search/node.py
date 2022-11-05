@@ -4,14 +4,13 @@ Component of a Monte Carlos Tree.
 """
 
 
-class Node(object):
+class Node:
     """
     A Node in the Monte Carlos Tree Search.
     """
 
     def __init__(self, prior: float, is_chance: bool = False):
         self.visit_count = 0
-        self.to_play = -1
         self.prior = prior
         self.value_sum = 0
         self.children = {}

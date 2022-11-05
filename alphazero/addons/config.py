@@ -21,6 +21,10 @@ class BufferConfig:
 
 @dataclass
 class UpperConfidenceBounds:
+    """
+    Configuration for compute UBC.
+    """
+
     discount: float
     pb_c_base: float
     pb_c_init: float
@@ -28,6 +32,10 @@ class UpperConfidenceBounds:
 
 @dataclass
 class NoiseConfig:
+    """
+    Configuration for adding noise.
+    """
+
     root_dirichlet_alpha: float
     root_dirichlet_adaptive: float
     root_exploration_fraction: float
@@ -35,6 +43,10 @@ class NoiseConfig:
 
 @dataclass
 class MonteCarlosConfig:
+    """
+    Configuration for Monte Carlos Tree Search.
+    """
+
     bounds: UpperConfidenceBounds
     num_simulations: int
 

@@ -14,12 +14,10 @@ from alphazero.addons.config import (
 )
 from alphazero.addons.simulator import Simulator
 from alphazero.addons.types import NetworkOutput, SimulatorOutput
-from alphazero.models import Network
+from alphazero.models.network import Network
 
 from .helpers import MinMaxStats
 from .node import Node
-
-# ##: TODO: faire un test unitaire pour tous les functions ici bas.
 
 
 def ucb_score(config: UpperConfidenceBounds, parent: Node, child: Node, min_max_stats: MinMaxStats) -> float:
@@ -28,14 +26,19 @@ def ucb_score(config: UpperConfidenceBounds, parent: Node, child: Node, min_max_
 
     Parameters
     ----------
-    config
-    parent
-    child
-    min_max_stats
+    config: UpperConfidenceBounds
+        UBC configuration
+    parent: Node
+        Parent node
+    child: Node
+        Child node
+    min_max_stats: MinMaxStats
+        MinMax class
 
     Returns
     -------
-
+    float
+        Value of UBC
     """
     pb_c = log((parent.visit_count + config.pb_c_base + 1) / config.pb_c_base) + config.pb_c_init
     pb_c *= sqrt(parent.visit_count) / (child.visit_count + 1)
@@ -47,13 +50,27 @@ def ucb_score(config: UpperConfidenceBounds, parent: Node, child: Node, min_max_
     return prior_score + value_score
 
 
-def select_child(config: UpperConfidenceBounds, node: Node, min_max_stats: MinMaxStats):
+def select_child(config: UpperConfidenceBounds, node: Node, min_max_stats: MinMaxStats) -> Node:
     """
     Select the child with the highest UCB score.
+
+    Parameters
+    ----------
+    config: UpperConfidenceBounds
+        UBC configuration
+    node: Node
+        A node
+    min_max_stats: MinMaxStats
+        MinMax class
+
+    Returns
+    -------
+    Node
+        A children node selected
     """
     if node.is_chance:
         # ##: If the node is chance, sample from the prior.
-        outcomes, probs = zip(*[(o, n.prob) for o, n in node.children.items()])
+        outcomes, probs = zip(*[(o, n.prior) for o, n in node.children.items()])
         outcome = np.random.choice(outcomes, p=probs)
         return node.children[outcome]
 
@@ -65,21 +82,30 @@ def select_child(config: UpperConfidenceBounds, node: Node, min_max_stats: MinMa
 
 
 def expand_node(node: Node, network_output: NetworkOutput, simulator_output: SimulatorOutput):
-    """Expand a node using the value, reward and policy prediction obtained from the neural network."""
+    """
+    Expand a node using the value, reward and policy prediction obtained from the neural network.
+
+    Parameters
+    ----------
+    node: Node
+        A node
+    network_output: NetworkOutput
+        Output of policy network
+    simulator_output: SimulatorOutput
+        Output of the simulator
+    """
     # ##: Loop over moves distribution.
     for action, prob in network_output.probabilities.items():
         # ##: Create the chance node.
         stochastic_node = Node(prior=prob, is_chance=True)
-        stochastic_node.to_play = 0
 
         # ##: Get stochastic state and reward
         stochastic_states, reward = simulator_output.stochastic_states[action]
-        for index, state, prior in enumerate(stochastic_states):
+        for index, stochastic_state in enumerate(stochastic_states):
             # ##: Create decision node.
-            child = Node(prior=prior, is_chance=False)
-            child.state = state
+            child = Node(prior=stochastic_state.probability, is_chance=False)
+            child.state = stochastic_state.state
             child.reward = reward
-            child.to_play = 0
 
             # ##: Create father link between stochastic node and his child.
             stochastic_node.children[index] = child
@@ -88,12 +114,23 @@ def expand_node(node: Node, network_output: NetworkOutput, simulator_output: Sim
         node.children[action] = stochastic_node
 
 
-def backpropagate(search_path: List[Node], value: float, to_play: int, discount: float, min_max_stats: MinMaxStats):
+def backpropagate(search_path: List[Node], value: float, discount: float, min_max_stats: MinMaxStats):
     """
     At the end of a simulation, propagate the evaluation all the way up the tree to the root.
+
+    Parameters
+    ----------
+    search_path: List
+        List of node
+    value: float:
+        Value given the policy network
+    discount: float
+        Discount
+    min_max_stats: MinMaxStats
+        MinMax class
     """
     for node in reversed(search_path):
-        node.value_sum += value if node.to_play == to_play else -value
+        node.value_sum += value
         node.visit_count += 1
         min_max_stats.update(node.value())
         value = node.reward + discount * value
@@ -101,8 +138,15 @@ def backpropagate(search_path: List[Node], value: float, to_play: int, discount:
 
 def add_exploration_noise(config: NoiseConfig, node: Node):
     """
-    At the start of each search, we add dirichlet noise to the prior of the root
-    to encourage the search to explore new actions.
+    At the start of each search, we add dirichlet noise to the prior of the root to encourage the search to
+    explore new actions.
+
+    Parameters
+    ----------
+    config: NoiseConfig
+        Noise configuration
+    node: Node
+        Root node
     """
     actions = list(node.children.keys())
     dir_alpha = config.root_dirichlet_alpha
@@ -111,8 +155,8 @@ def add_exploration_noise(config: NoiseConfig, node: Node):
 
     noise = np.random.dirichlet([dir_alpha] * len(actions))
     frac = config.root_exploration_fraction
-    for a, n in zip(actions, noise):
-        node.children[a].prior = node.children[a].prior * (1 - frac) + n * frac
+    for action, _noise in zip(actions, noise):
+        node.children[action].prior = node.children[action].prior * (1 - frac) + _noise * frac
 
 
 def run_mcts(
@@ -121,6 +165,19 @@ def run_mcts(
     """
     To decide on an action, run N simulations, always starting at the root of the search tree and traversing the
     tree according to the UCB formula until it reach a leaf node.
+
+    Parameters
+    ----------
+    config: MonteCarlosConfig
+        Monte Carlos Tree Search configuration
+    root: Node
+        Root node
+    network: Network
+        Policy network
+    simulator: Simulator
+        2048 Simulator
+    min_max_stats: MinMaxStats
+        MinMax class
     """
     for _ in range(config.num_simulations):
         node = root
@@ -140,4 +197,4 @@ def run_mcts(
         expand_node(node, network_output, simulator_output)
 
         # Back-propagate the value up the tree.
-        backpropagate(search_path, network_output.value, 0, config.bounds.discount, min_max_stats)
+        backpropagate(search_path, network_output.value, config.bounds.discount, min_max_stats)
