@@ -7,6 +7,7 @@ import unittest
 import numpy as np
 
 from simulate_2048 import GameBoard
+from simulate_2048.envs.utils import slide_and_merge
 
 
 class GameBoardTest(unittest.TestCase):
@@ -75,7 +76,7 @@ class GameBoardTest(unittest.TestCase):
 
             # ## ----> Applied action.
             rotated_board = np.rot90(self.BOARD, k=action)
-            _, updated_board = game._slide_and_merge(rotated_board)
+            _, updated_board = slide_and_merge(rotated_board)
             next_board = np.rot90(updated_board, k=4 - action)
 
             # ## ----> Compare boards.

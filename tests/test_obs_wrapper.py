@@ -7,7 +7,12 @@ import unittest
 import gym
 import numpy as np
 
-from simulate_2048 import FlattenLogObservation, FlattenObservation, LogObservation, FlattenOneHotObservation
+from simulate_2048 import (
+    FlattenLogObservation,
+    FlattenObservation,
+    FlattenOneHotObservation,
+    LogObservation,
+)
 
 
 class ObservationWrappersTest(unittest.TestCase):
