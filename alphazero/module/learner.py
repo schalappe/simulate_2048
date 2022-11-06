@@ -2,32 +2,10 @@
 """
 Set of class for training.
 """
-from abc import ABCMeta, abstractmethod
-
-from alphazero.addons import StochasticAlphaZeroConfig
-from alphazero.models import Network
+from alphazero.addons.config import StochasticAlphaZeroConfig
+from alphazero.models.network import Network, NetworkCacher
 
 from .replay import ReplayBuffer
-
-
-class Learner(metaclass=ABCMeta):
-    """
-    A learner to update the network weights based.
-    """
-
-    @abstractmethod
-    def learn(self):
-        """
-        Single training step of the learner.
-        """
-
-    @abstractmethod
-    def export(self) -> Network:
-        """
-        Exports the network.
-        Returns
-        -------
-        """
 
 
 # ##: TODO: Implement loss function ...
@@ -42,7 +20,7 @@ def value_or_reward_loss(prediction, target):
     For 2048, we use the two hot representation proposed in MuZero, and this loss is implemented as a KL divergence
     between the value and value target representations.
 
-    For 2048 we also apply a hyperbolic transformation to the target (seepaper for more information).
+    For 2048 we also apply a hyperbolic transformation to the target (see paper for more information).
 
     Parameters
     ----------
@@ -83,35 +61,42 @@ def minimize_with_adam_and_weight_decay(loss, learning_rate, weight_decay):
 
 
 # ##: TODO: Adapt the learning
-class StochasticMuZeroLearner(Learner):
+class StochasticMuZeroLearner:
     """
     Implements the learning for Stochastic MuZero.
     """
 
-    def __init__(self, config: StochasticAlphaZeroConfig, replay_buffer: ReplayBuffer):
+    def __init__(self, config: StochasticAlphaZeroConfig, network: Network, replay_buffer: ReplayBuffer):
         self.config = config
         self.replay_buffer = replay_buffer
 
         # ##: Instantiate the network.
-        self.network = config.network_factory()
+        self.network = network
+        self.optimizer = None
 
     def transpose_to_time(self, batch):
         """Transposes the data so the leading dimension is time instead of batch."""
         return batch
 
     def learn(self):
-        """Applies a single training step."""
+        """
+        Applies a single training step.
+        """
 
-        batch = self.replay_buffer.sample()
         # Transpose batch to make time the leading dimension.
+        batch = self.replay_buffer.sample()
         batch = self.transpose_to_time(batch)
+
         # Compute the initial step loss.
         latent_state = self.network.representation(batch[0].observation)
         predictions = self.network.predictions(latent_state)
+
         # Computes the td target for the 0th position.
         value_target = compute_td_target(self.config.td_steps, self.config.td_lambda, batch)
+
         # Train the network value towards the td target.
         total_loss = value_or_reward_loss(predictions.value, value_target)
+
         # Train the network policy towards the MCTS policy.
         total_loss += policy_loss(predictions.probabilities, batch[0].search_stats.search_policy)
 

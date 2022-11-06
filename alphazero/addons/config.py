@@ -15,6 +15,7 @@ class BufferConfig:
     """
 
     td_steps: int
+    td_lambda: float
     batch_size: int
     num_unroll_steps: int
     num_trajectories: int
@@ -38,7 +39,7 @@ class NoiseConfig:
     """
 
     root_dirichlet_alpha: float
-    root_dirichlet_adaptive: float
+    root_dirichlet_adaptive: bool
     root_exploration_fraction: float
 
 
@@ -60,7 +61,28 @@ class SelfPlayConfig:
 
     num_actors: int
     visit_softmax_temperature_fn: Callable[[int], float]
-    num_simulations: int
+
+
+@dataclass
+class Factory:
+    """
+    Set factory function for AlphaZero.
+    """
+
+    network_factory: Callable
+    environment_factory: Callable
+
+
+@dataclass
+class TrainingConfig:
+    """
+    Training configuration.
+    """
+
+    weight_decay: float
+    learning_rate: float
+    training_steps: int
+    export_network_every: int
 
 
 @dataclass
@@ -72,4 +94,6 @@ class StochasticAlphaZeroConfig:
     noise: NoiseConfig
     search: MonteCarlosConfig
     replay: BufferConfig
+    factory: Factory
+    training: TrainingConfig
     self_play: SelfPlayConfig

@@ -129,7 +129,7 @@ class StochasticMuZeroActor(Actor):
         """
 
         # ##: Get the visit count distribution.
-        actions, visit_counts = zip(*[(action, node.visit_counts) for action, node in root.children.items()])
+        actions, visit_counts = zip(*[(action, node.visit_count) for action, node in root.children.items()])
 
         # ##: Temperature
         temperature = self.config.self_play.visit_softmax_temperature_fn(self.training_step)
@@ -200,6 +200,6 @@ class StochasticMuZeroActor(Actor):
         if self.root is None:
             raise ValueError("No search was executed.")
         return SearchStats(
-            search_policy={action: node.visit_counts for action, node in self.root.children.items()},
+            search_policy={action: node.visit_count for action, node in self.root.children.items()},
             search_value=self.root.value(),
         )

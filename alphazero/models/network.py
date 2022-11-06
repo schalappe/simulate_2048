@@ -20,7 +20,7 @@ class Network:
     """
 
     def __init__(self, size: int):
-        shape = (4 * 4 * 31,)
+        shape = (4 * 4 * size,)
         self.encodage_size = size
         self.model = PolicyNetwork()(shape)
 

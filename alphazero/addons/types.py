@@ -24,7 +24,6 @@ class State(NamedTuple):
     observation: List[float]
     reward: float
     discount: float
-    player: int
     action: int
     search_stats: SearchStats
 
