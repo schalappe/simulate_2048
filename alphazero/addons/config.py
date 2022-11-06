@@ -4,7 +4,7 @@ Set of config for AlphaZero.
 """
 from dataclasses import dataclass
 
-INPUT_SIZE = 496
+ENCODAGE_SIZE = 31
 
 
 @dataclass
