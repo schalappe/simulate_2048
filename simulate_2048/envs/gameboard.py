@@ -172,7 +172,7 @@ class GameBoard(gym.Env):
         # ##: Fill new cell only if the board has evolved.
         if not np.array_equal(rotated_board, updated_board):
             self._board = np.rot90(updated_board, k=4 - action)
-            reward = score - penalty
+            reward = score  # - penalty
 
             # ##: Fill randomly one cell.
             self._fill_cells(number_tile=1)
