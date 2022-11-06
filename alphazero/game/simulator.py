@@ -2,14 +2,13 @@
 """
 Simulator for helping during Monte Carlos Tree Search
 """
-from typing import List, Tuple
+from typing import List, Sequence, Tuple
 
 import numpy as np
 from numpy import ndarray
 
+from alphazero.addons.types import SimulatorOutput, StochasticState
 from simulate_2048.envs.utils import slide_and_merge
-
-from .types import SimulatorOutput, StochasticState
 
 
 class Simulator:
@@ -109,3 +108,33 @@ class Simulator:
             outputs[action] = self._apply_action(state, action)
 
         return SimulatorOutput(stochastic_states=outputs)
+
+    @classmethod
+    def legal_actions(cls, state: ndarray) -> Sequence[int]:
+        """
+        Returns the legal actions for the current state.
+
+        Parameters
+        ----------
+        state: ndarray
+            Current state
+
+        Returns
+        -------
+        Sequence
+            List of legal action
+        """
+
+        legal_moves = []
+
+        # ##: Loop over all possible moves.
+        for action in range(4):
+            board = state.copy()
+
+            # ##: Generate next board.
+            rotated_board = np.rot90(board, k=action)
+            _, updated_board = slide_and_merge(rotated_board)
+            if not np.array_equal(rotated_board, updated_board):
+                legal_moves.append(action)
+
+        return legal_moves

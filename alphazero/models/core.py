@@ -11,6 +11,7 @@ class PolicyNetwork:
     """
     Policy network class.
     """
+
     @classmethod
     def dense_layer(cls, head: tf.keras.layers.Layer, units: int) -> tf.keras.layers.Layer:
         """

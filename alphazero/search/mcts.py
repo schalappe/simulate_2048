@@ -12,8 +12,8 @@ from alphazero.addons.config import (
     NoiseConfig,
     UpperConfidenceBounds,
 )
-from alphazero.addons.simulator import Simulator
 from alphazero.addons.types import NetworkOutput, SimulatorOutput
+from alphazero.game.simulator import Simulator
 from alphazero.models.network import Network
 
 from .helpers import MinMaxStats

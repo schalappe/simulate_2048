@@ -3,6 +3,7 @@
 Set of config for AlphaZero.
 """
 from dataclasses import dataclass
+from typing import Callable
 
 ENCODAGE_SIZE = 31
 
@@ -52,6 +53,17 @@ class MonteCarlosConfig:
 
 
 @dataclass
+class SelfPlayConfig:
+    """
+    Self play configuration.
+    """
+
+    num_actors: int
+    visit_softmax_temperature_fn: Callable[[int], float]
+    num_simulations: int
+
+
+@dataclass
 class StochasticAlphaZeroConfig:
     """
     Configuration for AlphaZero.
@@ -60,3 +72,4 @@ class StochasticAlphaZeroConfig:
     noise: NoiseConfig
     search: MonteCarlosConfig
     replay: BufferConfig
+    self_play: SelfPlayConfig

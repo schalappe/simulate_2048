@@ -5,12 +5,14 @@ Set of class for Self-play.
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
+from numpy import ndarray
 
 from alphazero.addons.config import StochasticAlphaZeroConfig
-from alphazero.addons.types import Action, SearchStats
-from alphazero.models.network import NetworkCacher, NetworkOutput
+from alphazero.addons.types import NetworkOutput, SearchStats
+from alphazero.game.simulator import Simulator
+from alphazero.models.network import NetworkCacher
+from alphazero.search.helpers import MinMaxStats
 from alphazero.search.mcts import (
-    MinMaxStats,
     add_exploration_noise,
     backpropagate,
     expand_node,
@@ -31,18 +33,18 @@ class Actor(metaclass=ABCMeta):
         """
 
     @abstractmethod
-    def select_action(self, env: Environment) -> Action:
+    def select_action(self, state: ndarray) -> int:
         """
         Selects an action for the current state of the environment.
 
         Parameters
         ----------
-        env: Environment
-            Simulator of an environment
+        state: ndarray
+            Current state
 
         Returns
         -------
-        Action
+        int
             A selected action.
         """
 
@@ -63,12 +65,13 @@ class StochasticMuZeroActor(Actor):
     A MuZero actor for self-play.
     """
 
-    def __int__(self, config: StochasticAlphaZeroConfig, cacher: NetworkCacher):
+    def __init__(self, config: StochasticAlphaZeroConfig, cacher: NetworkCacher):
         self.config = config
         self.cacher = cacher
         self.training_step = -1
         self.network = None
-        self.simulator = None
+        self.root = None
+        self.simulator = Simulator()
 
     def reset(self):
         """
@@ -78,15 +81,14 @@ class StochasticMuZeroActor(Actor):
         self.training_step, self.network = self.cacher.load_network()
         self.root = None
 
-    @classmethod
-    def _mask_illegal_actions(cls, env: Environment, outputs: NetworkOutput) -> NetworkOutput:
+    def _mask_illegal_actions(self, state: ndarray, outputs: NetworkOutput) -> NetworkOutput:
         """
         Masks any actions which are illegal at the root.
 
         Parameters
         ----------
-        env: Environment
-            Simulator of an environment
+        state: ndarray
+            Current state
         outputs: NetworkOutput
             Previous network output
 
@@ -100,18 +102,18 @@ class StochasticMuZeroActor(Actor):
         masked_policy = {}
         network_policy = outputs.probabilities
         norm = 0
-        for action in env.legal_actions():
+        for action in self.simulator.legal_actions(state):
             if action in network_policy:
                 masked_policy[action] = network_policy[action]
-        else:
-            masked_policy[action] = 0.0
-        norm += masked_policy[action]
+            else:
+                masked_policy[action] = 0.0
+            norm += masked_policy[action]
 
         # ##: Re-normalize the masked policy.
         masked_policy = {a: v / norm for a, v in masked_policy.items()}
         return NetworkOutput(value=outputs.value, probabilities=masked_policy)
 
-    def _select_action(self, root: Node) -> Action:
+    def _select_action(self, root: Node) -> int:
         """
         Selects an action given the root node.
 
@@ -122,7 +124,7 @@ class StochasticMuZeroActor(Actor):
 
         Returns
         -------
-        Action
+        int
             An action chosen with a certain probability
         """
 
@@ -130,7 +132,7 @@ class StochasticMuZeroActor(Actor):
         actions, visit_counts = zip(*[(action, node.visit_counts) for action, node in root.children.items()])
 
         # ##: Temperature
-        temperature = self.config.visit_softmax_temperature_fn(self.training_step)
+        temperature = self.config.self_play.visit_softmax_temperature_fn(self.training_step)
 
         # ##: Compute the search policy.
         search_policy = [v ** (1.0 / temperature) for v in visit_counts]
@@ -139,40 +141,39 @@ class StochasticMuZeroActor(Actor):
 
         return np.random.choice(actions, p=search_policy)
 
-    def select_action(self, env: Environment) -> Action:
+    def select_action(self, state: ndarray) -> int:
         """
         Selects an action.
 
         Parameters
         ----------
-        env: Environment
-            Simulator of an environment
+        state: ndarray
+            Current state
 
         Returns
         -------
         Action
             A selected action
         """
+        # ##: Define root node.
+        root = Node(0)
+        root.state = state
 
         # ##: New min max stats for the search tree.
-        min_max_stats = MinMaxStats(self.config.known_bounds)
+        min_max_stats = MinMaxStats(None)
 
-        # ##: At the root of the search tree
-        # ##: use the representation function to obtain a hidden state given the current observation.
-        root = Node(0)
-        latent_state = self.network.representation(env.observation())
+        # ##: Compute the predictions and keep only the legal actions.
+        outputs = self.network.predictions(state)
+        outputs = self._mask_illegal_actions(state, outputs)
 
-        # ##: Compute the predictions.
-        outputs = self.network.predictions(latent_state)
-
-        # ##: Keep only the legal actions.
-        outputs = self._mask_illegal_actions(env, outputs)
+        # ##: Generate all possibles children
+        simulator_outputs = self.simulator.step(state)
 
         # ##: Expand the root node.
-        expand_node(root, latent_state, outputs, env.to_play(), is_chance=False)
+        expand_node(root, network_output=outputs, simulator_output=simulator_outputs)
 
         # ##: Back-propagate the value.
-        backpropagate([root], outputs.value, env.to_play(), self.config.search.bounds.discount, min_max_stats)
+        backpropagate([root], outputs.value, self.config.search.bounds.discount, min_max_stats)
 
         # ##: Add exploration noise to the root node.
         add_exploration_noise(self.config.noise, root)
