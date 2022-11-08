@@ -40,10 +40,7 @@ def config_2048() -> StochasticAlphaZeroConfig:
             return 1.0
         if train_steps < 2e5:
             return 0.5
-        if train_steps < 3e5:
-            return 0.1
-        # ##: Greedy selection.
-        return 0.0
+        return 0.1
 
     # ##: Return configuration.
     return StochasticAlphaZeroConfig(
@@ -73,6 +70,7 @@ def config_2048() -> StochasticAlphaZeroConfig:
         ),
         training=TrainingConfig(learning_rate=3e-4, training_steps=int(20e6), store_path=""),
         self_play=SelfPlayConfig(
+            evaluation=100,
             num_actors=2,  # 1000,
             visit_softmax_temperature_fn=_visit_softmax_temperature,
         ),

@@ -3,6 +3,7 @@
 Set of class for Self-play.
 """
 from abc import ABCMeta, abstractmethod
+from typing import Optional
 
 import numpy as np
 from numpy import ndarray
@@ -10,7 +11,7 @@ from numpy import ndarray
 from alphazero.addons.config import StochasticAlphaZeroConfig
 from alphazero.addons.types import NetworkOutput, SearchStats
 from alphazero.game.simulator import Simulator
-from alphazero.models.network import NetworkCacher
+from alphazero.models.network import Network
 from alphazero.search.helpers import MinMaxStats
 from alphazero.search.mcts import (
     add_exploration_noise,
@@ -27,7 +28,7 @@ class Actor(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def reset(self):
+    def reset(self, step: Optional[int]):
         """
         Resets the player for a new episode.
         """
@@ -65,20 +66,18 @@ class StochasticMuZeroActor(Actor):
     A MuZero actor for self-play.
     """
 
-    def __init__(self, config: StochasticAlphaZeroConfig, cacher: NetworkCacher):
+    def __init__(self, config: StochasticAlphaZeroConfig, network: Network):
         self.config = config
-        self.cacher = cacher
         self.training_step = -1
-        self.network = None
+        self.network = network
         self.root = None
         self.simulator = Simulator()
 
-    def reset(self):
+    def reset(self, step: int):
         """
         Resets the player for a new episode.
         """
-        # ##: Read a network from the cacher for the new episode.
-        self.training_step, self.network = self.cacher.load_network()
+        self.training_step = step
         self.root = None
 
     def _mask_illegal_actions(self, state: ndarray, outputs: NetworkOutput) -> NetworkOutput:

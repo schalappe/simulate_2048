@@ -4,7 +4,7 @@ Set of class for network use by Alpha Zero.
 """
 from math import exp
 from os.path import join
-from typing import Sequence, Tuple
+from typing import Sequence
 
 import numpy as np
 import tensorflow as tf
@@ -116,37 +116,3 @@ class Network:
         """
         model_path = join(store_path, "alphazero.h5")
         self.model.save(model_path)
-
-
-class NetworkCacher:
-    """
-    An object to share the network between the self-play and training jobs.
-    """
-
-    def __init__(self):
-        self._networks = {}
-
-    def save_network(self, step: int, network: Network):
-        """
-        Save a network in the cacher.
-
-        Parameters
-        ----------
-        step: int
-            The training step
-        network: Network
-            The network to store
-        """
-        self._networks[step] = network
-
-    def load_network(self) -> Tuple[int, Network]:
-        """
-        Return the latest stored network.
-
-        Returns
-        -------
-        tuple
-            The latest training step and his network.
-        """
-        training_step = max(self._networks.keys())
-        return training_step, self._networks[training_step]

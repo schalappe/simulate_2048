@@ -59,6 +59,7 @@ class SelfPlayConfig:
     Self play configuration.
     """
 
+    evaluation: int
     num_actors: int
     visit_softmax_temperature_fn: Callable[[int], float]
 
