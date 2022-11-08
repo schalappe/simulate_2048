@@ -58,7 +58,7 @@ def config_2048() -> StochasticAlphaZeroConfig:
                 pb_c_base=19652,
                 pb_c_init=1.25,
             ),
-            num_simulations=100,
+            num_simulations=20,  # 100,
         ),
         replay=BufferConfig(
             td_steps=10,
@@ -71,11 +71,9 @@ def config_2048() -> StochasticAlphaZeroConfig:
             network_factory=_network_factory,
             environment_factory=_environment_factory,
         ),
-        training=TrainingConfig(
-            weight_decay=0.0, learning_rate=3e-4, training_steps=int(20e6), export_network_every=int(1e3)
-        ),
+        training=TrainingConfig(learning_rate=3e-4, training_steps=int(20e6), store_path=""),
         self_play=SelfPlayConfig(
-            num_actors=1,  #1000,
+            num_actors=2,  # 1000,
             visit_softmax_temperature_fn=_visit_softmax_temperature,
         ),
     )

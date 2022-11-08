@@ -3,7 +3,8 @@
 Set of class for network use by Alpha Zero.
 """
 from math import exp
-from typing import Tuple
+from os.path import join
+from typing import Sequence, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -16,7 +17,7 @@ from .core import PolicyNetwork
 
 class Network:
     """
-    An instance of the network used by Alpha Zero.
+    An instance of the network used by AlphaZero.
     """
 
     def __init__(self, size: int):
@@ -70,6 +71,51 @@ class Network:
         # ##: Generate output.
         policy = [exp(probs[0][a]) for a in range(4)]
         return NetworkOutput(float(value[0]), {action: policy[action] / sum(policy) for action in range(4)})
+
+    def train_step(self, batch: Sequence, optimizer: tf.keras.optimizers.Optimizer):
+        """
+        Train a single step of training.
+
+        Parameters
+        ----------
+        batch: Sequence
+            A list of observations, values and policies
+        optimizer: Optimizer
+            An optimizer function for back-propagation
+
+        """
+        # ##: Unpack batch into observations, values and policies.
+        observations, target_values, target_policies = zip(*batch)
+
+        # ##: Encode observation, then turn observations, values and policies into tensor.
+        observations = tf.stack([self.encode(obs) for obs in observations])
+        target_values = tf.stack(target_values)
+        target_policies = tf.stack(target_policies)
+
+        with tf.GradientTape() as tape:
+            # ##: Model predictions.
+            policies, values = self.model(observations, training=True)
+
+            # ##: Compute loss.
+            values_loss = tf.losses.huber(target_values, values)
+            policies_loss = tf.losses.kl_divergence(target_policies, policies)
+            loss = values_loss + policies_loss
+
+        # ##: Optimize model.
+        grads_model = tape.gradient(loss, self.model.trainable_variables)
+        optimizer.apply_gradients(zip(grads_model, self.model.trainable_variables))
+
+    def save_network(self, store_path: str):
+        """
+        Save a model.
+
+        Parameters
+        ----------
+        store_path: str
+            Path where store model
+        """
+        model_path = join(store_path, "alphazero.h5")
+        self.model.save(model_path)
 
 
 class NetworkCacher:

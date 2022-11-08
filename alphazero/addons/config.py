@@ -79,10 +79,9 @@ class TrainingConfig:
     Training configuration.
     """
 
-    weight_decay: float
+    store_path: str
     learning_rate: float
     training_steps: int
-    export_network_every: int
 
 
 @dataclass

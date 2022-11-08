@@ -65,11 +65,11 @@ class PolicyNetwork:
 
         # ##: Actor output.
         hidden_actor = self.dense_layer(head=hidden, units=256)
-        actor = tf.keras.layers.Dense(4)(hidden_actor)
+        actor = tf.keras.layers.Dense(4, activation="softmax")(hidden_actor)
 
         # ##: Critic output.
         hidden_critic = self.dense_layer(head=hidden, units=256)
-        critic = tf.keras.layers.Dense(1, activation="tanh")(hidden_critic)
+        critic = tf.keras.layers.Dense(1)(hidden_critic)
 
         # ##: Model.
         return tf.keras.Model(inputs=inputs, outputs=[actor, critic], name="policy")
