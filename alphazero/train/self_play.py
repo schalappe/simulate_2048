@@ -33,7 +33,8 @@ def run_self_play(config: StochasticAlphaZeroConfig, network: Network, replay_bu
     """
     actor = StochasticMuZeroActor(config, network)
 
-    for num in range(config.self_play.num_actors):
+    for num in range(config.self_play.episodes):
+
         # ##: Create a new instance of the environment.
         env = config.factory.environment_factory()
 
@@ -43,6 +44,7 @@ def run_self_play(config: StochasticAlphaZeroConfig, network: Network, replay_bu
         # ##: Play a game.
         episode = []
         while not env.is_terminal():
+            print(f"Actor n°{num + 1} is playing ...", end="\r")
             # ##: Interact with environment
             obs = env.observation()
             reward = env.reward()
@@ -61,10 +63,9 @@ def run_self_play(config: StochasticAlphaZeroConfig, network: Network, replay_bu
 
         # ##: Send the episode to the replay.
         replay_buffer.save(episode)
-        print(f"Actor n°{num+1} finish ...")
 
 
-def run_eval(config: StochasticAlphaZeroConfig, network: Network) -> None:
+def run_eval(config: StochasticAlphaZeroConfig, network: Network) -> dict:
     """
     Evaluate an agent.
 
@@ -99,6 +100,7 @@ def run_eval(config: StochasticAlphaZeroConfig, network: Network) -> None:
         score.append(max_array_values(env.observation()))
 
     # ##: Final log.
-    print("Evaluation is finished.")
+    # print("Evaluation is finished.")
     frequency = Counter(score)
-    print(f"Result: {dict(frequency)}")
+    # print(f"Result: {dict(frequency)}")
+    return dict(frequency)

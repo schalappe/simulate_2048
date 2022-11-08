@@ -94,13 +94,10 @@ def train_network(config: StochasticAlphaZeroConfig, network: Network, replay_bu
     optimizer = GCAdam(learning_rate=config.training.learning_rate)
 
     # ##: Nth training.
-    for _ in range(config.training.training_steps):
+    for _ in range(config.training.epochs):
         # ##: Compute targets.
         sample = replay_buffer.sample()
         batch = compute_td_target(config.replay.td_steps, config.replay.td_lambda, sample)
 
         # ##: Train network.
         network.train_step(batch, optimizer)
-
-        # ##: Export network.
-        network.save_network(config.training.store_path)
