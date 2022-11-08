@@ -37,8 +37,8 @@ def run_self_play(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, repl
         while not env.is_terminal():
             # ##: Interact with environment
             obs = env.observation()
+            reward = env.reward()
             action = actor.select_action(obs)
-            reward = env.step(action)
 
             # ##: Store state
             state = State(
@@ -49,6 +49,7 @@ def run_self_play(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, repl
                 search_stats=actor.stats(),
             )
             episode.append(state)
+            env.step(action)
 
         # ##: Send the episode to the replay.
         replay_buffer.save(episode)

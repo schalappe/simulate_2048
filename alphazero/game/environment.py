@@ -32,3 +32,9 @@ class Environment(ABC):
         """
         Returns true if the environment is in a terminal state.
         """
+
+    @abstractmethod
+    def reward(self):
+        """
+        Returns the reward of the environment.
+        """

@@ -19,22 +19,18 @@ class Game2048(Environment):
         self.done = False
         obs, _ = self.game.reset()
         self.observations = [obs]
+        self.rewards = [0]
 
     def step(self, action: int):
         """
         Applies an action or a chance outcome to the environment.
-
-        Parameters
-        ----------
-        action: int
-            Action to apply
         """
         if action not in self.actions:
             raise ValueError(f"The action `{action}` isn't recognize.")
         observation, reward, done, _, _ = self.game.step(action)
         self.observations += [observation]
+        self.rewards += [reward]
         self.done = done
-        return reward
 
     def observation(self):
         """
@@ -47,3 +43,9 @@ class Game2048(Environment):
         Returns true if the environment is in a terminal state.
         """
         return self.done
+
+    def reward(self):
+        """
+        Returns the reward of the environment.
+        """
+        return self.rewards[-1]
