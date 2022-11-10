@@ -3,6 +3,7 @@
 Self play function.
 """
 from collections import Counter
+import time
 
 from numpy import max as max_array_values
 from numpy import sum as sum_array_values
@@ -33,6 +34,7 @@ def run_self_play(config: StochasticAlphaZeroConfig, network: Network, replay_bu
     """
     actor = StochasticMuZeroActor(config, network)
 
+    epoch_start = time.time()
     for num in range(config.self_play.episodes):
 
         # ##: Create a new instance of the environment.
@@ -63,6 +65,11 @@ def run_self_play(config: StochasticAlphaZeroConfig, network: Network, replay_bu
 
         # ##: Send the episode to the replay.
         replay_buffer.save(episode)
+
+    # ##: Display time
+    epoch_end = time.time()
+    elapsed = (epoch_end - epoch_start) / 60.0
+    print("Self-play took {:.4} minutes".format(elapsed))
 
 
 def run_eval(config: StochasticAlphaZeroConfig, network: Network) -> dict:

@@ -23,7 +23,7 @@ network = config.factory.network_factory()
 # ##: Training Loop.
 for loop in range(config.loop):
     print("-" * 88)
-    print("Training loop", loop + 1)
+    print("Training loop ", loop + 1)
     run_self_play(config, network, replay_buffer, loop * config.training.epochs)
     train_network(config, network, replay_buffer)
 
@@ -32,4 +32,4 @@ for loop in range(config.loop):
     if loop > 0 and loop % config.export == 0:
         # ##: Export network.
         network.save_network(config.training.store_path)
-        print("General evaluation ->  score:", run_eval(config, network))
+        print("General evaluation ->  score: ", run_eval(config, network))

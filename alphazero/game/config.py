@@ -36,15 +36,11 @@ def config_2048() -> StochasticAlphaZeroConfig:
         return Network(ENCODAGE_SIZE)
 
     def _visit_softmax_temperature(train_steps: int) -> float:
-        if train_steps < 1e5:
-            return 1.0
-        if train_steps < 2e5:
-            return 0.5
-        return 0.1
+        return 1.0
 
     # ##: Return configuration.
     return StochasticAlphaZeroConfig(
-        loop=10000,
+        loop=1000,
         export=10,
         noise=NoiseConfig(
             root_dirichlet_alpha=0.3,
@@ -57,7 +53,7 @@ def config_2048() -> StochasticAlphaZeroConfig:
                 pb_c_base=19652,
                 pb_c_init=1.25,
             ),
-            num_simulations=20,
+            num_simulations=50,
         ),
         replay=BufferConfig(
             td_steps=10,
@@ -72,7 +68,7 @@ def config_2048() -> StochasticAlphaZeroConfig:
         ),
         training=TrainingConfig(epochs=200, learning_rate=3e-4, store_path=""),
         self_play=SelfPlayConfig(
-            episodes=100,
+            episodes=10,
             evaluation=50,
             visit_softmax_temperature_fn=_visit_softmax_temperature,
         ),

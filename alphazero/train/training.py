@@ -3,6 +3,7 @@
 Set of class for training.
 """
 from typing import Sequence
+import time
 
 from alphazero.addons.config import StochasticAlphaZeroConfig
 from alphazero.addons.optimizer import GCAdam
@@ -91,9 +92,13 @@ def train_network(config: StochasticAlphaZeroConfig, network: Network, replay_bu
         Buffer for experience
     """
     # ##: Optimizer function.
-    optimizer = GCAdam(learning_rate=config.training.learning_rate)
+    optimizer = GCAdam(
+        learning_rate=config.training.learning_rate,
+        decay=config.training.learning_rate / config.training.epochs
+    )
 
     # ##: Nth training.
+    epoch_start = time.time()
     for _ in range(config.training.epochs):
         # ##: Compute targets.
         sample = replay_buffer.sample()
@@ -101,3 +106,7 @@ def train_network(config: StochasticAlphaZeroConfig, network: Network, replay_bu
 
         # ##: Train network.
         network.train_step(batch, optimizer)
+
+    epoch_end = time.time()
+    elapsed = (epoch_end - epoch_start) / 60.0
+    print("Training took {:.4} minutes".format(elapsed))
