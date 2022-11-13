@@ -6,7 +6,6 @@ from math import log, sqrt
 from typing import List
 
 import numpy as np
-from numpy import ndarray
 
 from alphazero.addons.config import (
     MonteCarlosConfig,
@@ -160,41 +159,6 @@ def add_exploration_noise(config: NoiseConfig, node: Node):
         node.children[action].prior = node.children[action].prior * (1 - frac) + _noise * frac
 
 
-def mask_illegal_actions(state: ndarray, simulator: Simulator, outputs: NetworkOutput) -> NetworkOutput:
-    """
-    Masks any actions which are illegal at the root.
-
-    Parameters
-    ----------
-    state: ndarray
-        Current state
-    simulator: Simulator
-        Environment simulation
-    outputs: NetworkOutput
-        Previous network output
-
-    Returns
-    -------
-    NetworkOutput
-        New network output with legal action
-    """
-
-    # ##: We mask out and keep only the legal actions.
-    masked_policy = {}
-    network_policy = outputs.probabilities
-    norm = 0
-    for action in simulator.legal_actions(state):
-        if action in network_policy:
-            masked_policy[action] = network_policy[action]
-        else:
-            masked_policy[action] = 0.0
-        norm += masked_policy[action]
-
-    # ##: Re-normalize the masked policy.
-    masked_policy = {a: v / norm for a, v in masked_policy.items()}
-    return NetworkOutput(value=outputs.value, probabilities=masked_policy)
-
-
 def run_mcts(
     config: MonteCarlosConfig, root: Node, network: Network, simulator: Simulator, min_max_stats: MinMaxStats
 ):
@@ -225,7 +189,7 @@ def run_mcts(
 
         # ##: Get value and probability distribution over all moves.
         network_output = network.predictions(node.state)
-        network_output = mask_illegal_actions(node.state, simulator, network_output)
+        network_output = simulator.mask_illegal_actions(node.state, network_output)
 
         # ##: Get all children possible
         simulator_output = simulator.step(node.state)

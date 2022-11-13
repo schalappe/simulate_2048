@@ -166,7 +166,7 @@ class GameBoard(gym.Env):
 
         # ##: Applied action.
         rotated_board = np.rot90(self._board, k=action)
-        penalty = compute_penalties(rotated_board)
+        # penalty = compute_penalties(rotated_board)
         score, updated_board = slide_and_merge(rotated_board)
 
         # ##: Fill new cell only if the board has evolved.

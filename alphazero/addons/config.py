@@ -61,7 +61,6 @@ class SelfPlayConfig:
 
     episodes: int
     evaluation: int
-    visit_softmax_temperature_fn: Callable[[int], float]
 
 
 @dataclass
@@ -81,7 +80,9 @@ class TrainingConfig:
     """
 
     epochs: int
+    export: int
     store_path: str
+    training_step: int
     learning_rate: float
 
 
@@ -91,8 +92,6 @@ class StochasticAlphaZeroConfig:
     Configuration for AlphaZero.
     """
 
-    loop: int
-    export: int
     noise: NoiseConfig
     search: MonteCarlosConfig
     replay: BufferConfig

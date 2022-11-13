@@ -3,19 +3,17 @@
 Self play function.
 """
 from collections import Counter
-import time
 
 from numpy import max as max_array_values
-from numpy import sum as sum_array_values
 
 from alphazero.addons.config import StochasticAlphaZeroConfig
 from alphazero.addons.types import State
-from alphazero.models.network import Network
+from alphazero.models.network import NetworkCacher
 from alphazero.module.actor import StochasticMuZeroActor
 from alphazero.module.replay import ReplayBuffer
 
 
-def run_self_play(config: StochasticAlphaZeroConfig, network: Network, replay_buffer: ReplayBuffer, step: int) -> None:
+def run_self_play(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, replay_buffer: ReplayBuffer) -> int:
     """
     Takes the latest network snapshot, produces an episode and makes it available to the training job by writing it
     to a replay buffer.
@@ -24,61 +22,45 @@ def run_self_play(config: StochasticAlphaZeroConfig, network: Network, replay_bu
     ----------
     config: StochasticAlphaZeroConfig
         Configuration for self play
-    network: Network
-        The latest network.
+    cacher: NetworkCacher
+        List of network weights
     replay_buffer: ReplayBuffer
         Buffer for experience
-    step: int
-        Training step
 
     """
-    actor = StochasticMuZeroActor(config, network)
+    actor = StochasticMuZeroActor(config, cacher)
 
-    epoch_start = time.time()
-    max_values = 2
-    for num in range(config.self_play.episodes):
+    # ##: Create a new instance of the environment.
+    env = config.factory.environment_factory()
 
-        # ##: Create a new instance of the environment.
-        env = config.factory.environment_factory()
+    # ##: Reset the actor.
+    actor.reset()
 
-        # ##: Reset the actor.
-        actor.reset(step)
+    # ##: Play a game.
+    episode = []
+    while not env.is_terminal():
+        # ##: Interact with environment
+        obs = env.observation()
+        reward = env.reward()
+        action = actor.select_action(obs)
 
-        # ##: Play a game.
-        episode = []
-        while not env.is_terminal():
-            # ##: Interact with environment
-            obs = env.observation()
-            reward = env.reward()
-            action = actor.select_action(obs)
+        # ##: Store state
+        state = State(
+            observation=obs,
+            reward=reward,
+            discount=config.search.bounds.discount,
+            action=action,
+            search_stats=actor.stats(),
+        )
+        episode.append(state)
+        env.step(action)
 
-            # ##: Store state
-            state = State(
-                observation=obs,
-                reward=reward,
-                discount=config.search.bounds.discount,
-                action=action,
-                search_stats=actor.stats(),
-            )
-            episode.append(state)
-            env.step(action)
-
-            # ##: Log.
-            print(f"Game: {num + 1} - Score: {sum_array_values(env.observation())}", end="\r")
-        print(f"Game: {num + 1} - Score: {sum_array_values(env.observation())}")
-
-        # ##: Send the episode to the replay.
-        replay_buffer.save(episode)
-        max_values = max(max_values, max_array_values(env.observation()))
-
-    # ##: Display time
-    epoch_end = time.time()
-    elapsed = (epoch_end - epoch_start) / 60.0
-    print(f"Max: {max_values} for the self-play ...")
-    print("Self-play took {:.4} minutes".format(elapsed))
+    # ##: Send the episode to the replay.
+    replay_buffer.save(episode)
+    return max_array_values(env.observation())
 
 
-def run_eval(config: StochasticAlphaZeroConfig, network: Network) -> dict:
+def run_eval(config: StochasticAlphaZeroConfig, cacher: NetworkCacher) -> dict:
     """
     Evaluate an agent.
 
@@ -86,10 +68,10 @@ def run_eval(config: StochasticAlphaZeroConfig, network: Network) -> dict:
     ----------
     config: StochasticAlphaZeroConfig
         Configuration for self play
-    network: Network
-        The latest network.
+    cacher: NetworkCacher
+        List of network weights
     """
-    actor = StochasticMuZeroActor(config, network)
+    actor = StochasticMuZeroActor(config, cacher)
     score = []
 
     for num in range(config.self_play.evaluation):
@@ -97,13 +79,13 @@ def run_eval(config: StochasticAlphaZeroConfig, network: Network) -> dict:
         env = config.factory.environment_factory()
 
         # ##: Reset the actor.
-        actor.reset(0)
+        actor.reset()
 
         # ##: Play a game.
         while not env.is_terminal():
             # ##: Interact with environment
             obs = env.observation()
-            action = actor.select_action(obs)
+            action = actor.select_action(obs, train=False)
             env.step(action)
 
             # ##: Log.

@@ -5,10 +5,12 @@ Simulator for helping during Monte Carlos Tree Search
 from typing import List, Sequence, Tuple
 
 import numpy as np
+from numba import njit
 from numpy import ndarray
 
 from alphazero.addons.types import SimulatorOutput, StochasticState
-from simulate_2048.envs.utils import slide_and_merge, compute_penalties
+from alphazero.models.network import NetworkOutput
+from simulate_2048.envs.utils import slide_and_merge
 
 
 class Simulator:
@@ -18,7 +20,24 @@ class Simulator:
     """
 
     @staticmethod
-    def _stochastic_states(state: ndarray) -> List[StochasticState]:
+    @njit
+    def __stochastic_states(state: ndarray) -> List:
+        all_possibilities = []
+        for value, prob in [(2, 0.9), (4, 0.1)]:
+            # ##: Get all available positions.
+            available_cells = np.argwhere(state == 0)
+
+            # ##: Generate possible states.
+            for position in available_cells:
+                # ##: New state
+                board = state.copy()
+                board[(position[0], position[1])] = value
+                prior = prob * 1 / len(available_cells)
+
+                all_possibilities.append((board, prior))
+        return all_possibilities
+
+    def _stochastic_states(self, state: ndarray) -> List[StochasticState]:
         """
         Generate all possible states.
 
@@ -37,19 +56,8 @@ class Simulator:
             return [StochasticState(state=state.copy(), probability=1.0)]
 
         # ##: Store all possible states.
-        all_possibilities = []
-        for value, prob in [(2, 0.9), (4, 0.1)]:
-            # ##: Get all available positions.
-            available_cells = np.argwhere(state == 0)
-
-            # ##: Generate possible states.
-            for position in available_cells:
-                # ##: New state
-                board = state.copy()
-                board[tuple(position)] = value
-                prior = prob * 1 / len(available_cells)
-
-                all_possibilities.append(StochasticState(state=board, probability=prior))
+        all_possibilities = self.__stochastic_states(state)
+        all_possibilities = [StochasticState(state=board, probability=prior) for board, prior in all_possibilities]
 
         return all_possibilities
 
@@ -74,7 +82,7 @@ class Simulator:
         # ##: Applied action.
         rotated_board = np.rot90(state, k=action)
         score, updated_board = slide_and_merge(rotated_board)
-        penalty = compute_penalties(rotated_board)
+        # penalty = compute_penalties(rotated_board)
 
         # ##: If same board, return simulation output.
         if np.array_equal(rotated_board, updated_board):
@@ -139,3 +147,35 @@ class Simulator:
                 legal_moves.append(action)
 
         return legal_moves
+
+    def mask_illegal_actions(self, state: ndarray, outputs: NetworkOutput) -> NetworkOutput:
+        """
+        Masks any actions which are illegal at the root.
+
+        Parameters
+        ----------
+        state: ndarray
+            Current state
+        outputs: NetworkOutput
+            Previous network output
+
+        Returns
+        -------
+        NetworkOutput
+            New network output with legal action
+        """
+
+        # ##: We mask out and keep only the legal actions.
+        masked_policy = {}
+        network_policy = outputs.probabilities
+        norm = 0
+        for action in self.legal_actions(state):
+            if action in network_policy:
+                masked_policy[action] = network_policy[action]
+            else:
+                masked_policy[action] = 0.0
+            norm += masked_policy[action]
+
+        # ##: Re-normalize the masked policy.
+        masked_policy = {a: v / norm for a, v in masked_policy.items()}
+        return NetworkOutput(value=outputs.value, probabilities=masked_policy)

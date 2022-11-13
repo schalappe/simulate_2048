@@ -3,15 +3,14 @@
 Set of class for Self-play.
 """
 from abc import ABCMeta, abstractmethod
-from typing import Optional
 
 import numpy as np
 from numpy import ndarray
 
 from alphazero.addons.config import StochasticAlphaZeroConfig
-from alphazero.addons.types import NetworkOutput, SearchStats
+from alphazero.addons.types import SearchStats
 from alphazero.game.simulator import Simulator
-from alphazero.models.network import Network
+from alphazero.models.network import NetworkCacher
 from alphazero.search.helpers import MinMaxStats
 from alphazero.search.mcts import (
     add_exploration_noise,
@@ -28,7 +27,7 @@ class Actor(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def reset(self, step: Optional[int]):
+    def reset(self):
         """
         Resets the player for a new episode.
         """
@@ -66,53 +65,22 @@ class StochasticMuZeroActor(Actor):
     A MuZero actor for self-play.
     """
 
-    def __init__(self, config: StochasticAlphaZeroConfig, network: Network):
+    def __init__(self, config: StochasticAlphaZeroConfig, cacher: NetworkCacher):
         self.config = config
-        self.training_step = -1
-        self.network = network
+        self.cacher = cacher
+        self.network = None
         self.root = None
         self.simulator = Simulator()
 
-    def reset(self, step: int):
+    def reset(self):
         """
         Resets the player for a new episode.
         """
-        self.training_step = step
+        self.network = self.cacher.load_network()
         self.root = None
 
-    def _mask_illegal_actions(self, state: ndarray, outputs: NetworkOutput) -> NetworkOutput:
-        """
-        Masks any actions which are illegal at the root.
-
-        Parameters
-        ----------
-        state: ndarray
-            Current state
-        outputs: NetworkOutput
-            Previous network output
-
-        Returns
-        -------
-        NetworkOutput
-            New network output with legal action
-        """
-
-        # ##: We mask out and keep only the legal actions.
-        masked_policy = {}
-        network_policy = outputs.probabilities
-        norm = 0
-        for action in self.simulator.legal_actions(state):
-            if action in network_policy:
-                masked_policy[action] = network_policy[action]
-            else:
-                masked_policy[action] = 0.0
-            norm += masked_policy[action]
-
-        # ##: Re-normalize the masked policy.
-        masked_policy = {a: v / norm for a, v in masked_policy.items()}
-        return NetworkOutput(value=outputs.value, probabilities=masked_policy)
-
-    def _select_action(self, root: Node) -> int:
+    @classmethod
+    def _select_action(cls, root: Node) -> int:
         """
         Selects an action given the root node.
 
@@ -130,17 +98,14 @@ class StochasticMuZeroActor(Actor):
         # ##: Get the visit count distribution.
         actions, visit_counts = zip(*[(action, node.visit_count) for action, node in root.children.items()])
 
-        # ##: Temperature
-        temperature = self.config.self_play.visit_softmax_temperature_fn(self.training_step)
-
         # ##: Compute the search policy.
-        search_policy = [v ** (1.0 / temperature) for v in visit_counts]
+        search_policy = list(visit_counts)
         norm = sum(search_policy)
         search_policy = [v / norm for v in search_policy]
 
         return np.random.choice(actions, p=search_policy)
 
-    def select_action(self, state: ndarray) -> int:
+    def select_action(self, state: ndarray, train: bool = True) -> int:
         """
         Selects an action.
 
@@ -148,6 +113,8 @@ class StochasticMuZeroActor(Actor):
         ----------
         state: ndarray
             Current state
+        train: bool
+            Training mode
 
         Returns
         -------
@@ -163,7 +130,7 @@ class StochasticMuZeroActor(Actor):
 
         # ##: Compute the predictions and keep only the legal actions.
         outputs = self.network.predictions(state)
-        outputs = self._mask_illegal_actions(state, outputs)
+        outputs = self.simulator.mask_illegal_actions(state, outputs)
 
         # ##: Generate all possibles children
         simulator_outputs = self.simulator.step(state)
@@ -175,7 +142,8 @@ class StochasticMuZeroActor(Actor):
         backpropagate([root], outputs.value, self.config.search.bounds.discount, min_max_stats)
 
         # ##: Add exploration noise to the root node.
-        add_exploration_noise(self.config.noise, root)
+        if train:
+            add_exploration_noise(self.config.noise, root)
 
         # ##: Run a Monte Carlo Tree Search using only action sequences and the model learned by the network.
         run_mcts(self.config.search, root, self.network, self.simulator, min_max_stats)

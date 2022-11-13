@@ -2,13 +2,14 @@
 """
 Set of class for training.
 """
-from typing import Sequence
 import time
+from typing import Sequence
+
 import tensorflow as tf
 
 from alphazero.addons.config import StochasticAlphaZeroConfig
 from alphazero.addons.types import State, Trajectory
-from alphazero.models.network import Network
+from alphazero.models.network import NetworkCacher
 from alphazero.module.replay import ReplayBuffer
 
 
@@ -78,7 +79,7 @@ def compute_td_target(td_steps: int, td_lambda: float, trajectories: Sequence[Tr
     return targets
 
 
-def train_network(config: StochasticAlphaZeroConfig, network: Network, replay_buffer: ReplayBuffer):
+def train_network(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, replay_buffer: ReplayBuffer):
     """
     Applies a training step.
 
@@ -86,13 +87,16 @@ def train_network(config: StochasticAlphaZeroConfig, network: Network, replay_bu
     ----------
     config: StochasticAlphaZeroConfig
         Configuration for self play
-    network: Network
-        Model to train
+    cacher: NetworkCacher
+        List of network weights
     replay_buffer: ReplayBuffer
         Buffer for experience
     """
     # ##: Optimizer function.
     optimizer = tf.keras.optimizers.Adam(learning_rate=config.training.learning_rate)
+
+    # ##: Create new network with random initialization.
+    network = config.factory.network_factory()
 
     # ##: Nth training.
     epoch_start = time.time()
@@ -104,6 +108,10 @@ def train_network(config: StochasticAlphaZeroConfig, network: Network, replay_bu
         # ##: Train network.
         network.train_step(batch, optimizer)
 
+    # ##: Log.
     epoch_end = time.time()
     elapsed = (epoch_end - epoch_start) / 60.0
-    print("Training took {:.4} minutes".format(elapsed))
+    print(f"Training took {elapsed:.4} minutes")
+
+    # ##: Save the training model.
+    cacher.save_network(network)

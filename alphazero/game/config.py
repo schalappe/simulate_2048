@@ -35,13 +35,8 @@ def config_2048() -> StochasticAlphaZeroConfig:
     def _network_factory():
         return Network(ENCODAGE_SIZE)
 
-    def _visit_softmax_temperature(train_steps: int) -> float:
-        return 1.0
-
     # ##: Return configuration.
     return StochasticAlphaZeroConfig(
-        loop=101,
-        export=10,
         noise=NoiseConfig(
             root_dirichlet_alpha=0.3,
             root_dirichlet_adaptive=False,
@@ -58,18 +53,20 @@ def config_2048() -> StochasticAlphaZeroConfig:
         replay=BufferConfig(
             td_steps=10,
             td_lambda=0.5,
-            batch_size=2048,
+            batch_size=1024,
             num_unroll_steps=5,
-            num_trajectories=125000,
+            num_trajectories=int(125e3),
         ),
         factory=Factory(
             network_factory=_network_factory,
             environment_factory=_environment_factory,
         ),
-        training=TrainingConfig(epochs=100, learning_rate=3e-4, store_path=""),
-        self_play=SelfPlayConfig(
-            episodes=10,
-            evaluation=50,
-            visit_softmax_temperature_fn=_visit_softmax_temperature,
+        training=TrainingConfig(
+            epochs=int(1e4),
+            export=20,
+            store_path="",
+            learning_rate=3e-4,
+            training_step=100
         ),
+        self_play=SelfPlayConfig(episodes=10, evaluation=50),
     )

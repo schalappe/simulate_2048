@@ -2,7 +2,7 @@
 """
 Set of class for network use by Alpha Zero.
 """
-from math import exp
+from collections import deque
 from os.path import join
 from typing import Sequence
 
@@ -10,6 +10,7 @@ import numpy as np
 import tensorflow as tf
 from numpy import ndarray
 
+from alphazero.addons.config import ENCODAGE_SIZE
 from alphazero.addons.types import NetworkOutput
 
 from .core import PolicyNetwork
@@ -69,8 +70,8 @@ class Network:
         probs, value = self.model(obs_tensor)
 
         # ##: Generate output.
-        policy = [exp(probs[0][a]) for a in range(4)]
-        return NetworkOutput(float(value[0]), {action: policy[action] / sum(policy) for action in range(4)})
+        # policy = [exp(probs[0][a]) for a in range(4)]
+        return NetworkOutput(float(value[0]), {action: probs[0][action] for action in range(4)})
 
     def train_step(self, batch: Sequence, optimizer: tf.keras.optimizers.Optimizer):
         """
@@ -116,3 +117,36 @@ class Network:
         """
         model_path = join(store_path, "alphazero.h5")
         self.model.save(model_path)
+
+
+class NetworkCacher:
+    """
+    An object to share the network weights between the self-play and training jobs.
+    """
+
+    def __init__(self, max_weights: int = 100):
+        self._networks = deque(maxlen=max_weights)
+
+    def save_network(self, network: Network):
+        """
+        Save the network weights.
+
+        Parameters
+        ----------
+        network: Network
+            Model to save
+        """
+        self._networks.append(network.model.get_weights())
+
+    def load_network(self) -> Network:
+        """
+        Use the last weight to create a new model.
+
+        Returns
+        -------
+        Network
+            Model with the last weight
+        """
+        network = Network(ENCODAGE_SIZE)
+        network.model.set_weights(self._networks[-1])
+        return network

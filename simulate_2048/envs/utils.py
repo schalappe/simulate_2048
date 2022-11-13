@@ -3,11 +3,13 @@
 Set of useful function for 2048 Simulation.
 """
 from typing import Tuple
+from numba import njit
 
 import numpy as np
 from numpy import ndarray
 
 
+@njit
 def merge_column(column) -> Tuple:
     """
     Merge value in a column and compute score.
@@ -71,6 +73,7 @@ def slide_and_merge(board: ndarray, size: int = 4) -> Tuple:
     return score, np.array(result, dtype=np.int64)
 
 
+@njit
 def compute_penalties(board: ndarray) -> float:
     """
     Compute penalties for moved cells.
