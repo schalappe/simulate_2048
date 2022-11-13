@@ -40,7 +40,7 @@ def config_2048() -> StochasticAlphaZeroConfig:
 
     # ##: Return configuration.
     return StochasticAlphaZeroConfig(
-        loop=1000,
+        loop=101,
         export=10,
         noise=NoiseConfig(
             root_dirichlet_alpha=0.3,
@@ -53,12 +53,12 @@ def config_2048() -> StochasticAlphaZeroConfig:
                 pb_c_base=19652,
                 pb_c_init=1.25,
             ),
-            num_simulations=50,
+            num_simulations=100,
         ),
         replay=BufferConfig(
             td_steps=10,
             td_lambda=0.5,
-            batch_size=1024,
+            batch_size=2048,
             num_unroll_steps=5,
             num_trajectories=125000,
         ),
@@ -66,7 +66,7 @@ def config_2048() -> StochasticAlphaZeroConfig:
             network_factory=_network_factory,
             environment_factory=_environment_factory,
         ),
-        training=TrainingConfig(epochs=200, learning_rate=3e-4, store_path=""),
+        training=TrainingConfig(epochs=100, learning_rate=3e-4, store_path=""),
         self_play=SelfPlayConfig(
             episodes=10,
             evaluation=50,

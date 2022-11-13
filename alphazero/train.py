@@ -32,4 +32,4 @@ for loop in range(config.loop):
     if loop > 0 and loop % config.export == 0:
         # ##: Export network.
         network.save_network(config.training.store_path)
-        print("General evaluation ->  score: ", run_eval(config, network))
+print("General evaluation ->  score: ", run_eval(config, network))

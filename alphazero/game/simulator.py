@@ -8,7 +8,7 @@ import numpy as np
 from numpy import ndarray
 
 from alphazero.addons.types import SimulatorOutput, StochasticState
-from simulate_2048.envs.utils import slide_and_merge
+from simulate_2048.envs.utils import slide_and_merge, compute_penalties
 
 
 class Simulator:
@@ -74,6 +74,7 @@ class Simulator:
         # ##: Applied action.
         rotated_board = np.rot90(state, k=action)
         score, updated_board = slide_and_merge(rotated_board)
+        penalty = compute_penalties(rotated_board)
 
         # ##: If same board, return simulation output.
         if np.array_equal(rotated_board, updated_board):
@@ -81,7 +82,7 @@ class Simulator:
 
         # ##: Board has evolved, compute reward.
         _board = np.rot90(updated_board, k=4 - action)
-        reward = score
+        reward = score  # - penalty
 
         # ##: Generate all stochastic states possibles.
         all_states = self._stochastic_states(_board)
