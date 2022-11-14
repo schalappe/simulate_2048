@@ -5,9 +5,8 @@ Set of class for training.
 import time
 from typing import Sequence
 
-import tensorflow as tf
-
 from alphazero.addons.config import StochasticAlphaZeroConfig
+from alphazero.addons.optimizer import GCAdam
 from alphazero.addons.types import State, Trajectory
 from alphazero.models.network import NetworkCacher
 from alphazero.module.replay import ReplayBuffer
@@ -93,7 +92,7 @@ def train_network(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, repl
         Buffer for experience
     """
     # ##: Optimizer function.
-    optimizer = tf.keras.optimizers.Adam(learning_rate=config.training.learning_rate)
+    optimizer = GCAdam(learning_rate=config.training.learning_rate)
 
     # ##: Create new network with random initialization.
     network = config.factory.network_factory()

@@ -2,8 +2,8 @@
 """
 Self play function.
 """
-from collections import Counter
 import time
+from collections import Counter
 
 from numpy import max as max_array_values
 from numpy import sum as sum_array_values
@@ -30,15 +30,15 @@ def run_self_play(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, repl
         Buffer for experience
 
     """
-    actor = StochasticMuZeroActor(config, cacher)
-
     epoch_start = time.time()
     max_values = 2
     for num in range(config.self_play.episodes):
+
         # ##: Create a new instance of the environment.
         env = config.factory.environment_factory()
 
-        # ##: Reset the actor.
+        # ##: Create the actor.
+        actor = StochasticMuZeroActor(config, cacher)
         actor.reset()
 
         # ##: Play a game.
@@ -61,7 +61,8 @@ def run_self_play(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, repl
             env.step(action)
 
             # ##: Log.
-            print(f"Actor: {num + 1} - Score: {sum_array_values(env.observation())}", end="\r")
+            print(f"Actor n°{num + 1}: - Score: {sum_array_values(env.observation())}", end="\r")
+        print(f"Actor n°{num + 1}: - Score: {sum_array_values(env.observation())}")
 
         # ##: Send the episode to the replay.
         replay_buffer.save(episode)

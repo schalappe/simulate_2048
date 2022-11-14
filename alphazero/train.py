@@ -2,8 +2,6 @@
 """
 Script for training an agent.
 """
-import concurrent.futures
-import time
 from os.path import abspath, dirname, join
 
 from alphazero.game.config import config_2048

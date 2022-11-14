@@ -16,6 +16,30 @@ from alphazero.addons.types import NetworkOutput
 from .core import PolicyNetwork
 
 
+def encode(state: ndarray, encodage_size: int) -> ndarray:
+    """
+    Flatten the observation given by the environment than encode it.
+
+    Parameters
+    ----------
+    state: ndarray
+        Observation given by the environment
+    encodage_size: int
+        Size of encodage
+
+    Returns
+    -------
+    ndarray:
+        Encode observation
+    """
+    obs = state.copy()
+    obs = np.reshape(obs, -1)
+    obs[obs == 0] = 1
+    obs = np.log2(obs)
+    obs = obs.astype(np.int64)
+    return np.reshape(np.eye(encodage_size)[obs], -1)
+
+
 class Network:
     """
     An instance of the network used by AlphaZero.
@@ -25,27 +49,6 @@ class Network:
         shape = (4 * 4 * size,)
         self.encodage_size = size
         self.model = PolicyNetwork()(shape)
-
-    def encode(self, state: ndarray) -> ndarray:
-        """
-        Flatten the observation given by the environment than encode it.
-
-        Parameters
-        ----------
-        state: ndarray
-            Observation given by the environment
-
-        Returns
-        -------
-        ndarray:
-            Encode observation
-        """
-        obs = state.copy()
-        obs = np.reshape(obs, -1)
-        obs[obs == 0] = 1
-        obs = np.log2(obs)
-        obs = obs.astype(int)
-        return np.reshape(np.eye(self.encodage_size)[obs], -1)
 
     def predictions(self, state: ndarray) -> NetworkOutput:
         """
@@ -62,7 +65,7 @@ class Network:
             The value of given state and the probabilities distribution over all moves
         """
         # ##: Transform the state for network.
-        observation = self.encode(state)
+        observation = encode(state, self.encodage_size)
 
         # ##: Use model for values and action probability distribution.
         obs_tensor = tf.convert_to_tensor(observation)
@@ -89,7 +92,7 @@ class Network:
         observations, target_values, target_policies = zip(*batch)
 
         # ##: Encode observation, then turn observations, values and policies into tensor.
-        observations = tf.stack([self.encode(obs) for obs in observations])
+        observations = tf.stack([encode(obs, self.encodage_size) for obs in observations])
         target_values = tf.stack(target_values)
         target_policies = tf.stack(target_policies)
 

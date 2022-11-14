@@ -12,23 +12,6 @@ from alphazero.models.network import NetworkOutput
 from simulate_2048.envs.utils import slide_and_merge
 
 
-def stochastic_states(state: ndarray) -> List:
-    all_possibilities = []
-    for value, prob in [(2, 0.9), (4, 0.1)]:
-        # ##: Get all available positions.
-        available_cells = np.argwhere(state == 0)
-
-        # ##: Generate possible states.
-        for position in available_cells:
-            # ##: New state
-            board = state.copy()
-            board[(position[0], position[1])] = value
-            prior = prob * 1 / len(available_cells)
-
-            all_possibilities.append((board, prior))
-    return all_possibilities
-
-
 class Simulator:
     """
     Simulator class.
@@ -39,12 +22,10 @@ class Simulator:
     def _stochastic_states(state: ndarray) -> List[StochasticState]:
         """
         Generate all possible states.
-
         Parameters
         ----------
         state: ndarray
             Transient state
-
         Returns
         -------
         list[StochasticState]
@@ -53,11 +34,18 @@ class Simulator:
         # ##: If board is full, return it.
         if state.all():
             return [StochasticState(state=state.copy(), probability=1.0)]
-
         # ##: Store all possible states.
-        all_possibilities = stochastic_states(state)
-        all_possibilities = [StochasticState(state=board, probability=prior) for board, prior in all_possibilities]
-
+        all_possibilities = []
+        for value, prob in [(2, 0.9), (4, 0.1)]:
+            # ##: Get all available positions.
+            available_cells = np.argwhere(state == 0)
+            # ##: Generate possible states.
+            for position in available_cells:
+                # ##: New state
+                board = state.copy()
+                board[tuple(position)] = value
+                prior = prob * 1 / len(available_cells)
+                all_possibilities.append(StochasticState(state=board, probability=prior))
         return all_possibilities
 
     def _apply_action(self, state: ndarray, action: int) -> Tuple[List[StochasticState], int]:
