@@ -5,12 +5,28 @@ Simulator for helping during Monte Carlos Tree Search
 from typing import List, Sequence, Tuple
 
 import numpy as np
-from numba import njit
 from numpy import ndarray
 
 from alphazero.addons.types import SimulatorOutput, StochasticState
 from alphazero.models.network import NetworkOutput
 from simulate_2048.envs.utils import slide_and_merge
+
+
+def stochastic_states(state: ndarray) -> List:
+    all_possibilities = []
+    for value, prob in [(2, 0.9), (4, 0.1)]:
+        # ##: Get all available positions.
+        available_cells = np.argwhere(state == 0)
+
+        # ##: Generate possible states.
+        for position in available_cells:
+            # ##: New state
+            board = state.copy()
+            board[(position[0], position[1])] = value
+            prior = prob * 1 / len(available_cells)
+
+            all_possibilities.append((board, prior))
+    return all_possibilities
 
 
 class Simulator:
@@ -20,24 +36,7 @@ class Simulator:
     """
 
     @staticmethod
-    @njit
-    def __stochastic_states(state: ndarray) -> List:
-        all_possibilities = []
-        for value, prob in [(2, 0.9), (4, 0.1)]:
-            # ##: Get all available positions.
-            available_cells = np.argwhere(state == 0)
-
-            # ##: Generate possible states.
-            for position in available_cells:
-                # ##: New state
-                board = state.copy()
-                board[(position[0], position[1])] = value
-                prior = prob * 1 / len(available_cells)
-
-                all_possibilities.append((board, prior))
-        return all_possibilities
-
-    def _stochastic_states(self, state: ndarray) -> List[StochasticState]:
+    def _stochastic_states(state: ndarray) -> List[StochasticState]:
         """
         Generate all possible states.
 
@@ -56,7 +55,7 @@ class Simulator:
             return [StochasticState(state=state.copy(), probability=1.0)]
 
         # ##: Store all possible states.
-        all_possibilities = self.__stochastic_states(state)
+        all_possibilities = stochastic_states(state)
         all_possibilities = [StochasticState(state=board, probability=prior) for board, prior in all_possibilities]
 
         return all_possibilities

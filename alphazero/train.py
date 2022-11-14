@@ -30,22 +30,7 @@ for loop in range(config.training.training_step):
     print("Training loop ", loop + 1)
 
     # ##: Self play.
-    max_cells = []
-    epoch_start = time.time()
-    print("Self-play is in progress ...")
-    for _ in range(config.self_play.episodes // 2):
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = []
-            for _ in range(2):
-                futures.append(executor.submit(lambda: run_self_play(config, cacher, replay_buffer)))
-            for future in concurrent.futures.as_completed(futures):
-                max_cells.append(future.result())
-    epoch_end = time.time()
-
-    # ##: Display time
-    elapsed = (epoch_end - epoch_start) / 60.0
-    print("Max: {max(max_cells)} for the self-play ...")
-    print(f"Self-play took {elapsed:.4} minutes")
+    run_self_play(config, cacher, replay_buffer)
 
     # ##: Train network.
     train_network(config, cacher, replay_buffer)
