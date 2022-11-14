@@ -61,6 +61,6 @@ def config_2048() -> StochasticAlphaZeroConfig:
             network_factory=_network_factory,
             environment_factory=_environment_factory,
         ),
-        training=TrainingConfig(epochs=int(1e4), export=20, store_path="", learning_rate=3e-3, training_step=100),
-        self_play=SelfPlayConfig(episodes=10, evaluation=10),
+        training=TrainingConfig(epochs=int(1e3), export=20, store_path="", learning_rate=3e-3, training_step=100),
+        self_play=SelfPlayConfig(episodes=1, evaluation=10),
     )

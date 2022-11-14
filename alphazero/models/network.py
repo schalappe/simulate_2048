@@ -8,6 +8,7 @@ from typing import Sequence
 
 import numpy as np
 import tensorflow as tf
+from numba import jit
 from numpy import ndarray
 
 from alphazero.addons.config import ENCODAGE_SIZE
@@ -16,6 +17,7 @@ from alphazero.addons.types import NetworkOutput
 from .core import PolicyNetwork
 
 
+@jit(nopython=True, cache=True)
 def encode(state: ndarray, encodage_size: int) -> ndarray:
     """
     Flatten the observation given by the environment than encode it.

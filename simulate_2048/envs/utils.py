@@ -6,8 +6,10 @@ from typing import Tuple
 
 import numpy as np
 from numpy import ndarray
+from numba import jit
 
 
+@jit(nopython=True, cache=True)
 def merge_column(column) -> Tuple:
     """
     Merge value in a column and compute score.
@@ -71,6 +73,7 @@ def slide_and_merge(board: ndarray, size: int = 4) -> Tuple:
     return score, np.array(result, dtype=np.int64)
 
 
+@jit(nopython=True, cache=True)
 def compute_penalties(board: ndarray) -> float:
     """
     Compute penalties for moved cells.
