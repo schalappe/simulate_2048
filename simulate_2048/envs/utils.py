@@ -5,8 +5,8 @@ Set of useful function for 2048 Simulation.
 from typing import Tuple
 
 import numpy as np
-from numpy import ndarray
 from numba import jit
+from numpy import ndarray
 
 
 @jit(nopython=True, cache=True)

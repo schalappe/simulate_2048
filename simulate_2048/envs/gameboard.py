@@ -30,7 +30,7 @@ class GameBoard(gym.Env):
 
     def __init__(self, size: int = 4):
         self.size = size  # ##: The size of the square grid.
-        self.observation_space = spaces.Box(low=0, high=2**32, shape=(size, size), dtype=np.int64)
+        self.observation_space = spaces.Box(low=0, high=2**32, shape=(size * size,), dtype=np.int64)
         self.action_space = spaces.Discrete(4)  # ##: 4 actions possible.
 
         # ##: Initialize variables.
@@ -72,7 +72,7 @@ class GameBoard(gym.Env):
         tuple
             List of chosen cells
         """
-        available_cells = np.argwhere(self.board == 0)
+        available_cells = np.argwhere(self._board == 0)
         chosen_cells = self.random.choice(len(available_cells), size=number_cell, replace=False)
         cell_positions = available_cells[chosen_cells]
         return tuple(map(tuple, cell_positions))
@@ -87,7 +87,7 @@ class GameBoard(gym.Env):
             Number of cell to fill
         """
         # ##: Only there still available places
-        if not self.board.all():
+        if not self._board.all():
             values = self.__random_cell_value(number_cell=number_tile)
             cells = self.__random_position(number_cell=number_tile)
 
@@ -104,7 +104,7 @@ class GameBoard(gym.Env):
             True if the game is finished
             False else
         """
-        board = self.board.copy()
+        board = self._board.copy()
 
         # ##: Check if all cells is filled.
         if not board.all():
@@ -143,7 +143,7 @@ class GameBoard(gym.Env):
         self._old_board = None
         self._fill_cells(number_tile=2)
 
-        return self.board, {}
+        return np.reshape(self._board, -1), {}
 
     def step(self, action: int) -> Tuple[Any, Union[int, Tuple], bool, bool, dict]:
         """
@@ -180,7 +180,7 @@ class GameBoard(gym.Env):
         # ##: Check if game is finished.
         done = self._is_done()
 
-        return self.board, reward, done, False, {}
+        return np.reshape(self._board, -1), reward, done, False, {}
 
     def render(self, mode="human"):
         """
@@ -194,39 +194,3 @@ class GameBoard(gym.Env):
         if mode == "human":
             for row in self._board.tolist():
                 print(" \t".join(map(str, row)))
-
-    @property
-    def board(self) -> np.ndarray:
-        """
-        Return game board.
-
-        Returns
-        -------
-        np.ndarray:
-            Game board
-        """
-        return self._board
-
-    @board.setter
-    def board(self, board: np.ndarray):
-        """
-        Change the current game board.
-
-        Parameters
-        ----------
-        board: np.ndarray
-            New game board
-        """
-        self._board = board
-
-    @property
-    def old_board(self) -> np.ndarray:
-        """
-        Return the old board.
-
-        Returns
-        -------
-        np.ndarray:
-            Old game board
-        """
-        return self._old_board
