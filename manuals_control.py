@@ -38,10 +38,9 @@ def reset(envs: gym.Env, window: WindowBoard):
         Class to draw the game board
     """
     # ## ---> Reset the game.
-    envs.reset()
+    board, _ = envs.reset()
 
     # ## ----> Redraw the game board.
-    board = envs.board
     redraw(window, board)
 
 
@@ -63,8 +62,7 @@ def step(envs: gym.Env, window: WindowBoard, action: int):
     obs, reward, terminated, _, info = envs.step(action)
     print(f"reward={reward:.2f}")
 
-    board = envs.board
-    redraw(window, board)
+    redraw(window, obs)
     if terminated:
         print("terminated!")
 

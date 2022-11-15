@@ -56,7 +56,7 @@ class Simulator:
 
         # ##: Store all possible states.
         all_possibilities = stochastic_states(state)
-        all_possibilities = [StochasticState(state=board, probability=prior) for board, prior in all_possibilities]
+        all_possibilities = [StochasticState(state=np.reshape(board, -1), probability=prior) for board, prior in all_possibilities]
 
         return all_possibilities
 
@@ -79,7 +79,8 @@ class Simulator:
         reward = -10
 
         # ##: Applied action.
-        rotated_board = np.rot90(state, k=action)
+        _state = np.reshape(state, (4, 4))
+        rotated_board = np.rot90(_state, k=action)
         score, updated_board = slide_and_merge(rotated_board)
         # penalty = compute_penalties(rotated_board)
 
@@ -134,10 +135,11 @@ class Simulator:
         """
 
         legal_moves = []
+        _state = np.reshape(state, (4, 4))
 
         # ##: Loop over all possible moves.
         for action in range(4):
-            board = state.copy()
+            board = _state.copy()
 
             # ##: Generate next board.
             rotated_board = np.rot90(board, k=action)
@@ -163,12 +165,13 @@ class Simulator:
         NetworkOutput
             New network output with legal action
         """
+        _state = np.reshape(state, (4, 4))
 
         # ##: We mask out and keep only the legal actions.
         masked_policy = {}
         network_policy = outputs.probabilities
         norm = 0
-        for action in self.legal_actions(state):
+        for action in self.legal_actions(_state):
             if action in network_policy:
                 masked_policy[action] = network_policy[action]
             else:
