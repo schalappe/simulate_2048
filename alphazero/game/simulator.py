@@ -60,7 +60,7 @@ def legal_actions(state: ndarray) -> Sequence[int]:
         List of legal action
     """
 
-    legal_moves = np.zeros(4, dtype=np.int8)
+    legal_moves = np.array([-1, -1, -1, -1])
 
     # ##: Loop over all possible moves.
     for action in prange(4):
@@ -72,7 +72,7 @@ def legal_actions(state: ndarray) -> Sequence[int]:
         if not np.array_equal(rotated_board, updated_board):
             legal_moves[action] = action
 
-    return np.extract(legal_moves > 0, legal_moves)
+    return np.extract(legal_moves > -1, legal_moves)
 
 
 class Simulator:
@@ -122,8 +122,7 @@ class Simulator:
         """
 
         # ##: Applied action.
-        _state = np.reshape(state, (4, 4))
-        rotated_board = np.rot90(_state, k=action)
+        rotated_board = np.rot90(state, k=action)
         score, updated_board = slide_and_merge(rotated_board)
 
         # ##: Board has evolved, compute reward.
@@ -157,9 +156,9 @@ class Simulator:
         # ##: Generate all possible state for all actions.
         for action in range(4):
             if action in legal_moves:
-                outputs[action] = self._apply_action(state, action)
+                outputs[action] = self._apply_action(_state, action)
             else:
-                outputs[action] = []
+                outputs[action] = ([StochasticState(state=state.copy(), probability=1.0)], -10)
 
         return SimulatorOutput(stochastic_states=outputs)
 

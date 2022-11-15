@@ -76,7 +76,7 @@ class Network:
 
         # ##: Generate output.
         # policy = [exp(probs[0][a]) for a in range(4)]
-        return NetworkOutput(float(value[0]), {action: probs[0][action] for action in range(4)})
+        return NetworkOutput(float(value[0]), {action: probs[0][action].numpy() for action in range(4)})
 
     def train_step(self, batch: Sequence, optimizer: tf.keras.optimizers.Optimizer):
         """

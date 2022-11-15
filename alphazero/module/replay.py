@@ -3,12 +3,68 @@
 Class used to hold experience.
 """
 from collections import deque
-from typing import Sequence
+from typing import Sequence, Tuple
 
+import numpy as np
 from numpy.random import choice
+from numpy import ndarray
+from numba import prange, jit
 
 from alphazero.addons.config import BufferConfig
 from alphazero.addons.types import Trajectory
+
+
+@jit(nopython=True, cache=True)
+def compute_n_return(rewards: ndarray, td_lambda: float) -> float:
+    """
+    Compute the n-step return.
+
+    Parameters
+    ----------
+    rewards: ndarray
+        List of rewards
+    td_lambda: float
+        Discount for n-step return
+
+    Returns
+    -------
+    float
+        n-step return
+    """
+    value = 0.0
+
+    _len = rewards.shape[0]
+    for i in prange(_len):
+        value += rewards[i] * td_lambda ** i
+
+    return value
+
+
+@jit(nopython=True, cache=True)
+def compute_all_return(all_rewards: ndarray, td_steps: int, td_lambda: float) -> ndarray:
+    """
+    Compute the n-step return for all trajectories.
+
+    Parameters
+    ----------
+    all_rewards: ndarray
+        All reward of trajectories
+    td_steps:
+        The number n of the n-step returns
+    td_lambda:
+        The lambda in TD(lambda)
+
+    Returns
+    -------
+
+    """
+    all_return = np.zeros(all_rewards.shape[0])
+
+    _len = all_rewards.shape[0]
+    for i in prange(_len):
+        all_return[i] = compute_n_return(all_rewards[i:i+td_steps], td_lambda)
+
+    return all_return
 
 
 class ReplayBuffer:
@@ -32,9 +88,13 @@ class ReplayBuffer:
         sequence: Trajectory
             A sequence of state
         """
-        self._data.append(sequence)
+        # ##: Compute n-step return.
+        all_rewards = np.array([state.reward for state in sequence])
+        all_return = compute_all_return(all_rewards, self._config.td_steps, self._config.td_lambda)
 
-    def sample_trajectory(self) -> Trajectory:
+        self._data.append([sequence, all_return])
+
+    def sample_trajectory(self) -> Tuple[Trajectory, ndarray]:
         """
         Samples a trajectory uniformly.
 
@@ -46,25 +106,7 @@ class ReplayBuffer:
         indice = choice(len(self._data), 1, replace=False)[0]
         return self._data[indice]
 
-    @classmethod
-    def sample_index(cls, sequence: Trajectory) -> int:
-        """
-        Samples an index in the trajectory uniformly.
-
-        Parameters
-        ----------
-        sequence: Trajectory
-            A sequence of state
-
-        Returns
-        -------
-        int
-            An index of state in trajectory
-        """
-        indice = choice(len(sequence), 1, replace=False)[0]
-        return indice
-
-    def sample_element(self) -> Trajectory:
+    def sample_element(self) -> Sequence:
         """
         Samples a single element from the buffer.
 
@@ -75,14 +117,35 @@ class ReplayBuffer:
         """
 
         # ##: Sample a trajectory.
-        trajectory = self.sample_trajectory()
-        state_idx = self.sample_index(trajectory)
-        limit = max([self._config.num_unroll_steps, self._config.td_steps])
+        trajectory, all_return = self.sample_trajectory()
 
-        # ##: Returns a trajectory of experiment.
-        return trajectory[state_idx : state_idx + limit]
+        # ##: Compute priority for buffer.
+        priorities = []
+        for index, episode in enumerate(trajectory):
+            priority = abs(episode.search_stats.search_value - all_return[index])
+            priorities.append(priority)
 
-    def sample(self) -> Sequence[Trajectory]:
+        # ##: Normalize priority.
+        norm = sum(priorities)
+        priorities = [priority / norm for priority in priorities]
+
+        # ##: Choice index.
+        indice = len(trajectory)
+        while indice + self._config.td_steps >= len(trajectory):
+            indice = choice(len(trajectory), 1, replace=False, p=priorities)[0]
+
+        # ## Compute TD value and policy
+        td_value = trajectory[indice + self._config.td_steps].search_stats.search_value * self._config.td_lambda ** self._config.td_steps + all_return[indice]
+
+        sum_visits = sum(child for child in trajectory[indice].search_stats.search_policy.values())
+        td_policy = [
+            trajectory[indice].search_stats.search_policy[a] / sum_visits if a in trajectory[
+                indice].search_stats.search_policy else 0
+            for a in range(4)
+        ]
+        return [trajectory[indice].observation, td_value, td_policy]
+
+    def sample(self) -> Sequence:
         """
         Samples a training batch.
 
