@@ -55,4 +55,4 @@ class SimulatorOutput(NamedTuple):
     The simulator's output.
     """
 
-    stochastic_states: Dict[int, Tuple[List[StochasticState], int]]
+    stochastic_states: Dict[int, Tuple[Sequence[StochasticState], int]]

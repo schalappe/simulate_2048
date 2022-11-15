@@ -5,7 +5,7 @@ Set of useful function for 2048 Simulation.
 from typing import Tuple
 
 import numpy as np
-from numba import jit
+from numba import jit, prange
 from numpy import ndarray
 
 
@@ -42,6 +42,7 @@ def merge_column(column) -> Tuple:
     return score, result
 
 
+@jit(nopython=True, cache=True)
 def slide_and_merge(board: ndarray, size: int = 4) -> Tuple:
     """
     Slide board to the left and merge cells. Then compute score for agent.
@@ -58,19 +59,45 @@ def slide_and_merge(board: ndarray, size: int = 4) -> Tuple:
     tuple
         score and next board
     """
-    result, _internal_score = [], []
+    result = np.zeros((4, 4), dtype=np.int64)
+    _internal_score = np.zeros(4, dtype=np.int64)
 
     # ## ----> Loop over board
-    for row in board:
+    for index in prange(4):
+        row = board[index]
         row = np.extract(row > 0, row)
         _score, _result_row = merge_column(row)
-        _internal_score.extend(_score)
-        row = np.pad(np.array(_result_row), (0, size - len(_result_row)), "constant", constant_values=(0,))
-        result.append(row)
+        _internal_score[index] = np.sum(np.asarray(_score))
+        row = padding(np.array(_result_row), size)
+        result[index] = row
 
-    score = sum(_internal_score) if _internal_score else 0
+    score = np.sum(_internal_score)
 
-    return score, np.array(result, dtype=np.int64)
+    return score, result
+
+
+@jit(nopython=True, cache=True)
+def padding(array: ndarray, size=4) -> ndarray:
+    """
+    Pad an array with zero.
+
+    Parameters
+    ----------
+    array: ndarray
+        Array to pad
+    size: int
+        size of new array
+
+    Returns
+    -------
+    ndarray
+        Padded array
+    """
+    result = np.zeros(size)
+    if len(array) == 0:
+        return result
+    result[:array.shape[0]] = array
+    return result
 
 
 @jit(nopython=True, cache=True)
