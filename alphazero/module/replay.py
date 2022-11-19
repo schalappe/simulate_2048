@@ -8,47 +8,22 @@ from typing import Sequence, Tuple
 import numpy as np
 from numpy.random import choice
 from numpy import ndarray
-from numba import prange, jit
 
 from alphazero.addons.config import BufferConfig
 from alphazero.addons.types import Trajectory
+from .helpers import _priority, _n_return, _discount_rewards, _discount_values, _policies
 
 
-@jit(nopython=True, cache=True)
-def compute_n_return(rewards: ndarray, td_lambda: float) -> float:
-    """
-    Compute the n-step return.
-
-    Parameters
-    ----------
-    rewards: ndarray
-        List of rewards
-    td_lambda: float
-        Discount for n-step return
-
-    Returns
-    -------
-    float
-        n-step return
-    """
-    value = 0.0
-
-    _len = rewards.shape[0]
-    for i in prange(_len):
-        value += rewards[i] * td_lambda ** i
-
-    return value
-
-
-@jit(nopython=True, cache=True)
-def compute_all_return(all_rewards: ndarray, td_steps: int, td_lambda: float) -> ndarray:
+def compute_n_return(all_rewards: ndarray, all_values: ndarray, td_steps: int, td_lambda: float) -> ndarray:
     """
     Compute the n-step return for all trajectories.
 
     Parameters
     ----------
     all_rewards: ndarray
-        All reward of trajectories
+        Reward of each episode in trajectory
+    all_values: ndarray
+        Value of each episode in trajectory
     td_steps:
         The number n of the n-step returns
     td_lambda:
@@ -56,15 +31,57 @@ def compute_all_return(all_rewards: ndarray, td_steps: int, td_lambda: float) ->
 
     Returns
     -------
-
+    ndarray
+        All return of trajectories
     """
-    all_return = np.zeros(all_rewards.shape[0])
+    # ##: Compute discount elements.
+    discount_rewards = _discount_rewards(all_rewards, td_steps, td_lambda)
+    discount_values = _discount_values(all_values, td_steps, td_lambda)
 
-    _len = all_rewards.shape[0]
-    for i in prange(_len):
-        all_return[i] = compute_n_return(all_rewards[i:i+td_steps], td_lambda)
+    # ##: Compute N-step returns
+    n_returns = _n_return(discount_values, discount_rewards, td_steps)
+    return n_returns
 
-    return all_return
+
+def compute_priorities(search_values: ndarray, n_returns: ndarray) -> ndarray:
+    """
+    Compute the priority for each episode of trajectory.
+
+    Parameters
+    ----------
+    search_values: ndarray
+        Value of each episode in trajectory
+    n_returns: ndarray
+        Return of each episode in trajectory
+
+    Returns
+    -------
+    ndarray
+        Prioritized replay buffer
+    """
+    # ##: Compute priority for buffer.
+    priorities = _priority(search_values, n_returns)
+
+    # ##: Normalize priority.
+    norm = np.sum(priorities)
+    return priorities / norm
+
+
+def compute_target(trajectory: Trajectory, td_steps: int, td_lambda: float) -> Tuple[ndarray, ndarray, ndarray]:
+    all_rewards = np.array([state.reward for state in trajectory])
+    all_values = np.array([state.search_stats.search_value for state in trajectory])
+    all_visits = np.array([[state.search_stats.search_policy[a] if a in state.search_stats.search_policy else 0 for a in range(4)] for state in trajectory])
+
+    # ##: Compute N-step returns.
+    n_returns = compute_n_return(all_rewards, all_values, td_steps, td_lambda)
+
+    # ## Compute priority.
+    priorities = compute_priorities(all_values, n_returns)
+
+    # ## Compute policies.
+    policies = _policies(all_visits)
+
+    return n_returns, policies, priorities
 
 
 class ReplayBuffer:
@@ -89,12 +106,11 @@ class ReplayBuffer:
             A sequence of state
         """
         # ##: Compute n-step return.
-        all_rewards = np.array([state.reward for state in sequence])
-        all_return = compute_all_return(all_rewards, self._config.td_steps, self._config.td_lambda)
+        n_returns, policies, priorities = compute_target(sequence, self._config.td_steps, self._config.td_lambda)
 
-        self._data.append([sequence, all_return])
+        self._data.append([sequence, n_returns, policies, priorities])
 
-    def sample_trajectory(self) -> Tuple[Trajectory, ndarray]:
+    def sample_trajectory(self) -> Tuple[Trajectory, ndarray, ndarray, ndarray]:
         """
         Samples a trajectory uniformly.
 
@@ -115,35 +131,15 @@ class ReplayBuffer:
         Trajectory
             A selected trajectory
         """
-
         # ##: Sample a trajectory.
-        trajectory, all_return = self.sample_trajectory()
-
-        # ##: Compute priority for buffer.
-        priorities = []
-        for index, episode in enumerate(trajectory):
-            priority = abs(episode.search_stats.search_value - all_return[index])
-            priorities.append(priority)
-
-        # ##: Normalize priority.
-        norm = sum(priorities)
-        priorities = [priority / norm for priority in priorities]
+        trajectory, n_returns, policies, priorities = self.sample_trajectory()
 
         # ##: Choice index.
         indice = len(trajectory)
         while indice + self._config.td_steps >= len(trajectory):
             indice = choice(len(trajectory), 1, replace=False, p=priorities)[0]
 
-        # ## Compute TD value and policy
-        td_value = trajectory[indice + self._config.td_steps].search_stats.search_value * self._config.td_lambda ** self._config.td_steps + all_return[indice]
-
-        sum_visits = sum(child for child in trajectory[indice].search_stats.search_policy.values())
-        td_policy = [
-            trajectory[indice].search_stats.search_policy[a] / sum_visits if a in trajectory[
-                indice].search_stats.search_policy else 0
-            for a in range(4)
-        ]
-        return [trajectory[indice].observation, td_value, td_policy]
+        return [trajectory[indice].observation, n_returns[indice], policies[indice]]
 
     def sample(self) -> Sequence:
         """

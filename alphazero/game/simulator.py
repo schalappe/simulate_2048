@@ -5,7 +5,7 @@ Simulator for helping during Monte Carlos Tree Search
 from typing import List, Sequence, Tuple
 
 import numpy as np
-from numba import jit, prange
+from numba import njit, prange
 from numpy import ndarray
 
 from alphazero.addons.types import SimulatorOutput, StochasticState
@@ -13,7 +13,7 @@ from alphazero.models.network import NetworkOutput
 from simulate_2048.envs.utils import slide_and_merge
 
 
-@jit(nopython=True)
+@njit
 def stochastic_states(state: ndarray) -> Sequence[Tuple[ndarray, float]]:
     """
     Generate all possible states.
@@ -44,7 +44,7 @@ def stochastic_states(state: ndarray) -> Sequence[Tuple[ndarray, float]]:
     return all_possibilities
 
 
-@jit(nopython=True)
+@njit
 def legal_actions(state: ndarray) -> Sequence[int]:
     """
     Returns the legal actions for the current state.
