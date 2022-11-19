@@ -5,7 +5,7 @@ Simulator for helping during Monte Carlos Tree Search
 from typing import List, Sequence, Tuple
 
 import numpy as np
-from numba import njit, prange
+from numba import njit
 from numpy import ndarray
 
 from alphazero.addons.types import SimulatorOutput, StochasticState
@@ -63,7 +63,7 @@ def legal_actions(state: ndarray) -> Sequence[int]:
     legal_moves = np.array([-1, -1, -1, -1])
 
     # ##: Loop over all possible moves.
-    for action in prange(4):
+    for action in range(4):
         board = state.copy()
 
         # ##: Generate next board.
@@ -100,7 +100,9 @@ class Simulator:
 
         # ##: Store all possible states.
         all_possibilities = stochastic_states(state)
-        all_possibilities = [StochasticState(state=np.reshape(board, -1), probability=prior) for board, prior in all_possibilities]
+        all_possibilities = [
+            StochasticState(state=np.reshape(board, -1), probability=prior) for board, prior in all_possibilities
+        ]
 
         return all_possibilities
 

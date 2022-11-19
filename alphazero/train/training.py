@@ -39,4 +39,3 @@ def train_network(config: StochasticAlphaZeroConfig, network: Network, replay_bu
     epoch_end = time.time()
     elapsed = (epoch_end - epoch_start) / 60.0
     print(f"Training took {elapsed:.4} minutes")
-

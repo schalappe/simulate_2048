@@ -3,8 +3,8 @@
 Set of function useful for module.
 """
 import numpy as np
+from numba import njit
 from numpy import ndarray
-from numba import prange, njit
 
 
 @njit
@@ -27,8 +27,8 @@ def _sum_reward(rewards: ndarray, td_lambda: float) -> float:
     value = 0.0
 
     _len = rewards.shape[0]
-    for i in prange(_len):
-        value += rewards[i] * td_lambda ** i
+    for i in range(_len):
+        value += rewards[i] * td_lambda**i
 
     return value
 
@@ -55,8 +55,8 @@ def _discount_rewards(all_rewards: ndarray, td_steps: int, td_lambda: float) -> 
     _len = all_rewards.shape[0]
     discount_rewards = np.zeros(_len)
 
-    for i in prange(_len):
-        discount_rewards[i] = _sum_reward(all_rewards[i:i+td_steps], td_lambda)
+    for i in range(_len):
+        discount_rewards[i] = _sum_reward(all_rewards[i : i + td_steps], td_lambda)
 
     return discount_rewards
 
@@ -83,8 +83,8 @@ def _discount_values(all_values: ndarray, td_steps: int, td_lambda: float) -> nd
     _len = all_values.shape[0]
     discount_values = np.zeros(_len)
 
-    for i in prange(_len):
-        discount_values[i] = all_values[i] * td_lambda ** td_steps
+    for i in range(_len):
+        discount_values[i] = all_values[i] * td_lambda**td_steps
 
     return discount_values
 
@@ -111,7 +111,7 @@ def _n_return(discount_values: ndarray, discount_rewards: ndarray, td_steps: int
     _len = discount_values.shape[0]
     all_returns = np.zeros(_len)
 
-    for i in prange(_len):
+    for i in range(_len):
         indice = _len - 1 if i + td_steps > _len else i + td_steps
         all_returns[i] = discount_values[indice] + discount_rewards[i]
 
@@ -138,7 +138,7 @@ def _priority(search_values: ndarray, all_returns: ndarray) -> ndarray:
     _len = all_returns.shape[0]
     priorities = np.zeros(_len)
 
-    for i in prange(_len):
+    for i in range(_len):
         priorities[i] = abs(search_values[i] - all_returns[i])
 
     return priorities
@@ -162,7 +162,7 @@ def _policies(all_visits: ndarray) -> ndarray:
     _len = all_visits.shape[0]
     policies = np.zeros(all_visits.shape)
 
-    for i in prange(_len):
+    for i in range(_len):
         total = np.sum(all_visits[i])
         policies[i] = all_visits[i] / total
 

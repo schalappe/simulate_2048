@@ -7,7 +7,7 @@ from typing import Sequence
 
 import numpy as np
 import tensorflow as tf
-from numba import njit, prange
+from numba import njit
 from numpy import ndarray
 
 from alphazero.addons.types import NetworkOutput
@@ -60,7 +60,7 @@ def encode_multiple(states: ndarray, encodage_size: int) -> ndarray:
     _len = states.shape[0]
     observations = np.zeros((_len, encodage_size))
 
-    for i in prange(_len):
+    for i in range(_len):
         observations[i] = encode(states[i], encodage_size)
 
     return observations
@@ -119,7 +119,7 @@ class Network:
         observations, target_values, target_policies = zip(*batch)
 
         # ##: Encode observation.
-        observations = np.array([obs for obs in observations])
+        observations = np.array(list(observations))
         observations = encode_multiple(observations, self.encodage_size)
 
         # ##: Turn observations, values and policies into tensor.

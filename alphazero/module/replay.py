@@ -6,12 +6,19 @@ from collections import deque
 from typing import Sequence, Tuple
 
 import numpy as np
-from numpy.random import choice
 from numpy import ndarray
+from numpy.random import choice
 
 from alphazero.addons.config import BufferConfig
 from alphazero.addons.types import Trajectory
-from .helpers import _priority, _n_return, _discount_rewards, _discount_values, _policies
+
+from .helpers import (
+    _discount_rewards,
+    _discount_values,
+    _n_return,
+    _policies,
+    _priority,
+)
 
 
 def compute_n_return(all_rewards: ndarray, all_values: ndarray, td_steps: int, td_lambda: float) -> ndarray:
@@ -68,9 +75,31 @@ def compute_priorities(search_values: ndarray, n_returns: ndarray) -> ndarray:
 
 
 def compute_target(trajectory: Trajectory, td_steps: int, td_lambda: float) -> Tuple[ndarray, ndarray, ndarray]:
+    """
+    Compute target for training and sampling.
+
+    Parameters
+    ----------
+    trajectory: Trajectory
+        Sequence of State
+    td_steps:
+        The number n of the n-step returns
+    td_lambda:
+        The lambda in TD(lambda)
+
+    Returns
+    -------
+    tuple
+        N-step returns, policy target and priority
+    """
     all_rewards = np.array([state.reward for state in trajectory])
     all_values = np.array([state.search_stats.search_value for state in trajectory])
-    all_visits = np.array([[state.search_stats.search_policy[a] if a in state.search_stats.search_policy else 0 for a in range(4)] for state in trajectory])
+    all_visits = np.array(
+        [
+            [state.search_stats.search_policy[a] if a in state.search_stats.search_policy else 0 for a in range(4)]
+            for state in trajectory
+        ]
+    )
 
     # ##: Compute N-step returns.
     n_returns = compute_n_return(all_rewards, all_values, td_steps, td_lambda)

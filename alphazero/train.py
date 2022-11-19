@@ -33,6 +33,6 @@ for loop in range(config.training.training_step):
 
     # ##: Store model.
     if loop > 0 and loop % config.training.export == 0:
-        network.save_network(config.training.store_path, loop+1)
+        network.save_network(config.training.store_path, loop + 1)
 
 print("General evaluation ->  score: ", run_eval(config, network))
