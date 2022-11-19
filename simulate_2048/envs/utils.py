@@ -9,7 +9,7 @@ from numba import jit, prange
 from numpy import ndarray
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def merge_column(column) -> Tuple:
     """
     Merge value in a column and compute score.
@@ -42,7 +42,7 @@ def merge_column(column) -> Tuple:
     return score, result
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def slide_and_merge(board: ndarray, size: int = 4) -> Tuple:
     """
     Slide board to the left and merge cells. Then compute score for agent.
@@ -76,7 +76,7 @@ def slide_and_merge(board: ndarray, size: int = 4) -> Tuple:
     return score, result
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def padding(array: ndarray, size=4) -> ndarray:
     """
     Pad an array with zero.
@@ -100,7 +100,7 @@ def padding(array: ndarray, size=4) -> ndarray:
     return result
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def compute_penalties(board: ndarray) -> float:
     """
     Compute penalties for moved cells.

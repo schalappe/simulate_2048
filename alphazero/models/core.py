@@ -30,7 +30,6 @@ class PolicyNetwork:
         """
         initializer = tf.keras.initializers.HeUniform()
         block = tf.keras.layers.Dense(units=units, activation="relu", kernel_initializer=initializer)(head)
-        block = tf.keras.layers.Dropout(rate=0.1)(block)
         return block
 
     def dense_block(self, head: tf.keras.layers.Layer, size: int, depth: int = 10) -> tf.keras.layers.Layer:
@@ -61,7 +60,7 @@ class PolicyNetwork:
         inputs = tf.keras.layers.Input(shape=shape)
 
         # ##: All hidden layers.
-        hidden = self.dense_block(head=inputs, size=256, depth=19)
+        hidden = self.dense_block(head=inputs, size=256, depth=39)
 
         # ##: Actor output.
         hidden_actor = self.dense_layer(head=hidden, units=256)

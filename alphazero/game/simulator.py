@@ -13,7 +13,7 @@ from alphazero.models.network import NetworkOutput
 from simulate_2048.envs.utils import slide_and_merge
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def stochastic_states(state: ndarray) -> Sequence[Tuple[ndarray, float]]:
     """
     Generate all possible states.
@@ -44,7 +44,7 @@ def stochastic_states(state: ndarray) -> Sequence[Tuple[ndarray, float]]:
     return all_possibilities
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def legal_actions(state: ndarray) -> Sequence[int]:
     """
     Returns the legal actions for the current state.

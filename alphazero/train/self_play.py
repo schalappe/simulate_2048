@@ -30,6 +30,7 @@ def run_self_play(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, repl
         Buffer for experience
 
     """
+    actor = StochasticMuZeroActor(config, cacher)
     epoch_start = time.time()
     max_values = 2
     for num in range(config.self_play.episodes):
@@ -38,7 +39,6 @@ def run_self_play(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, repl
         env = config.factory.environment_factory()
 
         # ##: Create the actor.
-        actor = StochasticMuZeroActor(config, cacher)
         actor.reset()
 
         # ##: Play a game.
