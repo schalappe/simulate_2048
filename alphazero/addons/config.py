@@ -17,7 +17,6 @@ class BufferConfig:
     td_steps: int
     td_lambda: float
     batch_size: int
-    num_unroll_steps: int
     num_trajectories: int
 
 

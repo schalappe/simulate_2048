@@ -2,22 +2,20 @@
 """
 Set of class for network use by Alpha Zero.
 """
-from collections import deque
 from os.path import join
 from typing import Sequence
 
 import numpy as np
 import tensorflow as tf
-from numba import jit
+from numba import njit, prange
 from numpy import ndarray
 
-from alphazero.addons.config import ENCODAGE_SIZE
 from alphazero.addons.types import NetworkOutput
 
 from .core import PolicyNetwork
 
 
-@jit(nopython=True, cache=True)
+@njit
 def encode(state: ndarray, encodage_size: int) -> ndarray:
     """
     Flatten the observation given by the environment than encode it.
@@ -42,6 +40,32 @@ def encode(state: ndarray, encodage_size: int) -> ndarray:
     return np.reshape(np.eye(encodage_size)[obs], -1)
 
 
+@njit
+def encode_multiple(states: ndarray, encodage_size: int) -> ndarray:
+    """
+    Encode observation given by environment.
+
+    Parameters
+    ----------
+    states: ndarray
+        Observation given by the environment
+    encodage_size: int
+        Size of encodage
+
+    Returns
+    -------
+    ndarray:
+        Encode observation
+    """
+    _len = states.shape[0]
+    observations = np.zeros((_len, encodage_size))
+
+    for i in prange(_len):
+        observations[i] = encode(states[i], encodage_size)
+
+    return observations
+
+
 class Network:
     """
     An instance of the network used by AlphaZero.
@@ -51,6 +75,8 @@ class Network:
         shape = (4 * 4 * size,)
         self.encodage_size = size
         self.model = PolicyNetwork()(shape)
+        self.loss_values = tf.losses.Huber()
+        self.loss_policy = tf.losses.KLDivergence()
 
     def predictions(self, state: ndarray) -> NetworkOutput:
         """
@@ -72,10 +98,9 @@ class Network:
         # ##: Use model for values and action probability distribution.
         obs_tensor = tf.convert_to_tensor(observation)
         obs_tensor = tf.expand_dims(obs_tensor, 0)
-        probs, value = self.model(obs_tensor)
+        probs, value = self.model(obs_tensor, training=False)
 
         # ##: Generate output.
-        # policy = [exp(probs[0][a]) for a in range(4)]
         return NetworkOutput(float(value[0]), {action: probs[0][action].numpy() for action in range(4)})
 
     def train_step(self, batch: Sequence, optimizer: tf.keras.optimizers.Optimizer):
@@ -93,8 +118,12 @@ class Network:
         # ##: Unpack batch into observations, values and policies.
         observations, target_values, target_policies = zip(*batch)
 
-        # ##: Encode observation, then turn observations, values and policies into tensor.
-        observations = tf.stack([encode(obs, self.encodage_size) for obs in observations])
+        # ##: Encode observation.
+        observations = np.array([obs for obs in observations])
+        observations = encode_multiple(observations, self.encodage_size)
+
+        # ##: Turn observations, values and policies into tensor.
+        observations = tf.stack(observations)
         target_values = tf.stack(target_values)
         target_policies = tf.stack(target_policies)
 
@@ -103,15 +132,15 @@ class Network:
             policies, values = self.model(observations, training=True)
 
             # ##: Compute loss.
-            values_loss = tf.losses.huber(target_values, values)
-            policies_loss = tf.losses.kl_divergence(target_policies, policies)
+            values_loss = self.loss_values(target_values, values)
+            policies_loss = self.loss_policy(target_policies, policies)
             loss = values_loss + policies_loss
 
         # ##: Optimize model.
         grads_model = tape.gradient(loss, self.model.trainable_variables)
         optimizer.apply_gradients(zip(grads_model, self.model.trainable_variables))
 
-    def save_network(self, store_path: str):
+    def save_network(self, store_path: str, index: int):
         """
         Save a model.
 
@@ -119,39 +148,8 @@ class Network:
         ----------
         store_path: str
             Path where store model
+        index: int
+            Number of model
         """
-        model_path = join(store_path, "alphazero.h5")
+        model_path = join(store_path, f"alphazero_{index}.h5")
         self.model.save(model_path)
-
-
-class NetworkCacher:
-    """
-    An object to share the network weights between the self-play and training jobs.
-    """
-
-    def __init__(self, max_weights: int = 100):
-        self._networks = deque(maxlen=max_weights)
-
-    def save_network(self, network: Network):
-        """
-        Save the network weights.
-
-        Parameters
-        ----------
-        network: Network
-            Model to save
-        """
-        self._networks.append(network.model.get_weights())
-
-    def load_network(self) -> Network:
-        """
-        Use the last weight to create a new model.
-
-        Returns
-        -------
-        Network
-            Model with the last weight
-        """
-        network = Network(ENCODAGE_SIZE)
-        network.model.set_weights(self._networks[-1])
-        return network

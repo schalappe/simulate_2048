@@ -10,12 +10,12 @@ from numpy import sum as sum_array_values
 
 from alphazero.addons.config import StochasticAlphaZeroConfig
 from alphazero.addons.types import State
-from alphazero.models.network import NetworkCacher
+from alphazero.models.network import Network
 from alphazero.module.actor import StochasticMuZeroActor
 from alphazero.module.replay import ReplayBuffer
 
 
-def run_self_play(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, replay_buffer: ReplayBuffer) -> None:
+def run_self_play(config: StochasticAlphaZeroConfig, network: Network, replay_buffer: ReplayBuffer) -> None:
     """
     Takes the latest network snapshot, produces an episode and makes it available to the training job by writing it
     to a replay buffer.
@@ -24,13 +24,13 @@ def run_self_play(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, repl
     ----------
     config: StochasticAlphaZeroConfig
         Configuration for self play
-    cacher: NetworkCacher
-        List of network weights
+    network: Network
+        Model to use
     replay_buffer: ReplayBuffer
         Buffer for experience
 
     """
-    actor = StochasticMuZeroActor(config, cacher)
+    actor = StochasticMuZeroActor(config, network)
     epoch_start = time.time()
     max_values = 2
     for num in range(config.self_play.episodes):
@@ -75,7 +75,7 @@ def run_self_play(config: StochasticAlphaZeroConfig, cacher: NetworkCacher, repl
     print(f"Self-play took {elapsed:.4} minutes")
 
 
-def run_eval(config: StochasticAlphaZeroConfig, cacher: NetworkCacher) -> dict:
+def run_eval(config: StochasticAlphaZeroConfig, network: Network) -> dict:
     """
     Evaluate an agent.
 
@@ -83,10 +83,10 @@ def run_eval(config: StochasticAlphaZeroConfig, cacher: NetworkCacher) -> dict:
     ----------
     config: StochasticAlphaZeroConfig
         Configuration for self play
-    cacher: NetworkCacher
-        List of network weights
+    network: Network
+        Model to use
     """
-    actor = StochasticMuZeroActor(config, cacher)
+    actor = StochasticMuZeroActor(config, network)
     score = []
 
     for num in range(config.self_play.evaluation):

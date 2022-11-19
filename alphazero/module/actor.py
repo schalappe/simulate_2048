@@ -10,7 +10,7 @@ from numpy import ndarray
 from alphazero.addons.config import StochasticAlphaZeroConfig
 from alphazero.addons.types import SearchStats
 from alphazero.game.simulator import Simulator
-from alphazero.models.network import NetworkCacher
+from alphazero.models.network import Network
 from alphazero.search.helpers import MinMaxStats
 from alphazero.search.mcts import (
     add_exploration_noise,
@@ -65,10 +65,9 @@ class StochasticMuZeroActor(Actor):
     A MuZero actor for self-play.
     """
 
-    def __init__(self, config: StochasticAlphaZeroConfig, cacher: NetworkCacher):
+    def __init__(self, config: StochasticAlphaZeroConfig, network: Network):
         self.config = config
-        self.cacher = cacher
-        self.network = None
+        self.network = network
         self.root = None
         self.simulator = Simulator()
 
@@ -76,11 +75,10 @@ class StochasticMuZeroActor(Actor):
         """
         Resets the player for a new episode.
         """
-        self.network = self.cacher.load_network()
         self.root = None
 
     @classmethod
-    def _select_action(cls, root: Node) -> int:
+    def _select_action(cls, root: Node, train: bool = True) -> int:
         """
         Selects an action given the root node.
 
@@ -88,6 +86,8 @@ class StochasticMuZeroActor(Actor):
         ----------
         root: Node
             A tree search root node
+        train: bool
+            Training mode
 
         Returns
         -------
@@ -97,6 +97,9 @@ class StochasticMuZeroActor(Actor):
 
         # ##: Get the visit count distribution.
         actions, visit_counts = zip(*[(action, node.visit_count) for action, node in root.children.items()])
+
+        if not train:
+            return np.argmax(np.array(visit_counts))[0]
 
         # ##: Compute the search policy.
         search_policy = list(visit_counts)
@@ -152,7 +155,7 @@ class StochasticMuZeroActor(Actor):
         self.root = root
 
         # ##: Return an action.
-        return self._select_action(root)
+        return self._select_action(root, train)
 
     def stats(self) -> SearchStats:
         """

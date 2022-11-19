@@ -54,7 +54,6 @@ def config_2048() -> StochasticAlphaZeroConfig:
             td_steps=10,
             td_lambda=0.5,
             batch_size=1024,
-            num_unroll_steps=5,
             num_trajectories=int(125e3),
         ),
         factory=Factory(
