@@ -2,8 +2,9 @@
 """
 Set of class for network use by Alpha Zero.
 """
+from abc import ABCMeta, abstractmethod
 from os.path import join
-from typing import Sequence
+from typing import Sequence, Union
 
 import numpy as np
 import tensorflow as tf
@@ -58,7 +59,8 @@ def encode_multiple(states: ndarray, encodage_size: int) -> ndarray:
         Encode observation
     """
     _len = states.shape[0]
-    observations = np.zeros((_len, encodage_size))
+    size = states.shape[1]
+    observations = np.zeros((_len, encodage_size * size))
 
     for i in range(_len):
         observations[i] = encode(states[i], encodage_size)
@@ -66,17 +68,46 @@ def encode_multiple(states: ndarray, encodage_size: int) -> ndarray:
     return observations
 
 
-class Network:
+def scale_gradient(tensor: tf.Tensor, scale: Union[float, ndarray]) -> tf.Tensor:
+    """
+    Scales the gradient for the backward pass.
+
+    Parameters
+    ----------
+    tensor: Tensor
+        A Tensor
+    scale: float or ndarray
+        The scale factor
+
+    Returns
+    -------
+    Tensor
+        A tensor with the same type as the input tensor
+    """
+    dtype = tensor.dtype.base_dtype
+    scale = tf.convert_to_tensor(scale, dtype=dtype)
+    return tensor * scale + tf.stop_gradient(tensor) * (1 - scale)
+
+
+class Network(metaclass=ABCMeta):
     """
     An instance of the network used by AlphaZero.
     """
 
-    def __init__(self, size: int):
-        shape = (4 * 4 * size,)
+    def __init__(self, size: int, size_or_path: Union[str, tuple]):
         self.encodage_size = size
-        self.model = PolicyNetwork()(shape)
-        self.loss_values = tf.losses.Huber()
-        self.loss_policy = tf.losses.KLDivergence()
+        self.model = self._load_model(size_or_path)
+
+    @abstractmethod
+    def _load_model(self, size_or_path: Union[str, tuple]) -> tf.keras.Model:
+        """
+        Load model.
+
+        Returns
+        -------
+        PolicyNetwork
+            Model to use
+        """
 
     def predictions(self, state: ndarray) -> NetworkOutput:
         """
@@ -103,7 +134,27 @@ class Network:
         # ##: Generate output.
         return NetworkOutput(float(value[0]), {action: probs[0][action].numpy() for action in range(4)})
 
-    def train_step(self, batch: Sequence, optimizer: tf.keras.optimizers.Optimizer):
+
+class TrainNetwork(Network):
+    """
+    An instance of the network used by AlphaZero.
+    """
+
+    def __init__(self, size: int):
+        super().__init__(size, (4 * 4 * size,))
+
+    def _load_model(self, size_or_path: tuple) -> PolicyNetwork:
+        """
+        Load model.
+
+        Returns
+        -------
+        PolicyNetwork
+            Model to use
+        """
+        return PolicyNetwork()(size_or_path)
+
+    def train_step(self, batch: Sequence, optimizer: tf.keras.optimizers.Optimizer) -> float:
         """
         Train a single step of training.
 
@@ -114,13 +165,16 @@ class Network:
         optimizer: Optimizer
             An optimizer function for back-propagation
 
+        Returns
+        -------
+        float
+            Loss
         """
         # ##: Unpack batch into observations, values and policies.
-        observations, target_values, target_policies = zip(*batch)
+        observations, target_values, target_policies, weights = zip(*batch)
 
         # ##: Encode observation.
-        observations = np.array(list(observations))
-        observations = encode_multiple(observations, self.encodage_size)
+        observations = encode_multiple(np.array(list(observations)), self.encodage_size)
 
         # ##: Turn observations, values and policies into tensor.
         observations = tf.stack(observations)
@@ -132,13 +186,18 @@ class Network:
             policies, values = self.model(observations, training=True)
 
             # ##: Compute loss.
-            values_loss = self.loss_values(target_values, values)
-            policies_loss = self.loss_policy(target_policies, policies)
-            loss = values_loss + policies_loss
+            values_loss = tf.losses.huber(target_values, values)
+            values_loss = scale_gradient(values_loss, weights)
+
+            policies_loss = tf.losses.kullback_leibler_divergence(target_policies, policies)
+            policies_loss = scale_gradient(policies_loss, weights)
+
+            loss = tf.reduce_sum(values_loss) + tf.reduce_sum(policies_loss)
 
         # ##: Optimize model.
         grads_model = tape.gradient(loss, self.model.trainable_variables)
         optimizer.apply_gradients(zip(grads_model, self.model.trainable_variables))
+        return loss.numpy()
 
     def save_network(self, store_path: str, index: int):
         """
@@ -153,3 +212,23 @@ class Network:
         """
         model_path = join(store_path, f"alphazero_{index}.h5")
         self.model.save(model_path)
+
+
+class FinalNetwork(Network):
+    """
+    An instance of the network used by AlphaZero.
+    """
+
+    def __init__(self, size: int, path: str):
+        super().__init__(size, path)
+
+    def _load_model(self, size_or_path) -> tf.keras.Model:
+        """
+        Load model.
+
+        Returns
+        -------
+        PolicyNetwork
+            Model to use
+        """
+        return tf.keras.models.load_model(size_or_path)

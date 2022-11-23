@@ -26,13 +26,13 @@ for loop in range(config.training.training_step):
     print("Training loop ", loop + 1)
 
     # ##: Self play.
-    run_self_play(config, network, replay_buffer)
+    run_self_play(config, network, replay_buffer, epochs=loop + 1)
 
     # ##: Train network.
     train_network(config, network, replay_buffer)
 
     # ##: Store model.
     if loop > 0 and loop % config.training.export == 0:
-        network.save_network(config.training.store_path, loop + 1)
+        network.save_network(config.training.store_path, loop)
 
 print("General evaluation ->  score: ", run_eval(config, network))

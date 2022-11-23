@@ -65,11 +65,13 @@ class StochasticMuZeroActor(Actor):
     A MuZero actor for self-play.
     """
 
-    def __init__(self, config: StochasticAlphaZeroConfig, network: Network):
+    def __init__(self, config: StochasticAlphaZeroConfig, network: Network, epochs: int, train: bool = True):
         self.config = config
         self.network = network
         self.root = None
         self.simulator = Simulator()
+        self.epochs = epochs
+        self.train = train
 
     def reset(self):
         """
@@ -77,8 +79,7 @@ class StochasticMuZeroActor(Actor):
         """
         self.root = None
 
-    @classmethod
-    def _select_action(cls, root: Node, train: bool = True) -> int:
+    def _select_action(self, root: Node) -> int:
         """
         Selects an action given the root node.
 
@@ -86,8 +87,6 @@ class StochasticMuZeroActor(Actor):
         ----------
         root: Node
             A tree search root node
-        train: bool
-            Training mode
 
         Returns
         -------
@@ -98,17 +97,21 @@ class StochasticMuZeroActor(Actor):
         # ##: Get the visit count distribution.
         actions, visit_counts = zip(*[(action, node.visit_count) for action, node in root.children.items()])
 
-        if not train:
-            return np.argmax(np.array(visit_counts))[0]
+        if not self.train:
+            index = np.argmax(np.array(visit_counts))
+            return actions[index]
+
+        # Temperature
+        temperature = self.config.training.visit_softmax_temperature(self.epochs)
 
         # ##: Compute the search policy.
-        search_policy = list(visit_counts)
+        search_policy = [v ** (1.0 / temperature) for v in visit_counts]
         norm = sum(search_policy)
         search_policy = [v / norm for v in search_policy]
 
         return np.random.choice(actions, p=search_policy)
 
-    def select_action(self, state: ndarray, train: bool = True) -> int:
+    def select_action(self, state: ndarray) -> int:
         """
         Selects an action.
 
@@ -116,8 +119,6 @@ class StochasticMuZeroActor(Actor):
         ----------
         state: ndarray
             Current state
-        train: bool
-            Training mode
 
         Returns
         -------
@@ -145,7 +146,7 @@ class StochasticMuZeroActor(Actor):
         backpropagate([root], outputs.value, self.config.search.bounds.discount, min_max_stats)
 
         # ##: Add exploration noise to the root node.
-        if train:
+        if self.train:
             add_exploration_noise(self.config.noise, root)
 
         # ##: Run a Monte Carlo Tree Search using only action sequences and the model learned by the network.
@@ -155,7 +156,7 @@ class StochasticMuZeroActor(Actor):
         self.root = root
 
         # ##: Return an action.
-        return self._select_action(root, train)
+        return self._select_action(root)
 
     def stats(self) -> SearchStats:
         """

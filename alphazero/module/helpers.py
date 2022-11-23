@@ -112,7 +112,7 @@ def _n_return(discount_values: ndarray, discount_rewards: ndarray, td_steps: int
     all_returns = np.zeros(_len)
 
     for i in range(_len):
-        indice = _len - 1 if i + td_steps > _len else i + td_steps
+        indice = _len - 1 if i + td_steps >= _len else i + td_steps
         all_returns[i] = discount_values[indice] + discount_rewards[i]
 
     return all_returns
@@ -135,13 +135,7 @@ def _priority(search_values: ndarray, all_returns: ndarray) -> ndarray:
     ndarray
         All priority of trajectories
     """
-    _len = all_returns.shape[0]
-    priorities = np.zeros(_len)
-
-    for i in range(_len):
-        priorities[i] = abs(search_values[i] - all_returns[i])
-
-    return priorities
+    return np.abs(search_values - all_returns)
 
 
 @njit

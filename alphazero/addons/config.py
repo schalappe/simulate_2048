@@ -83,6 +83,7 @@ class TrainingConfig:
     store_path: str
     training_step: int
     learning_rate: float
+    visit_softmax_temperature: Callable
 
 
 @dataclass

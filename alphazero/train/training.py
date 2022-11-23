@@ -4,8 +4,10 @@ Set of class for training.
 """
 import time
 
+import tensorflow as tf
+import tqdm
+
 from alphazero.addons.config import StochasticAlphaZeroConfig
-from alphazero.addons.optimizer import GCAdam
 from alphazero.models.network import Network
 from alphazero.module.replay import ReplayBuffer
 
@@ -24,16 +26,21 @@ def train_network(config: StochasticAlphaZeroConfig, network: Network, replay_bu
         Buffer for experience
     """
     # ##: Optimizer function.
-    optimizer = GCAdam(learning_rate=config.training.learning_rate)
+    optimizer = tf.optimizers.Adam(learning_rate=config.training.learning_rate)
 
     # ##: Nth training.
     epoch_start = time.time()
-    for _ in range(config.training.epochs):
-        # ##: Compute targets.
-        sample = replay_buffer.sample()
+    with tqdm.trange(config.training.epochs) as period:
+        for step in period:
+            # ##: Compute targets.
+            sample = replay_buffer.sample()
 
-        # ##: Train network.
-        network.train_step(sample, optimizer)
+            # ##: Train network.
+            loss = network.train_step(sample, optimizer)
+
+            # ##: Log.
+            period.set_description(f"Training: {step + 1}")
+            period.set_postfix(loss=loss)
 
     # ##: Log.
     epoch_end = time.time()

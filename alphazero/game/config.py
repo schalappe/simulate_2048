@@ -13,9 +13,30 @@ from alphazero.addons.config import (
     TrainingConfig,
     UpperConfidenceBounds,
 )
-from alphazero.models.network import Network
+from alphazero.models.network import TrainNetwork
 
 from .game import Game2048
+
+
+def visit_softmax_temperature(train_steps: int) -> float:
+    """
+    Compute temperature during training.
+
+    Parameters
+    ----------
+    train_steps: int
+        Training step
+
+    Returns
+    -------
+    float
+        Temperature
+    """
+    if train_steps < 41:
+        return 1.0
+    if train_steps < 81:
+        return 0.5
+    return 0.1
 
 
 def config_2048() -> StochasticAlphaZeroConfig:
@@ -33,7 +54,7 @@ def config_2048() -> StochasticAlphaZeroConfig:
         return Game2048()
 
     def _network_factory():
-        return Network(ENCODAGE_SIZE)
+        return TrainNetwork(ENCODAGE_SIZE)
 
     # ##: Return configuration.
     return StochasticAlphaZeroConfig(
@@ -48,7 +69,7 @@ def config_2048() -> StochasticAlphaZeroConfig:
                 pb_c_base=19652,
                 pb_c_init=1.25,
             ),
-            num_simulations=100,
+            num_simulations=50,
         ),
         replay=BufferConfig(
             td_steps=10,
@@ -60,6 +81,13 @@ def config_2048() -> StochasticAlphaZeroConfig:
             network_factory=_network_factory,
             environment_factory=_environment_factory,
         ),
-        training=TrainingConfig(epochs=int(1e4), export=10, store_path="", learning_rate=3e-3, training_step=50),
-        self_play=SelfPlayConfig(episodes=20, evaluation=10),
+        training=TrainingConfig(
+            epochs=int(3e4),
+            export=30,
+            store_path="",
+            learning_rate=3e-3,
+            training_step=151,
+            visit_softmax_temperature=visit_softmax_temperature,
+        ),
+        self_play=SelfPlayConfig(episodes=10, evaluation=10),
     )

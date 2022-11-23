@@ -168,7 +168,11 @@ class ReplayBuffer:
         while indice + self._config.td_steps >= len(trajectory):
             indice = choice(len(trajectory), 1, replace=False, p=priorities)[0]
 
-        return [trajectory[indice].observation, n_returns[indice], policies[indice]]
+        # ##: Compute weights
+        max_weight = (len(trajectory) * min(priorities)) ** -1
+        weight = (len(trajectory) * priorities[indice]) ** -1
+
+        return [trajectory[indice].observation, n_returns[indice], policies[indice], weight / max_weight]
 
     def sample(self) -> Sequence:
         """
