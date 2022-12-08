@@ -1,41 +1,100 @@
 # -*- coding: utf-8 -*-
 """
-Set of types for this project.
+Set of config for AlphaZero.
 """
 from dataclasses import dataclass
+from typing import Callable
 
-INPUT_SIZE = 496
-
-
-@dataclass
-class TrainingConfiguration:
-    """
-    Train configuration.
-    """
-
-    store_history: str
-    training_steps: int
-    learning_rate: float
-    discount: float
-    save_steps: int
-    max_steps: int
+ENCODAGE_SIZE = 31
 
 
 @dataclass
-class TrainingConfigurationDQN(TrainingConfiguration):
+class BufferConfig:
     """
-    Training configuration for DQN
+    Configuration for the replay buffer.
     """
 
+    td_steps: int
+    td_lambda: float
     batch_size: int
-    replay_step: int
-    update_step: int
-    greedy_step: int
-    memory_size: int
+    num_trajectories: int
 
 
 @dataclass
-class TrainingConfigurationA2C(TrainingConfiguration):
+class UpperConfidenceBounds:
     """
-    Training configuration for A2C.
+    Configuration for compute UBC.
     """
+
+    discount: float
+    pb_c_base: float
+    pb_c_init: float
+
+
+@dataclass
+class NoiseConfig:
+    """
+    Configuration for adding noise.
+    """
+
+    root_dirichlet_alpha: float
+    root_dirichlet_adaptive: bool
+    root_exploration_fraction: float
+
+
+@dataclass
+class MonteCarlosConfig:
+    """
+    Configuration for Monte Carlos Tree Search.
+    """
+
+    bounds: UpperConfidenceBounds
+    num_simulations: int
+
+
+@dataclass
+class SelfPlayConfig:
+    """
+    Self play configuration.
+    """
+
+    episodes: int
+    evaluation: int
+
+
+@dataclass
+class Factory:
+    """
+    Set factory function for AlphaZero.
+    """
+
+    network_factory: Callable
+    environment_factory: Callable
+
+
+@dataclass
+class TrainingConfig:
+    """
+    Training configuration.
+    """
+
+    epochs: int
+    export: int
+    store_path: str
+    training_step: int
+    learning_rate: float
+    visit_softmax_temperature: Callable
+
+
+@dataclass
+class StochasticAlphaZeroConfig:
+    """
+    Configuration for AlphaZero.
+    """
+
+    noise: NoiseConfig
+    search: MonteCarlosConfig
+    replay: BufferConfig
+    factory: Factory
+    training: TrainingConfig
+    self_play: SelfPlayConfig

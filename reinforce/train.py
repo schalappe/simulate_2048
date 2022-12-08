@@ -4,155 +4,35 @@ Script for training an agent.
 """
 from os.path import abspath, dirname, join
 
-from addons import TrainingConfigurationA2C, TrainingConfigurationDQN
-from training import A2CTraining, DQNDuelingTraining, DQNTraining, DDQNTraining, DDQNDuelingTraining
+from reinforce.game.config import config_2048
+from reinforce.module.replay import ReplayBuffer
+from reinforce.train.self_play import run_eval, run_self_play
+from reinforce.train.training import train_network
 
 STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "zoo")
 
-if __name__ == "__main__":
-    import argparse
 
-    # ## ----> Get arguments.
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(dest="task")
-    subparsers.required = True
+# ##: Get configuration.
+config = config_2048()
+config.training.store_path = STORAGE_MODEL
 
-    # ## ----> Sub-parser for training.
-    parser_train = subparsers.add_parser("train", help="Aide de la commande `train`")
-    parser_train.add_argument("--algo", help="Which algorithm to use", required=True, type=str)
+# ##: Prepare necessary
+replay_buffer = ReplayBuffer(config.replay)
+network = config.factory.network_factory()
 
-    # ## ----> Sub-parser for multiple training.
-    parser_multi = subparsers.add_parser("multi-train", help="Aide de la commande `multi-train`")
+# ##: Training Loop.
+for loop in range(config.training.training_step):
+    print("-" * 88)
+    print("Training loop ", loop + 1)
 
-    args = parser.parse_args()
+    # ##: Self play.
+    run_self_play(config, network, replay_buffer, epochs=loop + 1)
 
-    # ## ----> Train specific algorithm.
-    if args.task == "train":
+    # ##: Train network.
+    train_network(config, network, replay_buffer)
 
-        # ##: Get configuration.
-        if args.algo == "dqn":
-            config = TrainingConfigurationDQN(
-                store_history=STORAGE_MODEL,
-                training_steps=10,
-                learning_rate=3e-4,
-                batch_size=64,
-                discount=0.99,
-                save_steps=101,
-                replay_step=50,
-                update_step=300,
-                greedy_step=5,
-                max_steps=5000,
-                memory_size=10000,
-            )
-            train = DQNTraining(config)
-        elif args.algo == "dqn-dueling":
-            config = TrainingConfigurationDQN(
-                store_history=STORAGE_MODEL,
-                training_steps=10,
-                learning_rate=3e-4,
-                batch_size=64,
-                discount=0.99,
-                save_steps=101,
-                replay_step=50,
-                update_step=300,
-                greedy_step=5,
-                max_steps=5000,
-                memory_size=10000,
-            )
-            train = DQNDuelingTraining(config)
-        elif args.algo == "double-dqn":
-            config = TrainingConfigurationDQN(
-                store_history=STORAGE_MODEL,
-                training_steps=10,
-                learning_rate=3e-4,
-                batch_size=64,
-                discount=0.99,
-                save_steps=101,
-                replay_step=50,
-                update_step=300,
-                greedy_step=5,
-                max_steps=5000,
-                memory_size=10000,
-            )
-            train = DDQNTraining(config)
-        elif args.algo == "double-dqn-dueling":
-            config = TrainingConfigurationDQN(
-                store_history=STORAGE_MODEL,
-                training_steps=30000,
-                learning_rate=3e-4,
-                batch_size=64,
-                discount=0.99,
-                save_steps=101,
-                replay_step=50,
-                update_step=300,
-                greedy_step=10000,
-                max_steps=5000,
-                memory_size=10000,
-            )
-            train = DDQNDuelingTraining(config)
-        elif args.algo == "a2c":
-            config = TrainingConfigurationA2C(
-                store_history=STORAGE_MODEL,
-                training_steps=500,
-                learning_rate=3e-4,
-                discount=0.99,
-                save_steps=101,
-                max_steps=5000,
-            )
-            train = A2CTraining(config)
-        else:
-            raise ValueError(f"This `{args.algo}` isn't implemented yet.")
+    # ##: Store model.
+    if loop > 0 and loop % config.training.export == 0:
+        network.save_network(config.training.store_path, loop)
 
-        # ##: Train agent.
-        train.train_model()
-    # ## -----> Train multiple model.
-    elif args.task == "multi-train":
-        # ##: A2C
-        config = TrainingConfigurationA2C(
-            store_history=STORAGE_MODEL,
-            training_steps=1000,
-            learning_rate=3e-4,
-            discount=0.99,
-            save_steps=101,
-            max_steps=5000,
-        )
-        train = A2CTraining(config)
-        train.train_model()
-
-        # ##: DQN Training.
-        del train
-        config = TrainingConfigurationDQN(
-            store_history=STORAGE_MODEL,
-            training_steps=1000,
-            learning_rate=3e-4,
-            batch_size=64,
-            discount=0.99,
-            save_steps=101,
-            replay_step=50,
-            update_step=300,
-            greedy_step=5000,
-            max_steps=5000,
-            memory_size=10000,
-        )
-        train = DQNTraining(config)
-        train.train_model()
-
-        # ##: DQN dueling.
-        del train
-        config = TrainingConfigurationDQN(
-            store_history=STORAGE_MODEL,
-            training_steps=1000,
-            learning_rate=3e-4,
-            batch_size=64,
-            discount=0.99,
-            save_steps=101,
-            replay_step=50,
-            update_step=300,
-            greedy_step=5000,
-            max_steps=5000,
-            memory_size=10000,
-        )
-        train = DQNDuelingTraining(config)
-        train.train_model()
-
-    print("Finish!")
+print("General evaluation ->  score: ", run_eval(config, network))

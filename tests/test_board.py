@@ -7,6 +7,7 @@ import unittest
 import numpy as np
 
 from simulate_2048 import GameBoard
+from simulate_2048.envs.utils import slide_and_merge
 
 
 class GameBoardTest(unittest.TestCase):
@@ -28,7 +29,7 @@ class GameBoardTest(unittest.TestCase):
         for _ in range(100):
             # ## ----> Generate new board.
             game = GameBoard(size=4)
-            board = game.board
+            board = game._board
 
             # ## ----> Get the occupied cells.
             occupied_cells = np.argwhere(board != 0)
@@ -51,31 +52,25 @@ class GameBoardTest(unittest.TestCase):
             game._fill_cells(number_tile=1)
 
             # ## ----> Get the occupied cells.
-            occupied_cells = np.argwhere(game.board != 0)
+            occupied_cells = np.argwhere(game._board != 0)
             occupied_cells = tuple(map(tuple, occupied_cells))
 
             # ## ----> Check that only two cells is occupied.
             self.assertEqual(len(occupied_cells), 3)
 
             # ## ----> Check that the value of occupied cells is 2 or 4.
-            good_values = [game.board[cell] in [2, 4] for cell in occupied_cells]
+            good_values = [game._board[cell] in [2, 4] for cell in occupied_cells]
             self.assertTrue(all(good_values))
 
     def test_slide_merge(self):
-        # ## ----> Generate new board.
-        game = GameBoard(size=4)
-
         # ## ----> Actions and board.
         actions = [self.LEFT, self.UP, self.RIGHT, self.DOWN]
         boards = [self.LEFT_BOARD, self.UP_BOARD, self.RIGHT_BOARD, self.DOWN_BOARD]
 
         for action, expected_board in zip(actions, boards):
-            # ## ----> Change current board.
-            game.board = self.BOARD
-
             # ## ----> Applied action.
             rotated_board = np.rot90(self.BOARD, k=action)
-            _, updated_board = game._slide_and_merge(rotated_board)
+            _, updated_board = slide_and_merge(rotated_board)
             next_board = np.rot90(updated_board, k=4 - action)
 
             # ## ----> Compare boards.
