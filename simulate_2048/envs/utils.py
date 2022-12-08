@@ -5,7 +5,7 @@ Set of useful function for 2048 Simulation.
 from typing import Tuple
 
 import numpy as np
-from numba import njit, prange
+from numba import njit
 from numpy import ndarray
 
 
@@ -63,7 +63,7 @@ def slide_and_merge(board: ndarray, size: int = 4) -> Tuple:
     _internal_score = np.zeros(4, dtype=np.int64)
 
     # ## ----> Loop over board
-    for index in prange(4):
+    for index in range(4):
         row = board[index]
         row = np.extract(row > 0, row)
         _score, _result_row = merge_column(row)
@@ -96,7 +96,7 @@ def padding(array: ndarray, size=4) -> ndarray:
     result = np.zeros(size)
     if len(array) == 0:
         return result
-    result[:array.shape[0]] = array
+    result[: array.shape[0]] = array
     return result
 
 

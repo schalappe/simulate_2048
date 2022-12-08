@@ -9,7 +9,7 @@ import numpy as np
 from gym import spaces
 from gym.utils import seeding
 
-from .utils import compute_penalties, slide_and_merge
+from .utils import slide_and_merge
 
 
 class GameBoard(gym.Env):
