@@ -1,6 +1,6 @@
 gym>=0.26.0
 numpy~=1.23.3
-setuptools~=65.4.0
+setuptools>=65.5.1
 matplotlib~=3.6.0
 tensorflow==2.10.1
 tqdm==4.64.1
