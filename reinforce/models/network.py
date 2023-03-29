@@ -2,7 +2,7 @@
 """
 Set of class for network use by Alpha Zero.
 """
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from os.path import join
 from typing import Sequence, Union
 
@@ -89,7 +89,7 @@ def scale_gradient(tensor: tf.Tensor, scale: Union[float, ndarray]) -> tf.Tensor
     return tensor * scale + tf.stop_gradient(tensor) * (1 - scale)
 
 
-class Network(metaclass=ABCMeta):
+class Network(ABC):
     """
     An instance of the network used by AlphaZero.
     """
@@ -105,7 +105,7 @@ class Network(metaclass=ABCMeta):
 
         Returns
         -------
-        PolicyNetwork
+        tf.keras.Model
             Model to use
         """
 
@@ -132,7 +132,7 @@ class Network(metaclass=ABCMeta):
         probs, value = self.model(obs_tensor)
 
         # ##: Generate output.
-        return NetworkOutput(float(value[0]), {action: probs[0][action] for action in range(4)})
+        return NetworkOutput(float(value[0]), {action: probs[0][action].numpy() for action in range(4)})
 
 
 class TrainNetwork(Network):
@@ -143,13 +143,13 @@ class TrainNetwork(Network):
     def __init__(self, size: int):
         super().__init__(size, (4 * 4 * size,))
 
-    def _load_model(self, size_or_path: tuple) -> PolicyNetwork:
+    def _load_model(self, size_or_path: tuple) -> tf.keras.Model:
         """
         Load model.
 
         Returns
         -------
-        PolicyNetwork
+        tf.keras.Model
             Model to use
         """
         return PolicyNetwork()(size_or_path)
@@ -228,7 +228,7 @@ class FinalNetwork(Network):
 
         Returns
         -------
-        PolicyNetwork
+        tf.keras.Model
             Model to use
         """
         return tf.keras.models.load_model(size_or_path)

@@ -16,9 +16,7 @@ from reinforce.module.actor import StochasticMuZeroActor
 from reinforce.module.replay import ReplayBuffer
 
 
-def run_self_play(
-    config: StochasticAlphaZeroConfig, network: Network, replay_buffer: ReplayBuffer, epochs: int
-) -> None:
+def run_self_play(config: StochasticAlphaZeroConfig, network: Network, replay_buffer: ReplayBuffer, epochs: int):
     """
     Takes the latest network snapshot, produces an episode and makes it available to the training job by writing it
     to a replay buffer.
@@ -51,13 +49,12 @@ def run_self_play(
             while not env.is_terminal():
                 # ##: Interact with environment
                 obs = env.observation()
-                reward = env.reward()
                 action = actor.select_action(obs)
 
                 # ##: Store state
                 state = State(
                     observation=obs,
-                    reward=reward,
+                    reward=env.reward(),
                     discount=config.search.bounds.discount,
                     action=action,
                     search_stats=actor.stats(),
@@ -105,12 +102,10 @@ def run_eval(config: StochasticAlphaZeroConfig, network: Network) -> dict:
             # ##: Play a game.
             while not env.is_terminal():
                 # ##: Interact with environment
-                obs = env.observation()
-                action = actor.select_action(obs)
-                env.step(action)
+                env.step(actor.select_action(env.observation()))
 
                 # ##: Log.
-                period.set_description(f"Self play: {num + 1}")
+                period.set_description(f"Evaluation: {num + 1}")
                 period.set_postfix(score=sum_array_values(env.observation()), max=max_array_values(env.observation()))
 
             # ##: Save max cells.

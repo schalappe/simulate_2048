@@ -82,12 +82,12 @@ def config_2048() -> StochasticAlphaZeroConfig:
             environment_factory=_environment_factory,
         ),
         training=TrainingConfig(
-            epochs=1,
+            epochs=10,
             export=int(1e3),
             store_path="",
             learning_rate=3e-3,
             training_step=int(20e6),
             visit_softmax_temperature=visit_softmax_temperature,
         ),
-        self_play=SelfPlayConfig(episodes=10, evaluation=10),
+        self_play=SelfPlayConfig(episodes=25, evaluation=10),
     )
