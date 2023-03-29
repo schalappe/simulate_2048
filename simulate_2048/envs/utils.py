@@ -59,7 +59,7 @@ def slide_and_merge(board: ndarray, size: int = 4) -> tuple:
         score and next board
     """
     result = np.zeros((4, 4), dtype=np.int64)
-    score = 0.
+    score = 0.0
 
     for index in range(4):
         row = board[index]

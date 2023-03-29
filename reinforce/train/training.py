@@ -8,11 +8,11 @@ import tensorflow as tf
 import tqdm
 
 from reinforce.addons.config import StochasticAlphaZeroConfig
-from reinforce.models.network import Network
+from reinforce.models.network import TrainNetwork
 from reinforce.module.replay import ReplayBuffer
 
 
-def train_network(config: StochasticAlphaZeroConfig, network: Network, replay_buffer: ReplayBuffer):
+def train_network(config: StochasticAlphaZeroConfig, network: TrainNetwork, replay_buffer: ReplayBuffer):
     """
     Applies a training step.
 
