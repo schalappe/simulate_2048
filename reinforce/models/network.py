@@ -8,7 +8,7 @@ from typing import Sequence, Union
 
 import numpy as np
 import tensorflow as tf
-from numba import njit
+from numba import njit, prange
 from numpy import ndarray
 
 from reinforce.addons.types import NetworkOutput
@@ -16,7 +16,7 @@ from reinforce.addons.types import NetworkOutput
 from .core import PolicyNetwork
 
 
-@njit
+@njit(fastmath=True)
 def encode(state: ndarray, encodage_size: int) -> ndarray:
     """
     Flatten the observation given by the environment than encode it.
@@ -41,7 +41,7 @@ def encode(state: ndarray, encodage_size: int) -> ndarray:
     return np.reshape(np.eye(encodage_size)[obs], -1)
 
 
-@njit
+@njit(parallel=True, fastmath=True)
 def encode_multiple(states: ndarray, encodage_size: int) -> ndarray:
     """
     Encode observation given by environment.
@@ -62,7 +62,7 @@ def encode_multiple(states: ndarray, encodage_size: int) -> ndarray:
     size = states.shape[1]
     observations = np.zeros((_len, encodage_size * size))
 
-    for i in range(_len):
+    for i in prange(_len):
         observations[i] = encode(states[i], encodage_size)
 
     return observations
@@ -127,12 +127,12 @@ class Network(metaclass=ABCMeta):
         observation = encode(state, self.encodage_size)
 
         # ##: Use model for values and action probability distribution.
-        obs_tensor = tf.convert_to_tensor(observation)
+        obs_tensor = tf.convert_to_tensor(observation, dtype=tf.float16)
         obs_tensor = tf.expand_dims(obs_tensor, 0)
-        probs, value = self.model(obs_tensor, training=False)
+        probs, value = self.model(obs_tensor)
 
         # ##: Generate output.
-        return NetworkOutput(float(value[0]), {action: probs[0][action].numpy() for action in range(4)})
+        return NetworkOutput(float(value[0]), {action: probs[0][action] for action in range(4)})
 
 
 class TrainNetwork(Network):

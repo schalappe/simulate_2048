@@ -2,15 +2,14 @@
 """
 Set of useful function for 2048 Simulation.
 """
-from typing import Tuple
 
 import numpy as np
-from numba import njit
+from numba import jit, prange
 from numpy import ndarray
 
 
-@njit
-def merge_column(column) -> Tuple:
+@jit(nopython=True)
+def merge_column(column) -> tuple:
     """
     Merge value in a column and compute score.
 
@@ -42,8 +41,8 @@ def merge_column(column) -> Tuple:
     return score, result
 
 
-@njit
-def slide_and_merge(board: ndarray, size: int = 4) -> Tuple:
+@jit(nopython=True)
+def slide_and_merge(board: ndarray, size: int = 4) -> tuple:
     """
     Slide board to the left and merge cells. Then compute score for agent.
 
@@ -60,23 +59,20 @@ def slide_and_merge(board: ndarray, size: int = 4) -> Tuple:
         score and next board
     """
     result = np.zeros((4, 4), dtype=np.int64)
-    _internal_score = np.zeros(4, dtype=np.int64)
+    score = 0.
 
-    # ## ----> Loop over board
     for index in range(4):
         row = board[index]
         row = np.extract(row > 0, row)
         _score, _result_row = merge_column(row)
-        _internal_score[index] = np.sum(np.asarray(_score))
+        score += np.sum(np.asarray(_score))
         row = padding(np.array(_result_row), size)
         result[index] = row
-
-    score = np.sum(_internal_score)
 
     return score, result
 
 
-@njit
+@jit
 def padding(array: ndarray, size=4) -> ndarray:
     """
     Pad an array with zero.
@@ -100,7 +96,7 @@ def padding(array: ndarray, size=4) -> ndarray:
     return result
 
 
-@njit
+@jit(nopython=True, fastmath=True)
 def compute_penalties(board: ndarray) -> float:
     """
     Compute penalties for moved cells.
@@ -116,9 +112,9 @@ def compute_penalties(board: ndarray) -> float:
         Penalties
     """
     penalties = 0.0
-    for row in board:
+    for index in prange(len(board)):
         idx = 0
-        for idx_v, valeur in enumerate(row):
+        for idx_v, valeur in enumerate(board[index]):
             if valeur != 0:
                 if idx_v != idx:
                     penalties += 0.1 * valeur

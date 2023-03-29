@@ -44,7 +44,7 @@ def stochastic_states(state: ndarray) -> Sequence[Tuple[ndarray, float]]:
     return all_possibilities
 
 
-@njit
+@njit(fastmath=True)
 def legal_actions(state: ndarray) -> Sequence[int]:
     """
     Returns the legal actions for the current state.
