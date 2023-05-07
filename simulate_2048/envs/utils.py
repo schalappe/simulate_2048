@@ -2,14 +2,15 @@
 """
 Set of useful function for 2048 Simulation.
 """
+from typing import List, Tuple
 
 import numpy as np
-from numba import jit, prange
+from numba import njit, prange
 from numpy import ndarray
 
 
-@jit(nopython=True)
-def merge_column(column) -> tuple:
+@njit
+def merge_column(column) -> Tuple[List, List]:
     """
     Merge value in a column and compute score.
 
@@ -41,8 +42,8 @@ def merge_column(column) -> tuple:
     return score, result
 
 
-@jit(nopython=True)
-def slide_and_merge(board: ndarray, size: int = 4) -> tuple:
+@njit
+def slide_and_merge(board: ndarray, size: int = 4) -> Tuple[float, ndarray]:
     """
     Slide board to the left and merge cells. Then compute score for agent.
 
@@ -64,15 +65,15 @@ def slide_and_merge(board: ndarray, size: int = 4) -> tuple:
     for index in range(4):
         row = board[index]
         row = np.extract(row > 0, row)
-        _score, _result_row = merge_column(row)
-        score += np.sum(np.asarray(_score))
-        row = padding(np.array(_result_row), size)
+        score_row, result_row = merge_column(row)
+        score += np.sum(np.asarray(score_row))
+        row = padding(np.array(result_row), size)
         result[index] = row
 
     return score, result
 
 
-@jit
+@njit
 def padding(array: ndarray, size=4) -> ndarray:
     """
     Pad an array with zero.
@@ -96,7 +97,7 @@ def padding(array: ndarray, size=4) -> ndarray:
     return result
 
 
-@jit(nopython=True, fastmath=True)
+@njit(fastmath=True)
 def compute_penalties(board: ndarray) -> float:
     """
     Compute penalties for moved cells.

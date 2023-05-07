@@ -35,7 +35,7 @@ class WindowBoard:
     }
 
     def __init__(self, title: str, size: int):
-        # ## ----> Create support.
+        # ##: Create support.
         self.fig, self.axe = plt.subplots()
         self.fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0.1, hspace=0.1)
         self.axe.set_facecolor("#BBADA0")
@@ -46,13 +46,13 @@ class WindowBoard:
         _ = self.axe.set_xticklabels([])
         _ = self.axe.set_yticklabels([])
 
-        # ## ----> Add cell for board.
+        # ##: Add cell for board.
         self.textes = []
         self.axes = [
             self.fig.add_subplot(size, size, r * size + c) for r in range(0, size) for c in range(1, size + 1)
         ]
-        for _ax in self.axes:
-            text = _ax.text(
+        for ax in self.axes:
+            text = ax.text(
                 0.5,
                 0.5,
                 "0",
@@ -62,14 +62,14 @@ class WindowBoard:
                 fontweight="demibold",
             )
             self.textes.append(text)
-        for _ax in self.axes:
-            _ = _ax.set_xticks([])
-            _ = _ax.set_yticks([])
+        for ax in self.axes:
+            _ = ax.set_xticks([])
+            _ = ax.set_yticks([])
 
-        # ## ----> Flag indicating that the window was closed.
+        # ##: Flag indicating that the window was closed.
         self.closed = False
 
-        def close_handler(evt):
+        def close_handler():
             self.closed = True
 
         self.fig.canvas.mpl_connect("close_event", close_handler)
@@ -83,17 +83,17 @@ class WindowBoard:
         board: np.ndarray
             Image to show
         """
-        # ## ----> Update the image data.
+        # ##: Update the image data.
         values = np.reshape(board, -1)
-        for _ax, text, value in zip(self.axes, self.textes, values):
+        for ax, text, value in zip(self.axes, self.textes, values):
             text.set_text(str(int(value)))
-            _ax.set_facecolor(self.COLORS[int(value)])
+            ax.set_facecolor(self.COLORS[int(value)])
 
         # ## ---> Request the window to be redrawn
         self.fig.canvas.draw_idle()
         self.fig.canvas.flush_events()
 
-        # ## ----> Let Matplotlib process UI events
+        # ##: Let Matplotlib process UI events
         plt.pause(0.001)
 
     def register_key_handler(self, key_handler):
@@ -107,7 +107,8 @@ class WindowBoard:
         """
         self.fig.canvas.mpl_connect("key_press_event", key_handler)
 
-    def show(self, block: bool = True):
+    @classmethod
+    def show(cls, block: bool = True):
         """
         Show the window, and start an event loop.
 
@@ -116,11 +117,11 @@ class WindowBoard:
         block: bool
             Activate or not the interactive mode
         """
-        # ## ----> If not blocking, trigger interactive mode.
+        # ##: If not blocking, trigger interactive mode.
         if not block:
             plt.ion()
 
-        # ## ----> Show the plot.
+        # ##: Show the plot.
         plt.show()
 
     def close(self):
