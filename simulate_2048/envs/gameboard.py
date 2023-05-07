@@ -113,7 +113,7 @@ class GameBoard(gym.Env):
 
         return True
 
-    def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> Tuple[ndarray, Optional[Dict]]:
+    def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> Tuple[ndarray, Dict]:
         """
         Initialize empty board then add randomly two tiles.
 
@@ -122,6 +122,9 @@ class GameBoard(gym.Env):
         Tuple
             New game board and information
         """
+        if options is None:
+            options = {}
+
         self._np_random, seed = seeding.np_random(seed)
         self._board = zeros(shape=[self.size, self.size], dtype=int64)
         self._fill_cells(number_tile=2)

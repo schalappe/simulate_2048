@@ -59,7 +59,7 @@ def step(envs: gym.Env, window: WindowBoard, action: int):
     action: int
         Action to apply
     """
-    obs, reward, terminated, _, info = envs.step(action)
+    obs, reward, terminated, _, _ = envs.step(action)
     print(f"reward={reward:.2f}")
 
     redraw(window, obs)
@@ -108,7 +108,7 @@ def key_handler(envs: gym.Env, window: WindowBoard, event: Any):
 
 if __name__ == "__main__":
     env = gym.make("GameBoard")
-    env.seed()
+    env.reset()
 
     window_board = WindowBoard(title="2048 Game", size=env.size)
     window_board.register_key_handler(lambda event: key_handler(env, window_board, event))
