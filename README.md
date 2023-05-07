@@ -21,4 +21,4 @@ When this project was created, two goals were set:
 
 We achieved the first goal after 300 self-plays, but not the second, even after 1500 self-plays of the agent.
 
-![2048 Game](game_short.gif)
+![2048 Game](docs/imgs/game_short.gif)
