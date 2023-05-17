@@ -2,50 +2,86 @@
 """
 Environment that implements the rule of 2048.
 """
+from typing import List, Tuple
+
 import gym
+import numpy as np
+import tensorflow as tf
 
-from .environment import Environment
+from simulate_2048 import GameBoard
 
 
-class Game2048(Environment):
-    """
-    The 2048 environment.
-    """
+class Game2048:
+    """The 2048 environment."""
 
-    def __init__(self):
+    def __init__(self, encodage_size: int):
         super().__init__()
-        self.game = gym.make("GameBoard")
-        self.actions = [0, 1, 2, 3]
-        self.done = False
+        self.game = GameBoard()  # gym.make("GameBoard")
+        self.encodage_size = encodage_size
+
+    def reset(self) -> np.ndarray:
+        """
+        Reinitialize the environment.
+
+        Returns
+        -------
+        ndarray
+            Initial state of environment
+        """
         obs, _ = self.game.reset()
-        self.observations = [obs]
-        self.rewards = [0]
+        return self.encode(obs).astype(np.float32)
 
-    def step(self, action: int):
+    def encode(self, state: np.ndarray) -> np.ndarray:
         """
-        Applies an action or a chance outcome to the environment.
-        """
-        if action not in self.actions:
-            raise ValueError(f"The action `{action}` isn't recognize.")
-        observation, reward, done, _, _ = self.game.step(action)
-        self.observations += [observation]
-        self.rewards += [reward]
-        self.done = done
+        Flatten the observation given by the environment than encode it.
 
-    def observation(self):
-        """
-        Returns the observation of the environment to feed to the network.
-        """
-        return self.observations[-1]
+        Parameters
+        ----------
+        state: ndarray
+            Observation given by the environment
 
-    def is_terminal(self) -> bool:
+        Returns
+        -------
+        ndarray:
+            Encode observation
         """
-        Returns true if the environment is in a terminal state.
-        """
-        return self.done
+        obs = state.copy()
+        obs = np.reshape(obs, -1)
+        obs[obs == 0] = 1
+        obs = np.log2(obs)
+        obs = obs.astype(np.int64)
+        return np.reshape(np.eye(self.encodage_size)[obs], -1)
 
-    def reward(self):
+    def env_step(self, action: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Returns the reward of the environment.
+        Returns state, reward and done flag given an action.
+
+        Parameters
+        ----------
+        action: ndarray
+            Action to apply to environment
+
+        Returns
+        -------
+        Tuple[ndarray, ndarray, ndarray]
+            Next step, reward, done flag
         """
-        return self.rewards[-1]
+
+        state, reward, done, _, _ = self.game.step(action)
+        return self.encode(state).astype(np.float32), np.array(reward, np.int32), np.array(done, np.int32)
+
+    def step(self, action: tf.Tensor) -> List[tf.Tensor]:
+        """
+        Returns state, reward and done flag given an action.
+
+        Parameters
+        ----------
+        action: Tensor
+            Action to apply to environment
+
+        Returns
+        -------
+        List[Tensor]
+            Next step, reward, done flag
+        """
+        return tf.numpy_function(self.env_step, [action], [tf.float32, tf.int32, tf.int32])

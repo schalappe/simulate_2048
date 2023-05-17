@@ -2,37 +2,43 @@
 """
 Script for training an agent.
 """
-from os.path import abspath, dirname, join
-
-from reinforce.game.config import config_2048
-from reinforce.module.replay import ReplayBuffer
-from reinforce.train.self_play import run_eval, run_self_play
-from reinforce.train.training import train_network
-
-STORAGE_MODEL = join(dirname(dirname(abspath(__file__))), "zoo")
+from reinforce.game.config import ENCODAGE_SIZE, Configuration
 
 
-# ##: Get configuration.
-config = config_2048()
-config.training.store_path = STORAGE_MODEL
+class Trainer:
+    def __init__(self, config: Configuration):
+        self._replay = config.replay_factory()
+        self._cacher = config.cacher_factory(ENCODAGE_SIZE)
+        self._actor = config.actor_factory(self._replay, self._cacher)
+        self._learner = config.learn_factory(self._replay, self._cacher)
+        self._cycles = config.cycles
 
-# ##: Prepare necessary
-replay_buffer = ReplayBuffer(config.replay)
-network = config.factory.network_factory()
+    def launch_train_cycle(self):
+        # ##: Learning cycle
+        for cycle in range(self._cycles):
+            print("-" * 88)
+            print("Training loop ", cycle + 1)
 
-# ##: Training Loop.
-for loop in range(config.training.training_step):
-    print("-" * 88)
-    print("Training loop ", loop + 1)
+            self._actor.play()
+            self._learner.learn()
 
-    # ##: Self play.
-    run_self_play(config, network, replay_buffer, epochs=loop + 1)
+        print("Finish ...")
 
-    # ##: Train network.
-    train_network(config, network, replay_buffer)
 
-    # ##: Store model.
-    if loop > 0 and loop % config.training.export == 0:
-        network.save_network(config.training.store_path, loop)
+if __name__ == "__main__":
+    import argparse
 
-print("General evaluation ->  score: ", run_eval(config, network))
+    from reinforce.algo.a2c_model import actor_critic
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--algo", type=str, required=True)
+    args = parser.parse_args()
+
+    trainer = None
+    if args.algo == "A2C":
+        trainer = Trainer(actor_critic())
+
+    if trainer:
+        trainer.launch_train_cycle()
+    else:
+        print("Not implemented yet !!!")

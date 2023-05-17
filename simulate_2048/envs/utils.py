@@ -5,11 +5,9 @@ Set of useful function for 2048 Simulation.
 from typing import List, Tuple
 
 import numpy as np
-from numba import njit, prange
 from numpy import ndarray
 
 
-@njit
 def merge_column(column) -> Tuple[List, List]:
     """
     Merge value in a column and compute score.
@@ -42,7 +40,6 @@ def merge_column(column) -> Tuple[List, List]:
     return score, result
 
 
-@njit
 def slide_and_merge(board: ndarray, size: int = 4) -> Tuple[float, ndarray]:
     """
     Slide board to the left and merge cells. Then compute score for agent.
@@ -73,7 +70,6 @@ def slide_and_merge(board: ndarray, size: int = 4) -> Tuple[float, ndarray]:
     return score, result
 
 
-@njit
 def padding(array: ndarray, size=4) -> ndarray:
     """
     Pad an array with zero.
@@ -97,7 +93,6 @@ def padding(array: ndarray, size=4) -> ndarray:
     return result
 
 
-@njit(fastmath=True)
 def compute_penalties(board: ndarray) -> float:
     """
     Compute penalties for moved cells.
@@ -113,7 +108,7 @@ def compute_penalties(board: ndarray) -> float:
         Penalties
     """
     penalties = 0.0
-    for index in prange(len(board)):
+    for index in range(len(board)):
         idx = 0
         for idx_v, valeur in enumerate(board[index]):
             if valeur != 0:
