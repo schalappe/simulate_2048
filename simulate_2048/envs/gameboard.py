@@ -9,27 +9,20 @@ from gym import spaces
 from gym.utils import seeding
 from numpy import argwhere, array_equal, int64, ndarray, reshape, rot90, zeros
 
-from .utils import slide_and_merge
+from .utils import compute_penalties, slide_and_merge
 
 
 class GameBoard(gym.Env):
     """2048 game environment."""
 
-    # ##: Available actions.
-    LEFT = 0
-    UP = 1
-    RIGHT = 2
-    DOWN = 3
-
     # ##: All Actions.
-    ACTIONS = [LEFT, UP, RIGHT, DOWN]
-    ACTIONS_STRING = {LEFT: "left", UP: "up", RIGHT: "right", DOWN: "down"}
+    ACTIONS = {"left": 0, "up": 1, "right": 2, "down": 3}
 
     # ##: Game variables.
-    _board = None
+    _board: Optional[ndarray] = None
 
     def __init__(self, size: int = 4):
-        self.size = size  # ##: The size of the square grid.
+        self._size = size  # ##: The size of the square grid.
         self.observation_space = spaces.Box(low=0, high=2**32, shape=(size * size,), dtype=int64)
         self.action_space = spaces.Discrete(len(self.ACTIONS))
 
@@ -52,7 +45,7 @@ class GameBoard(gym.Env):
         """
         return self._np_random.choice([2, 4], size=number_cell, p=[0.9, 0.1]).tolist()
 
-    def __random_position(self, number_cell: int) -> Tuple:
+    def __random_position(self, number_cell: int) -> Tuple[Tuple[int, int], ...]:
         """
         Randomly choose cells positions in board.
 
@@ -71,7 +64,7 @@ class GameBoard(gym.Env):
         cell_positions = available_cells[chosen_cells]
         return tuple(map(tuple, cell_positions))
 
-    def _fill_cells(self, number_tile):
+    def _fill_cells(self, number_tile) -> None:
         """
         Find empty cells and fill them with 2 or 4.
 
@@ -105,13 +98,25 @@ class GameBoard(gym.Env):
             return False
 
         # ##: Check if there still valid action.
-        for action in self.ACTIONS:
+        for action in self.ACTIONS.values():
             rotated_board = rot90(board, k=action)
             _, updated_board = slide_and_merge(rotated_board)
             if not updated_board.all():
                 return False
 
         return True
+
+    @property
+    def board(self) -> ndarray:
+        """
+        Return the state of the game.
+
+        Returns
+        -------
+        ndarray
+            State of the game
+        """
+        return self._board
 
     def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> Tuple[ndarray, Dict]:
         """
@@ -126,7 +131,7 @@ class GameBoard(gym.Env):
             options = {}
 
         self._np_random, seed = seeding.np_random(seed)
-        self._board = zeros(shape=[self.size, self.size], dtype=int64)
+        self._board = zeros(shape=[self._size, self._size], dtype=int64)
         self._fill_cells(number_tile=2)
 
         return reshape(self._board, -1), options
@@ -155,7 +160,7 @@ class GameBoard(gym.Env):
         # ##: Fill new cell only if the board has evolved.
         if not array_equal(rotated_board, updated_board):
             self._board = rot90(updated_board, k=4 - action)
-            reward = score  # - penalty
+            reward = score - compute_penalties(self._board)
 
             # ##: Fill randomly one cell.
             self._fill_cells(number_tile=1)
@@ -165,7 +170,7 @@ class GameBoard(gym.Env):
 
         return reshape(self._board, -1), reward, done, False, {}
 
-    def render(self, mode="human"):
+    def render(self, mode="human") -> None:  # pragma: no cover
         """
         Render game board.
 

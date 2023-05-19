@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Set of useful function for 2048 Simulation.
+Slide and merge columns.
 """
 from typing import List, Tuple
 
@@ -8,7 +8,7 @@ import numpy as np
 from numpy import ndarray
 
 
-def merge_column(column) -> Tuple[List, List]:
+def merge_column(column) -> Tuple[List[int], List[int]]:
     """
     Merge value in a column and compute score.
 
@@ -40,6 +40,29 @@ def merge_column(column) -> Tuple[List, List]:
     return score, result
 
 
+def padding(array: ndarray, size=4) -> ndarray:
+    """
+    Pad an array with zero.
+
+    Parameters
+    ----------
+    array: ndarray
+        Array to pad
+    size: int
+        size of new array
+
+    Returns
+    -------
+    ndarray
+        Padded array
+    """
+    result = np.zeros(size)
+    if len(array) == 0:
+        return result
+    result[: array.shape[0]] = array
+    return result
+
+
 def slide_and_merge(board: ndarray, size: int = 4) -> Tuple[float, ndarray]:
     """
     Slide board to the left and merge cells. Then compute score for agent.
@@ -68,29 +91,6 @@ def slide_and_merge(board: ndarray, size: int = 4) -> Tuple[float, ndarray]:
         result[index] = row
 
     return score, result
-
-
-def padding(array: ndarray, size=4) -> ndarray:
-    """
-    Pad an array with zero.
-
-    Parameters
-    ----------
-    array: ndarray
-        Array to pad
-    size: int
-        size of new array
-
-    Returns
-    -------
-    ndarray
-        Padded array
-    """
-    result = np.zeros(size)
-    if len(array) == 0:
-        return result
-    result[: array.shape[0]] = array
-    return result
 
 
 def compute_penalties(board: ndarray) -> float:
