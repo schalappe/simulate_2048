@@ -5,15 +5,15 @@ Define configuration for actor-critic algorithm
 import tensorflow as tf
 
 from reinforce.actor.a2c_actor import A2CActor
-from reinforce.game.config import ActorConfiguration, Configuration
+from reinforce.game.config import ActorConfiguration, Algorithm
 from reinforce.learner.a2c_learner import A2CConfiguration, A2CLearner
 from reinforce.network.actor_critic import ActorCritic
 from reinforce.network.cacher import NetworkCacher
 from reinforce.replay.experience_replay import ExperienceReplay
 
 
-def actor_critic() -> Configuration:
-    return Configuration(
+def actor_critic() -> Algorithm:
+    return Algorithm(
         cycles=100,
         replay_factory=lambda: ExperienceReplay(capacity=5, batch_size=5),
         cacher_factory=lambda size: NetworkCacher(

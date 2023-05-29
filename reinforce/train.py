@@ -2,27 +2,27 @@
 """
 Script for training an agent.
 """
-from reinforce.game.config import ENCODAGE_SIZE, Configuration
+from reinforce.game.config import ENCODAGE_SIZE, Algorithm
 
 
-class Trainer:
-    def __init__(self, config: Configuration):
-        self._replay = config.replay_factory()
-        self._cacher = config.cacher_factory(ENCODAGE_SIZE)
-        self._actor = config.actor_factory(self._replay, self._cacher)
-        self._learner = config.learn_factory(self._replay, self._cacher)
-        self._cycles = config.cycles
+def train_agent(*, algorithm: Algorithm) -> None:
+    # ##: Create necessary for agent.
+    replay_buffer = algorithm.replay_factory()
+    cacher_network = algorithm.cacher_factory(ENCODAGE_SIZE)
 
-    def launch_train_cycle(self):
-        # ##: Learning cycle
-        for cycle in range(self._cycles):
-            print("-" * 88)
-            print("Training loop ", cycle + 1)
+    # ##: Create agent for self-play and learning.
+    actor = algorithm.actor_factory(replay_buffer, cacher_network)
+    learner = algorithm.learn_factory(replay_buffer, cacher_network)
 
-            self._actor.play()
-            self._learner.learn()
+    # ##: Self-play and learning cycle.
+    for step in range(algorithm.cycles):
+        print("-" * 88)
+        print("Training loop ", step + 1)
 
-        print("Finish ...")
+        actor.play()
+        learner.learn()
+
+    print("Finish ...")
 
 
 if __name__ == "__main__":
@@ -30,15 +30,4 @@ if __name__ == "__main__":
 
     from reinforce.algo.a2c_model import actor_critic
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--algo", type=str, required=True)
-    args = parser.parse_args()
-
-    trainer = None
-    if args.algo == "A2C":
-        trainer = Trainer(actor_critic())
-
-    if trainer:
-        trainer.launch_train_cycle()
-    else:
-        print("Not implemented yet !!!")
+    train_agent(algorithm=actor_critic())

@@ -31,7 +31,7 @@ class ActorConfiguration:
 
 
 @dataclass
-class Configuration:
+class Algorithm:
     """Configuration necessary for reinforcement learning."""
 
     cycles: int
