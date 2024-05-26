@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Classe décrivant le jeu 2048 pour un agent
+Class describing the 2048 game for an agent.
 """
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import gym
 from gym import spaces
 from gym.utils import seeding
-from numpy import argwhere, array_equal, int64, ndarray, reshape, rot90, zeros
+from numpy import argwhere, array_equal, int64, ndarray, rot90, zeros
 
 from .utils import compute_penalties, slide_and_merge
 
@@ -29,132 +29,125 @@ class GameBoard(gym.Env):
         # ##: Reset game.
         self.reset()
 
-    def __random_cell_value(self, number_cell: int) -> List[int]:
+    def _fill_cells(self, number_tile: int) -> None:
         """
-        Randomly choose cell value between 2 and 4.
+        Fill empty cells with 2 or 4.
 
         Parameters
         ----------
-        number_cell: int
-            Number of value to generate
-
-        Returns
-        -------
-        list
-            List of chosen value
-        """
-        return self._np_random.choice([2, 4], size=number_cell, p=[0.9, 0.1]).tolist()
-
-    def __random_position(self, number_cell: int) -> Tuple[Tuple[int, int], ...]:
-        """
-        Randomly choose cells positions in board.
-
-        Parameters
-        ----------
-        number_cell: int
-            Number of cells to select
-
-        Returns
-        -------
-        tuple
-            List of chosen cells
-        """
-        available_cells = argwhere(self._board == 0)
-        chosen_cells = self._np_random.choice(len(available_cells), size=number_cell, replace=False)
-        cell_positions = available_cells[chosen_cells]
-        return tuple(map(tuple, cell_positions))
-
-    def _fill_cells(self, number_tile) -> None:
-        """
-        Find empty cells and fill them with 2 or 4.
-
-        Parameters
-        ----------
-        number_tile: int
-            Number of cell to fill
+        number_tile : int
+            Number of cells to fill.
         """
         # ##: Only there still available places
         if not self._board.all():
-            values = self.__random_cell_value(number_cell=number_tile)
-            cells = self.__random_position(number_cell=number_tile)
+            # ##: Randomly choose cell value between 2 and 4.
+            values = self._np_random.choice([2, 4], size=number_tile, p=[0.9, 0.1]).tolist()
 
+            # ##: Randomly choose cells positions in board.
+            available_cells = argwhere(self._board == 0)
+            chosen_indices = self._np_random.choice(len(available_cells), size=number_tile, replace=False)
+            cells = [tuple(available_cells[idx]) for idx in chosen_indices]
+
+            # ##: Fill empty cells.
             for cell, value in zip(cells, values):
                 self._board[cell] = value
 
     def _is_done(self) -> bool:
         """
-        Check if the game is finished. The game is finished when there aren't valid action.
+        Check if the game is finished.
 
         Returns
         -------
         bool
-            True if the game is finished
-            False else
+            True if the game is finished, False otherwise.
         """
-        board = self._board.copy()
-
-        # ##: Check if all cells is filled.
-        if not board.all():
+        if not self._board.all():
             return False
 
         # ##: Check if there still valid action.
         for action in self.ACTIONS.values():
-            rotated_board = rot90(board, k=action)
+            rotated_board = rot90(self._board, k=action)
             _, updated_board = slide_and_merge(rotated_board)
-            if not updated_board.all():
+            if not array_equal(rotated_board, updated_board):
                 return False
 
         return True
 
     @property
+    def is_finished(self) -> bool:
+        """
+        Check if the game is finished.
+
+        Returns
+        -------
+        bool
+            True if the game is finished, False otherwise.
+        """
+        return self._is_done()
+
+    @property
     def board(self) -> ndarray:
         """
-        Return the state of the game.
+        Get the current state of the game board.
 
         Returns
         -------
         ndarray
-            State of the game
+            Current state of the game board.
         """
         return self._board
 
-    def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> Tuple[ndarray, Dict]:
+    @property
+    def size(self) -> int:
         """
-        Initialize empty board then add randomly two tiles.
+        Get the size of the game board.
 
         Returns
         -------
-        Tuple
-            New game board and information
+        int
+            Size of the game board.
         """
-        if options is None:
-            options = {}
+        return self._size
 
-        self._np_random, seed = seeding.np_random(seed)
-        self._board = zeros(shape=[self._size, self._size], dtype=int64)
-        self._fill_cells(number_tile=2)
-
-        return reshape(self._board, -1), options
-
-    def step(self, action: int) -> Tuple[ndarray, Union[int, float], bool, bool, Dict]:
+    def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> Tuple[ndarray, Dict]:
         """
-        Applied the selected action to the board.
+        Initialize an empty board and add two random tiles.
 
         Parameters
         ----------
-        action: int
-            Action to apply
+        seed : int, optional
+            Random seed for reproducibility.
+        options : dict, optional
+            Additional options.
 
         Returns
         -------
-        tuple
-            Update board, reward, state of the game and info
+        Tuple[ndarray, Dict]
+            The new game board and additional info.
+        """
+        self._np_random, seed = seeding.np_random(seed)
+        self._board = zeros((self._size, self._size), dtype=int64)
+        self._fill_cells(number_tile=2)
+        return self._board, {}
+
+    def step(self, action: int) -> Tuple[ndarray, Union[int, float], bool, bool, Dict]:
+        """
+        Apply the selected action to the board.
+
+        Parameters
+        ----------
+        action : int
+            Action to apply.
+
+        Returns
+        -------
+        Tuple[ndarray, Union[int, float], bool, bool, Dict]
+            Updated board, reward, game state, and additional info.
         """
         reward = -4
 
         # ##: Applied action.
         rotated_board = rot90(self._board, k=action)
-        # penalty = compute_penalties(rotated_board)
         score, updated_board = slide_and_merge(rotated_board)
 
         # ##: Fill new cell only if the board has evolved.
@@ -168,16 +161,16 @@ class GameBoard(gym.Env):
         # ##: Check if game is finished.
         done = self._is_done()
 
-        return reshape(self._board, -1), reward, done, False, {}
+        return self._board, reward, done, False, {}
 
-    def render(self, mode="human") -> None:  # pragma: no cover
+    def render(self, mode: str = "human") -> None:
         """
-        Render game board.
+        Render the game board.
 
         Parameters
         ----------
-        mode: str
-            Mode
+        mode : str
+            Mode for rendering.
         """
         if mode == "human":
             for row in self._board.tolist():

@@ -2,17 +2,24 @@
 """
 Display the environment in a window.
 """
-import numpy as np
+from typing import Callable, Optional
+
 from matplotlib import pyplot as plt
+from matplotlib.backend_bases import Event
+from numpy import ndarray, reshape
 
 
 class WindowBoard:
     """
     Window to draw the 2048 board using Matplotlib.
+
     Inspired by @Farama-Foundation (Minigrid).
+
+    This class provides a graphical representation of the 2048 game board using Matplotlib,
+    allowing for visualization and updates of the game state in a window.
     """
 
-    # ##: Colors
+    # ##: Colors mapping for different tile values.
     COLORS = {
         0: "#FFFFFF",
         2: "#EEE4DA",
@@ -35,7 +42,7 @@ class WindowBoard:
     }
 
     def __init__(self, title: str, size: int):
-        # ##: Create support.
+        # ##: Create Matplotlib figure and axes.
         self.fig, self.axe = plt.subplots()
         self.fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0.1, hspace=0.1)
         self.axe.set_facecolor("#BBADA0")
@@ -43,14 +50,12 @@ class WindowBoard:
 
         self.axe.xaxis.set_ticks_position("none")
         self.axe.yaxis.set_ticks_position("none")
-        _ = self.axe.set_xticklabels([])
-        _ = self.axe.set_yticklabels([])
+        self.axe.set_xticklabels([])
+        self.axe.set_yticklabels([])
 
-        # ##: Add cell for board.
-        self.textes = []
-        self.axes = [
-            self.fig.add_subplot(size, size, r * size + c) for r in range(0, size) for c in range(1, size + 1)
-        ]
+        # ##: Create subplots for each cell in the game board.
+        self.texts = []
+        self.axes = [self.fig.add_subplot(size, size, r * size + c) for r in range(size) for c in range(1, size + 1)]
         for ax in self.axes:
             text = ax.text(
                 0.5,
@@ -61,72 +66,72 @@ class WindowBoard:
                 fontsize="x-large",
                 fontweight="demibold",
             )
-            self.textes.append(text)
-        for ax in self.axes:
-            _ = ax.set_xticks([])
-            _ = ax.set_yticks([])
+            self.texts.append(text)
+            ax.set_xticks([])
+            ax.set_yticks([])
 
-        # ##: Flag indicating that the window was closed.
         self.closed = False
 
-        def close_handler():
-            self.closed = True
+        self.fig.canvas.mpl_connect("close_event", self._close_handler)
 
-        self.fig.canvas.mpl_connect("close_event", close_handler)
-
-    def show_image(self, board: np.ndarray):
+    def _close_handler(self, event: Optional[Event] = None):
         """
-        Show an image or update the image being shown.
+        Handle the window close event.
 
         Parameters
         ----------
-        board: np.ndarray
-            Image to show
+        event : Event, optional
+            The Matplotlib close event.
         """
-        # ##: Update the image data.
-        values = np.reshape(board, -1)
-        for ax, text, value in zip(self.axes, self.textes, values):
-            text.set_text(str(int(value)))
-            ax.set_facecolor(self.COLORS[int(value)])
+        self.closed = True
 
-        # ## ---> Request the window to be redrawn
+    def show_image(self, board: ndarray):
+        """
+        Show or update the game board.
+
+        Parameters
+        ----------
+        board : ndarray
+            The current state of the game board.
+        """
+        values = reshape(board, -1)
+        for ax, text, value in zip(self.axes, self.texts, values):
+            value = int(value)
+            text.set_text(str(value) if value != 0 else "")
+            ax.set_facecolor(self.COLORS.get(value, "#FFFFFF"))
+
         self.fig.canvas.draw_idle()
         self.fig.canvas.flush_events()
-
-        # ##: Let Matplotlib process UI events
         plt.pause(0.001)
 
-    def register_key_handler(self, key_handler):
+    def register_key_handler(self, key_handler: Callable):
         """
         Register a keyboard event handler.
 
         Parameters
         ----------
-        key_handler: Any
-            Key handler
+        key_handler : Callable
+            A function to handle keyboard events.
         """
         self.fig.canvas.mpl_connect("key_press_event", key_handler)
 
     @classmethod
     def show(cls, block: bool = True):
         """
-        Show the window, and start an event loop.
+        Show the window and start the Matplotlib event loop.
 
         Parameters
         ----------
-        block: bool
-            Activate or not the interactive mode
+        block : bool
+            If True, the event loop is blocking; otherwise, it is non-blocking.
         """
-        # ##: If not blocking, trigger interactive mode.
         if not block:
             plt.ion()
-
-        # ##: Show the plot.
         plt.show()
 
     def close(self):
         """
         Close the window.
         """
-        plt.close()
+        plt.close(self.fig)
         self.closed = True
