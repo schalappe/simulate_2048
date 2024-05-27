@@ -8,9 +8,9 @@ from unittest import TestCase, main
 
 from numpy import argwhere, array, array_equal, extract, ndarray, rot90
 
-from simulate_2048 import GameBoard
-from simulate_2048.envs.utils import slide_and_merge
-from simulate_2048.wrappers import EncodedObservation
+from simulate import GameBoard
+from simulate.envs.utils import slide_and_merge
+from simulate.wrappers import EncodedGameBoard
 
 
 def legal_actions(state: ndarray) -> Sequence[int]:
@@ -104,7 +104,7 @@ class GameBoardTest(TestCase):
 
         # ##: Perform an action.
         action = choice(legal_actions(game.board))
-        _, _, done, _, _ = game.step(action)
+        _, _, done = game.step(action)
 
         # ##: Check that reward is positive and one cell has been filled.
         occupied_cells = argwhere(game.board != 0)
@@ -114,17 +114,14 @@ class GameBoardTest(TestCase):
         while not done:
             # ##: Perform an action.
             action = choice(legal_actions(game.board))
-            _, _, done, _, _ = game.step(action)
+            _, _, done = game.step(action)
 
 
 class WrapperTest(TestCase):
 
     def test_encodage(self):
-        # ##: Generate new board.
-        game = GameBoard(size=4)
-
         # ##: add wrapper.
-        encoded_game = EncodedObservation(game)
+        encoded_game = EncodedGameBoard()
 
         # ##: Get observation from reset.
         board, _ = encoded_game.reset()

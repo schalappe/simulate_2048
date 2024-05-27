@@ -2,17 +2,15 @@
 """
 Class describing the 2048 game for an agent.
 """
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
-import gym
-from gym import spaces
-from gym.utils import seeding
 from numpy import argwhere, array_equal, int64, ndarray, rot90, zeros
+from numpy.random import Generator, default_rng
 
 from .utils import compute_penalties, slide_and_merge
 
 
-class GameBoard(gym.Env):
+class GameBoard:
     """2048 game environment."""
 
     # ##: All Actions.
@@ -20,11 +18,10 @@ class GameBoard(gym.Env):
 
     # ##: Game variables.
     _board: Optional[ndarray] = None
+    _generator: Optional[Generator] = None
 
     def __init__(self, size: int = 4):
         self._size = size  # ##: The size of the square grid.
-        self.observation_space = spaces.Box(low=0, high=2**32, shape=(size * size,), dtype=int64)
-        self.action_space = spaces.Discrete(len(self.ACTIONS))
 
         # ##: Reset game.
         self.reset()
@@ -41,11 +38,11 @@ class GameBoard(gym.Env):
         # ##: Only there still available places
         if not self._board.all():
             # ##: Randomly choose cell value between 2 and 4.
-            values = self._np_random.choice([2, 4], size=number_tile, p=[0.9, 0.1]).tolist()
+            values = self._generator.choice([2, 4], size=number_tile, p=[0.9, 0.1]).tolist()
 
             # ##: Randomly choose cells positions in board.
             available_cells = argwhere(self._board == 0)
-            chosen_indices = self._np_random.choice(len(available_cells), size=number_tile, replace=False)
+            chosen_indices = self._generator.choice(len(available_cells), size=number_tile, replace=False)
             cells = [tuple(available_cells[idx]) for idx in chosen_indices]
 
             # ##: Fill empty cells.
@@ -109,7 +106,7 @@ class GameBoard(gym.Env):
         """
         return self._size
 
-    def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None) -> Tuple[ndarray, Dict]:
+    def reset(self, seed: Optional[int] = None) -> ndarray:
         """
         Initialize an empty board and add two random tiles.
 
@@ -117,20 +114,18 @@ class GameBoard(gym.Env):
         ----------
         seed : int, optional
             Random seed for reproducibility.
-        options : dict, optional
-            Additional options.
 
         Returns
         -------
-        Tuple[ndarray, Dict]
-            The new game board and additional info.
+        ndarray
+            The new game board.
         """
-        self._np_random, seed = seeding.np_random(seed)
+        self._generator = default_rng(seed)
         self._board = zeros((self._size, self._size), dtype=int64)
         self._fill_cells(number_tile=2)
-        return self._board, {}
+        return self._board
 
-    def step(self, action: int) -> Tuple[ndarray, Union[int, float], bool, bool, Dict]:
+    def step(self, action: int) -> Tuple[ndarray, Union[int, float], bool]:
         """
         Apply the selected action to the board.
 
@@ -141,8 +136,8 @@ class GameBoard(gym.Env):
 
         Returns
         -------
-        Tuple[ndarray, Union[int, float], bool, bool, Dict]
-            Updated board, reward, game state, and additional info.
+        Tuple[ndarray, Union[int, float], bool]
+            Updated board, reward, game state.
         """
         reward = -4
 
@@ -161,7 +156,7 @@ class GameBoard(gym.Env):
         # ##: Check if game is finished.
         done = self._is_done()
 
-        return self._board, reward, done, False, {}
+        return self._board, reward, done
 
     def render(self, mode: str = "human") -> None:
         """

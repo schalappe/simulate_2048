@@ -7,7 +7,7 @@ from typing import Any
 import gym
 import numpy as np
 
-from simulate_2048.utils import WindowBoard
+from simulate.utils import WindowBoard
 
 
 def redraw(window: WindowBoard, board: np.ndarray):
@@ -92,17 +92,8 @@ def key_handler(envs: gym.Env, window: WindowBoard, event: Any):
         reset(envs, window)
         return
 
-    if event.key == "left":
-        step(envs, window, envs.LEFT)
-        return
-    if event.key == "right":
-        step(envs, window, envs.RIGHT)
-        return
-    if event.key == "up":
-        step(envs, window, envs.UP)
-        return
-    if event.key == "down":
-        step(envs, window, envs.DOWN)
+    if event.key in envs.ACTIONS:
+        step(envs, window, envs.ACTIONS[event.key])
         return
 
 
