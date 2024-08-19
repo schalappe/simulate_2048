@@ -1,7 +1,2 @@
-matplotlib~=3.8.4
-numpy~=1.26.4
-setuptools~=68.2.0
-tensorflow~=2.16.1
-tqdm~=4.66.4
-keras~=3.3.3
-gym~=0.26.2
+matplotlib==3.9.2
+numpy==2.1.0

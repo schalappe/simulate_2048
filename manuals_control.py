@@ -3,8 +3,7 @@
 Play 2048 Game
 """
 from typing import Any
-
-import gym
+from simulate.envs import GameBoard
 import numpy as np
 
 from simulate.utils import WindowBoard
@@ -25,32 +24,32 @@ def redraw(window: WindowBoard, board: np.ndarray):
     window.show_image(board)
 
 
-def reset(envs: gym.Env, window: WindowBoard):
+def reset(envs: GameBoard, window: WindowBoard):
     """
     Reset and redraw the game board.
 
     Parameters
     ----------
-    envs: gym.Env
+    envs: GameBoard
         The Game environment
 
     window: WindowBoard
         Class to draw the game board
     """
     # ## ---> Reset the game.
-    board, _ = envs.reset()
+    board = envs.reset()
 
     # ## ----> Redraw the game board.
     redraw(window, board)
 
 
-def step(envs: gym.Env, window: WindowBoard, action: int):
+def step(envs: GameBoard, window: WindowBoard, action: int):
     """
     Applied action into the game.
 
     Parameters
     ----------
-    envs: gym.Env
+    envs: GameBoard
         The Game environment
 
     window: WindowBoard
@@ -59,7 +58,7 @@ def step(envs: gym.Env, window: WindowBoard, action: int):
     action: int
         Action to apply
     """
-    obs, reward, terminated, _, _ = envs.step(action)
+    obs, reward, terminated = envs.step(action)
     print(f"reward={reward:.2f}")
 
     redraw(window, obs)
@@ -67,13 +66,13 @@ def step(envs: gym.Env, window: WindowBoard, action: int):
         print("terminated!")
 
 
-def key_handler(envs: gym.Env, window: WindowBoard, event: Any):
+def key_handler(envs: GameBoard, window: WindowBoard, event: Any):
     """
     Handle the keyboard.
 
     Parameters
     ----------
-    envs: gym.Env
+    envs: GameBoard
         The Game environment
 
     window: WindowBoard
@@ -98,7 +97,7 @@ def key_handler(envs: gym.Env, window: WindowBoard, event: Any):
 
 
 if __name__ == "__main__":
-    env = gym.make("GameBoard")
+    env = GameBoard()
     env.reset()
 
     window_board = WindowBoard(title="2048 Game", size=env.size)

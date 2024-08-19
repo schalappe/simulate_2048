@@ -1,131 +1,131 @@
 # -*-  coding: utf-8 -*-
 """
-Set of test for GameBoard
+Set of test for GameBoard.
 """
-from random import choice
-from typing import Sequence
 from unittest import TestCase, main
 
-from numpy import argwhere, array, array_equal, extract, ndarray, rot90
+import numpy as np
 
-from simulate import GameBoard
-from simulate.envs.utils import slide_and_merge
+from simulate.envs.gameboard import GameBoard
+from simulate.envs.utils import illegal_actions, merge_column, slide_and_merge
 from simulate.wrappers import EncodedGameBoard
 
 
-def legal_actions(state: ndarray) -> Sequence[int]:
+class TestGameBoard(TestCase):
     """
-    Returns the legal actions for the current state.
-
-    Parameters
-    ----------
-    state: ndarray
-        Current state
-
-    Returns
-    -------
-    Sequence[int]
-        List of legal action
+    Test for the GameBoard class.
+    This class tests the core functionality of the 2048 game logic.
     """
 
-    legal_moves = array([-1, -1, -1, -1])
+    def setUp(self):
+        """Initialize a new game board before each test."""
+        self.game = GameBoard(size=4)
 
-    # ##: Loop over all possible moves.
-    for action in range(4):
-        board = state.copy()
+    def test_init(self):
+        """Test if the game board is correctly initialized."""
+        self.assertEqual(self.game.size, 4)
+        self.assertIsNotNone(self.game.board)
+        self.assertEqual(self.game.board.shape, (4, 4))
 
-        # ##: Generate next board.
-        rotated_board = rot90(board, k=action)
-        _, updated_board = slide_and_merge(rotated_board)
-        if not array_equal(rotated_board, updated_board):
-            legal_moves[action] = action
+    def test_reset(self):
+        """Test if the game board is correctly reset with two initial tiles."""
+        board = self.game.reset(seed=42)
+        self.assertEqual(np.count_nonzero(board), 2)
+        self.assertTrue(np.all(np.isin(board[board != 0], [2, 4])))
 
-    return list(extract(legal_moves > -1, legal_moves))
+    def test_step_valid_move(self):
+        """Test if a valid move is correctly processed."""
+        self.game._board = np.array([[2, 2, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
+        board, reward, done = self.game.step(GameBoard.ACTIONS["left"])
+        self.assertEqual(board[0, 0], 4)
+        self.assertGreater(reward, 0)
+        self.assertFalse(done)
+
+    def test_step_invalid_move(self):
+        """Test if an invalid move is correctly handled."""
+        self.game._board = np.array([[2, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
+        board, reward, done = self.game.step(GameBoard.ACTIONS["left"])
+        self.assertTrue(np.array_equal(board, self.game._board))
+        self.assertEqual(reward, -4)
+        self.assertFalse(done)
+
+    def test_is_finished(self):
+        """Test if the game correctly identifies a finished state."""
+        self.game._board = np.array(
+            [[2, 4, 8, 16], [32, 64, 128, 256], [512, 1024, 2048, 4096], [8192, 16384, 32768, 65536]]
+        )
+        self.assertTrue(self.game.is_finished)
+
+    def test_not_finished(self):
+        """Test if the game correctly identifies an unfinished state."""
+        self.game._board = np.array(
+            [[2, 2, 8, 16], [32, 64, 128, 256], [512, 1024, 2048, 4096], [8192, 16384, 32768, 65536]]
+        )
+        self.assertFalse(self.game.is_finished)
 
 
-class GameBoardTest(TestCase):
-    # ##: Board and update board.
-    BOARD = array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 4], [4, 0, 4, 2]])
-    UP_BOARD = array([[4, 0, 4, 4], [0, 0, 0, 2], [0, 0, 0, 0], [0, 0, 0, 0]])
-    DOWN_BOARD = array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 4], [4, 0, 4, 2]])
-    LEFT_BOARD = array([[0, 0, 0, 0], [0, 0, 0, 0], [4, 0, 0, 0], [8, 2, 0, 0]])
-    RIGHT_BOARD = array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 4], [0, 0, 8, 2]])
+class TestUtils(TestCase):
+    """
+    Test for utility functions.
+    This class tests the helper functions used in the game logic.
+    """
 
-    # ##: Actions possible.
-    LEFT = 0
-    UP = 1
-    RIGHT = 2
-    DOWN = 3
+    def test_merge_column(self):
+        """Test if columns are correctly merged."""
+        column = np.array([2, 2, 4, 4])
+        score, result = merge_column(column)
+        self.assertEqual(score, 12)
+        np.testing.assert_array_equal(result, np.array([4, 8]))
 
-    def test_reset_game(self):
-        # ##: Check many times
-        for _ in range(100):
-            # ##: Generate new board.
-            game = GameBoard(size=4)
-            board = game.board
+    def test_slide_and_merge(self):
+        """Test if the entire board is correctly slid and merged."""
+        board = np.array([[2, 2, 4, 4], [0, 2, 2, 4], [2, 0, 0, 2], [2, 2, 2, 2]])
+        score, result = slide_and_merge(board)
+        expected = np.array([[4, 8, 0, 0], [4, 4, 0, 0], [4, 0, 0, 0], [4, 4, 0, 0]])
+        self.assertEqual(score, 28)
+        np.testing.assert_array_equal(result, expected)
 
-            # ##: Get the occupied cells.
-            occupied_cells = argwhere(board != 0)
-            occupied_cells = tuple(map(tuple, occupied_cells))
+    def test_illegal_actions(self):
+        """Test if illegal actions are correctly identified."""
+        board = np.array([[2, 4, 8, 16], [32, 64, 128, 256], [512, 1024, 2048, 4096], [8192, 16384, 32768, 65536]])
+        illegal = illegal_actions(board)
+        self.assertEqual(set(illegal), set(GameBoard.ACTIONS.values()))
 
-            # ##: Check that only two cells is occupied.
-            self.assertEqual(len(occupied_cells), 2)
 
-            # ##: Check that the value of occupied cells is 2 or 4.
-            good_values = [board[cell] in [2, 4] for cell in occupied_cells]
-            self.assertTrue(all(good_values))
+class TestEncodedGameBoard(TestCase):
+    """
+    Test for the EncodedGameBoard class.
+    This class tests the binary encoding of the game state.
+    """
 
-    def test_slide_merge(self):
-        # ##: Actions and board.
-        actions = [self.LEFT, self.UP, self.RIGHT, self.DOWN]
-        boards = [self.LEFT_BOARD, self.UP_BOARD, self.RIGHT_BOARD, self.DOWN_BOARD]
+    def setUp(self):
+        """Initialize a new encoded game board before each test."""
+        self.game = EncodedGameBoard(size=4, block_size=31)
 
-        for action, expected_board in zip(actions, boards):
-            # ##: Applied action.
-            rotated_board = rot90(self.BOARD, k=action)
-            _, updated_board = slide_and_merge(rotated_board)
-            next_board = rot90(updated_board, k=4 - action)
+    def test_init(self):
+        """Test if the encoded game board is correctly initialized."""
+        self.assertEqual(self.game.size, 4)
+        self.assertEqual(self.game._block_size, 31)
 
-            # ##: Compare boards.
-            self.assertTrue(array_equal(expected_board, next_board))
+    def test_reset(self):
+        """Test if the encoded game board is correctly reset."""
+        encoded_board = self.game.reset(seed=42)
+        self.assertEqual(encoded_board.shape, (4 * 4 * 31,))
 
     def test_step(self):
-        # ##: Generate new board.
-        game = GameBoard(size=4)
+        """Test if a step in the encoded game is correctly processed."""
+        self.game.reset(seed=42)
+        encoded_board, reward, done = self.game.step(GameBoard.ACTIONS["left"])
+        self.assertEqual(encoded_board.shape, (4 * 4 * 31,))
+        self.assertIsInstance(reward, (int, float))
+        self.assertIsInstance(done, bool)
 
-        # ##: Check that only two cell are filled.
-        occupied_cells = argwhere(game.board != 0)
-        occupied_cells = tuple(map(tuple, occupied_cells))
-        self.assertEqual(len(occupied_cells), 2)
-
-        # ##: Check that the value of occupied cells is 2 or 4.
-        good_values = [game.board[cell] in [2, 4] for cell in occupied_cells]
-        self.assertTrue(all(good_values))
-
-        # ##: Perform an action.
-        action = choice(legal_actions(game.board))
-        _, _, done = game.step(action)
-
-        # ##: Check that reward is positive and one cell has been filled.
-        occupied_cells = argwhere(game.board != 0)
-        occupied_cells = tuple(map(tuple, occupied_cells))
-        self.assertLessEqual(len(occupied_cells), 3)
-
-        while not done:
-            # ##: Perform an action.
-            action = choice(legal_actions(game.board))
-            _, _, done = game.step(action)
-
-
-class WrapperTest(TestCase):
-
-    def test_encodage(self):
-        # ##: add wrapper.
-        encoded_game = EncodedGameBoard()
-
-        # ##: Get observation from reset.
-        board, _ = encoded_game.reset()
-        self.assertEqual(len(board), 496)
+    def test_observation(self):
+        """Test if the game state is correctly encoded."""
+        board = np.array([[2, 4, 8, 16], [32, 64, 128, 256], [512, 1024, 2048, 4096], [8192, 16384, 32768, 65536]])
+        encoded = self.game.observation(board)
+        self.assertEqual(encoded.shape, (4 * 4 * 31,))
+        self.assertTrue(np.all(np.isin(encoded, [0, 1])))
 
 
 if __name__ == "__main__":

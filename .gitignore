@@ -142,4 +142,5 @@ dmypy.json
 cython_debug/
 
 # Model path
+*.lock
 zoo/

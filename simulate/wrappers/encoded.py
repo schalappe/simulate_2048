@@ -2,7 +2,7 @@
 """
 Encode the game state in binary representation.
 """
-from typing import Tuple, Union
+from typing import Tuple
 
 from numpy import eye, int64, log2, ndarray, reshape
 
@@ -13,6 +13,16 @@ class EncodedGameBoard(GameBoard):
     """Encode the game state in binary representation."""
 
     def __init__(self, size: int = 4, block_size: int = 31):
+        """
+        Initialize the encoded game board.
+
+        Parameters
+        ----------
+        size : int, optional
+            The size of the game board (default is 4).
+        block_size : int, optional
+            The size of the one-hot encoding block (default is 31).
+        """
         self._block_size = block_size
         super().__init__(size)
 
@@ -22,7 +32,7 @@ class EncodedGameBoard(GameBoard):
 
         Parameters
         ----------
-        kwargs : dict
+        **kwargs : dict
             Additional arguments for the reset method of the parent class.
 
         Returns
@@ -33,7 +43,7 @@ class EncodedGameBoard(GameBoard):
         obs = super().reset(**kwargs)
         return self.observation(obs)
 
-    def step(self, action: int) -> Tuple[ndarray, Union[int, float], bool]:
+    def step(self, action: int) -> Tuple[ndarray, float, bool]:
         """
         Apply the action, step the environment, and return an encoded observation.
 
@@ -44,7 +54,7 @@ class EncodedGameBoard(GameBoard):
 
         Returns
         -------
-        Tuple[ndarray, Union[int, float], bool]
+        Tuple[ndarray, float, bool]
             The encoded state of the game board, the reward, whether the game has ended.
         """
         observation, reward, terminated = super().step(action)
@@ -80,8 +90,7 @@ class EncodedGameBoard(GameBoard):
           encoding.
         - The resulting one-hot encoded array is flattened before being returned.
         """
-        obs = observation.copy()
-        obs = reshape(obs, -1)
+        obs = observation.flatten()
         obs[obs == 0] = 1
         obs = log2(obs).astype(int64)
         encoded = eye(self._block_size, dtype=int64)[obs]

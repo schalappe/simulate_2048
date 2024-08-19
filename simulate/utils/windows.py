@@ -6,7 +6,7 @@ from typing import Callable, Optional
 
 from matplotlib import pyplot as plt
 from matplotlib.backend_bases import Event
-from numpy import ndarray, reshape
+from numpy import ndarray
 
 
 class WindowBoard:
@@ -21,7 +21,7 @@ class WindowBoard:
 
     # ##: Colors mapping for different tile values.
     COLORS = {
-        0: "#FFFFFF",
+        0: "#CCC0B3",
         2: "#EEE4DA",
         4: "#ECE0C8",
         8: "#ECB280",
@@ -37,52 +37,40 @@ class WindowBoard:
         8192: "#9ED682",
         16384: "#9ED682",
         32768: "#9ED682",
-        65536: "#9ED682",
-        131072: "#9ED682",
     }
 
     def __init__(self, title: str, size: int):
-        # ##: Create Matplotlib figure and axes.
-        self.fig, self.axe = plt.subplots()
-        self.fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0.1, hspace=0.1)
-        self.axe.set_facecolor("#BBADA0")
-        self.fig.canvas.manager.set_window_title(title)
-
-        self.axe.xaxis.set_ticks_position("none")
-        self.axe.yaxis.set_ticks_position("none")
-        self.axe.set_xticklabels([])
-        self.axe.set_yticklabels([])
-
-        # ##: Create subplots for each cell in the game board.
-        self.texts = []
-        self.axes = [self.fig.add_subplot(size, size, r * size + c) for r in range(size) for c in range(1, size + 1)]
-        for ax in self.axes:
-            text = ax.text(
-                0.5,
-                0.5,
-                "0",
-                horizontalalignment="center",
-                verticalalignment="center",
-                fontsize="x-large",
-                fontweight="demibold",
-            )
-            self.texts.append(text)
-            ax.set_xticks([])
-            ax.set_yticks([])
-
-        self.closed = False
-
-        self.fig.canvas.mpl_connect("close_event", self._close_handler)
-
-    def _close_handler(self, event: Optional[Event] = None):
         """
-        Handle the window close event.
+        Initialize the game board window.
 
         Parameters
         ----------
-        event : Event, optional
-            The Matplotlib close event.
+        title : str
+            The title of the window.
+        size : int
+            The size of the game board.
         """
+        self.fig, self.axe = plt.subplots()
+        self.fig.canvas.manager.set_window_title(title)
+        self._setup_axes(size)
+        self.closed = False
+        self.fig.canvas.mpl_connect("close_event", self._close_handler)
+
+    def _setup_axes(self, size: int):
+        """Set up the axes for the game board."""
+        self.fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0.1, hspace=0.1)
+        self.axe.set_facecolor("#BBADA0")
+        self.axe.axis("off")
+
+        self.texts = []
+        self.axes = [self.fig.add_subplot(size, size, r * size + c + 1) for r in range(size) for c in range(size)]
+        for ax in self.axes:
+            text = ax.text(0.5, 0.5, "", ha="center", va="center", fontsize="x-large", fontweight="demibold")
+            self.texts.append(text)
+            ax.axis("off")
+
+    def _close_handler(self, event: Optional[Event] = None):
+        """Handle the window close event."""
         self.closed = True
 
     def show_image(self, board: ndarray):
@@ -94,8 +82,7 @@ class WindowBoard:
         board : ndarray
             The current state of the game board.
         """
-        values = reshape(board, -1)
-        for ax, text, value in zip(self.axes, self.texts, values):
+        for ax, text, value in zip(self.axes, self.texts, board.flat):
             value = int(value)
             text.set_text(str(value) if value != 0 else "")
             ax.set_facecolor(self.COLORS.get(value, "#FFFFFF"))
@@ -130,8 +117,6 @@ class WindowBoard:
         plt.show()
 
     def close(self):
-        """
-        Close the window.
-        """
+        """Close the window."""
         plt.close(self.fig)
         self.closed = True
