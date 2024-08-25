@@ -1,5 +1,5 @@
 """..."""
 
-from .encoded import EncodedGameBoard
+from .encoded import EncodedTwentyFortyEight
 
-__all__ = ["EncodedGameBoard"]
+__all__ = ["EncodedTwentyFortyEight"]

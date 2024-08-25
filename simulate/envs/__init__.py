@@ -1,5 +1,5 @@
 """..."""
 
-from .gameboard import GameBoard
+from .twentyfortyeight import TwentyFortyEight
 
-__all__ = ["GameBoard"]
+__all__ = ["TwentyFortyEight"]

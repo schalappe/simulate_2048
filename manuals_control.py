@@ -3,7 +3,7 @@
 Play 2048 Game
 """
 from typing import Any
-from simulate.envs import GameBoard
+from simulate.envs import TwentyFortyEight
 import numpy as np
 
 from simulate.utils import WindowBoard
@@ -24,32 +24,32 @@ def redraw(window: WindowBoard, board: np.ndarray):
     window.show_image(board)
 
 
-def reset(envs: GameBoard, window: WindowBoard):
+def reset(envs: TwentyFortyEight, window: WindowBoard):
     """
     Reset and redraw the game board.
 
     Parameters
     ----------
-    envs: GameBoard
+    envs: TwentyFortyEight
         The Game environment
 
     window: WindowBoard
         Class to draw the game board
     """
-    # ## ---> Reset the game.
+    # ##: Reset the game.
     board = envs.reset()
 
-    # ## ----> Redraw the game board.
+    # ##: Redraw the game board.
     redraw(window, board)
 
 
-def step(envs: GameBoard, window: WindowBoard, action: int):
+def step(envs: TwentyFortyEight, window: WindowBoard, action: int):
     """
     Applied action into the game.
 
     Parameters
     ----------
-    envs: GameBoard
+    envs: TwentyFortyEight
         The Game environment
 
     window: WindowBoard
@@ -66,13 +66,13 @@ def step(envs: GameBoard, window: WindowBoard, action: int):
         print("terminated!")
 
 
-def key_handler(envs: GameBoard, window: WindowBoard, event: Any):
+def key_handler(envs: TwentyFortyEight, window: WindowBoard, event: Any):
     """
     Handle the keyboard.
 
     Parameters
     ----------
-    envs: GameBoard
+    envs: TwentyFortyEight
         The Game environment
 
     window: WindowBoard
@@ -97,7 +97,7 @@ def key_handler(envs: GameBoard, window: WindowBoard, event: Any):
 
 
 if __name__ == "__main__":
-    env = GameBoard()
+    env = TwentyFortyEight()
     env.reset()
 
     window_board = WindowBoard(title="2048 Game", size=env.size)
