@@ -1,89 +1,193 @@
 # -*- coding: utf-8 -*-
 """
-Monte carlo Node.
+Monte Carlo Tree Search node classes for decision-making in stochastic environments.
 """
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from numpy import ndarray
+from numpy import array_equal, ndarray
+from numpy.random import PCG64DXSM, default_rng
+
+from simulate.utils import after_state, is_done, latent_state, legal_actions
+
+GENERATOR = default_rng(PCG64DXSM())
 
 
-@dataclass
-class Node:
+@dataclass(kw_only=True)
+class Node(ABC):
     """
-    Represents a node in the Monte Carlo search tree for the 2048 game.
-
-    This class encapsulates the state and metadata of a node in the Monte Carlo Tree Search (MCTS) algorithm. Each
-    node represents a game state and contains information about its children, parent, associated action, and
-    statistical data used in the MCTS process.
+    Base class for Monte Carlo Tree Search nodes.
 
     Attributes
     ----------
-    state : ndarray
-        The game state represented by this node.
-    prior : float
-        The prior probability of selecting this node.
-    is_chance : bool
-        Whether this node represents a chance event.
-    children : List[Node]
-        Child nodes representing possible next states.
-    parent : Optional[Node]
-        The parent node in the search tree.
-    action : Optional[int]
-        The action that led to this node from its parent.
+    state : np.ndarray
+        The current state representation.
+    values : float
+        Accumulated rewards from simulations.
     visits : int
-        The number of times this node has been visited during search.
-    value : float
-        The cumulative value (score) associated with this node.
+        Number of times the node has been visited.
+    children : List
+        List of child nodes.
 
     Methods
     -------
-    expanded : bool
-        Property that checks if the node has been expanded (has children).
-    exploitation : float
-        Property that calculates the average value of the node.
+    fully_expanded()
+        Check if the node is fully expanded.
+    update(reward)
+        Update node statistics after a simulation.
     """
 
     state: ndarray
-    prior: float
-    is_chance: bool
-    children: List[Node] = field(default_factory=list)
-    parent: Optional[Node] = None
-    action: Optional[int] = None
+    values: float = 0.0
     visits: int = 0
-    value: float = 0.0
+    children: List = field(default_factory=list)
 
-    @property
-    def expanded(self) -> bool:
+    @abstractmethod
+    def fully_expanded(self) -> bool:
+        """Check if the node is fully expanded."""
+
+    def update(self, reward: float) -> None:
         """
-        Check if the node has been expanded.
+        Update node statistics after a simulation.
+
+        This method updates the accumulated values and visit count of the node.
+
+        Parameters
+        ----------
+        reward : float
+            The reward received from the simulation.
+        """
+        self.values += reward
+        self.visits += 1
+
+
+@dataclass(kw_only=True)
+class Decision(Node):
+    """
+    Represents a decision node in the Monte Carlo Tree Search.
+
+    Attributes
+    ----------
+    prior : float
+        Prior probability of selecting this node.
+    final : bool
+        Whether this node represents a terminal state.
+    parent : Optional[Chance]
+        The parent chance node.
+    legal_moves : List[int]
+        List of legal actions from this state.
+
+    Methods
+    -------
+    fully_expanded()
+        Check if all legal moves have been explored.
+    add_child()
+        Add a new chance node as a child.
+    """
+
+    prior: float
+    final: bool
+    parent: Optional[Chance] = None
+    legal_moves: List[int] = field(default_factory=list)
+
+    def __post_init__(self):
+        """Initialize legal moves if the node is not final."""
+        if not self.final:
+            self.legal_moves = legal_actions(self.state)
+
+    def fully_expanded(self) -> bool:
+        """Check if all legal moves have been explored."""
+        return len(self.children) == len(self.legal_moves)
+
+    def add_child(self) -> Chance:
+        """
+        Add a new chance node as a child.
+
+        This method selects an unexplored action and creates a new Chance node.
 
         Returns
         -------
-        bool
-            True if the node has children, False otherwise.
+        Chance
+            The newly created chance node.
 
-        Notes
-        -----
-        An expanded node is one that has had its possible child states generated and added to its children list.
+        Raises
+        ------
+        ValueError
+            If all actions have been tried. Node should be fully expanded.
         """
-        return bool(self.children)
+        untried_actions = set(self.legal_moves) - {child.action for child in self.children}
+        if not untried_actions:
+            raise ValueError("All actions have been tried. Node should be fully expanded.")
+        action = int(GENERATOR.choice(list(untried_actions)))
+        child_state, _ = latent_state(self.state, action)
+        child = Chance(state=child_state, parent=self, action=action)
+        self.children.append(child)
+        return child
 
-    @property
-    def exploitation(self) -> float:
+
+@dataclass(kw_only=True)
+class Chance(Node):
+    """
+    Represents a chance node in the Monte Carlo Tree Search.
+
+    Attributes
+    ----------
+    action : int
+        The action taken to reach this node.
+    parent : Decision
+        The parent decision node.
+    next_states : List[Tuple[np.ndarray, float]]
+        Possible next states and their probabilities.
+
+    Methods
+    -------
+    fully_expanded()
+        Check if all possible next states have been explored.
+    add_child()
+        Add a new decision node as a child.
+    """
+
+    action: int
+    parent: Decision
+    next_states: List[Tuple[ndarray, float]] = field(default_factory=list)
+
+    def __post_init__(self):
+        """Initialize possible next states."""
+        self.next_states = after_state(self.state)
+
+    def fully_expanded(self) -> bool:
+        """Check if all possible next states have been explored."""
+        return len(self.children) == len(self.next_states)
+
+    def add_child(self) -> Decision:
         """
-        Calculate the average value of the node.
+        Add a new decision node as a child.
+
+        This method selects an unexplored outcome and creates a new Decision node.
 
         Returns
         -------
-        float
-            The average value (score) of the node, or 0 if the node hasn't been visited.
+        Decision
+            The newly created decision node.
 
-        Notes
-        -----
-        This property is used in the Upper Confidence Bound (UCB) calculation during the selection phase of
-        the Monte Carlo Tree Search algorithm.
+        Raises
+        ------
+        ValueError
+            If all possible outcomes have been tried.
         """
-        return self.value / self.visits if self.visits else 0.0
+        unvisited_outcomes = [
+            (outcome, prior)
+            for outcome, prior in self.next_states
+            if not any(array_equal(outcome, child.state) for child in self.children)
+        ]
+
+        if not unvisited_outcomes:
+            raise ValueError("All outcomes have been tried. Node should be fully expanded.")
+
+        outcome, prior = unvisited_outcomes[GENERATOR.choice(len(unvisited_outcomes))]
+        child = Decision(state=outcome, prior=prior, final=is_done(outcome), parent=self)
+        self.children.append(child)
+        return child

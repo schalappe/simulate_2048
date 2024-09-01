@@ -2,27 +2,26 @@
 """
 List of functions for Monte Carlo Tree Search.
 """
+from typing import Union
+
 from numpy import log, ndarray, sqrt
-from numpy.random import default_rng
+from numpy.random import PCG64DXSM, default_rng
 
-from simulate.utils import after_state, is_done, latent_state, legal_actions, next_state
+from simulate.utils import is_done, legal_actions, next_state
 
-from .node import Node
+from .node import Chance, Decision
 
-GENERATOR = default_rng(seed=None)
+GENERATOR = default_rng(PCG64DXSM())
 
 
-def ucb_score(node: Node, exploration_weight: float) -> float:
+def uct_select(node: Decision, exploration_weight: float) -> Chance:
     """
-    Calculate the Upper Confidence Bound (UCB1) score for a node.
-
-    This function implements the UCB1 formula used in the selection phase of Monte Carlo Tree Search to balance
-    exploration and exploitation.
+    Select a child node using the UCT formula.
 
     Parameters
     ----------
-    node : Node
-        The node for which to calculate the UCB1 score.
+    node : Decision
+        The parent node from which to select a child.
     exploration_weight : float
         The exploration weight parameter in the UCB1 formula.
 
@@ -33,19 +32,19 @@ def ucb_score(node: Node, exploration_weight: float) -> float:
 
     Notes
     -----
-    The UCB1 score is calculated as:
-    exploitation + exploration_weight * sqrt(log(parent_visits) / node_visits)
-
-    If the node has not been visited, it returns positive infinity to ensure unvisited nodes are explored.
+    Uses the UCB1 formula: exploitation + exploration_weight * sqrt(log(parent_visits) / child_visits)
     """
-    if node.visits == 0:
-        return float("inf")
-    exploitation = node.exploitation
-    exploration = sqrt(log(node.parent.visits) / node.visits)
-    return exploitation + exploration_weight * exploration
+    if isinstance(node, Chance):
+        raise ValueError("UCB1 is only defined for Decision nodes.")
+
+    log_visits = log(node.visits)
+    return max(
+        node.children,
+        key=lambda child: child.values / child.visits + exploration_weight * sqrt(log_visits / child.visits),
+    )
 
 
-def select_child(node: Node, exploration_weight: float) -> Node:
+def select_child(node: Union[Decision, Chance], exploration_weight: float) -> Union[Decision, Chance]:
     """
     Select a child node for expansion using the UCB1 algorithm.
 
@@ -54,87 +53,37 @@ def select_child(node: Node, exploration_weight: float) -> Node:
 
     Parameters
     ----------
-    node : Node
+    node : Union[Decision, Chance]
         The current node from which to select a child.
     exploration_weight : float
         The exploration weight for the UCB1 calculation.
 
     Returns
     -------
-    Node
+    Union[Decision, Chance]
         The selected child node.
-
-    Notes
-    -----
-    - If the node has no children, it returns the node itself.
-    - For chance nodes, it randomly selects a child based on prior probabilities.
-    - For decision nodes, it selects the child with the highest UCB1 score.
-    - Unvisited children are prioritized for exploration.
     """
-    # ##: Check if the node has any children,
-    if not node.children:
-        return node
-
-    # ##: If the node is a chance node, sample from the prior probabilities.
-    if node.is_chance:
-        outcomes, probabilities = zip(*[(child, child.prior) for child in node.children])
-        return GENERATOR.choice(outcomes, p=probabilities)
-
-    # ##: Select the child with the highest UCB1 score.
-    unvisited_children = [child for child in node.children if child.visits == 0]
-    if unvisited_children:
-        return unvisited_children[0]
-
-    return max(node.children, key=lambda child: ucb_score(child, exploration_weight))
+    while node.children:
+        if not node.fully_expanded():
+            return node
+        if isinstance(node, Decision):
+            node = uct_select(node, exploration_weight)
+        else:
+            node = GENERATOR.choice(node.children, p=[child.prior for child in node.children])
+    return node
 
 
-def expand_node(node: Node) -> None:
+def simulate(node: Union[Decision, Chance]) -> float:
     """
-    Expand a node by adding its possible child nodes.
+    Perform a rollout simulation from the given node.
 
-    This function is part of the expansion phase in Monte Carlo Tree Search. It generates all possible next states
-    from the current node and adds them as child nodes.
+    This function is part of the simulation phase in Monte Carlo Tree Search. It plays out the game from the
+    given state using random moves until the game ends.
 
     Parameters
     ----------
-    node : Node
-        The node to expand.
-
-    Notes
-    -----
-    - For non-chance parent nodes, it generates probable next states.
-    - For chance parent nodes or the root, it generates child nodes for all legal actions.
-    - Each child node is initialized with appropriate state, prior probability, and parent information.
-    """
-    if node.parent and not node.parent.is_chance:
-        probable_states = after_state(node.state)
-        children = [Node(state=state, prior=prior, is_chance=False, parent=node) for state, prior in probable_states]
-    else:
-        legal_moves = legal_actions(node.state)
-        children = [
-            Node(
-                state=latent_state(node.state, action),
-                prior=1.0,
-                is_chance=True,
-                parent=node,
-                action=action,
-            )
-            for action in legal_moves
-        ]
-    node.children = children
-
-
-def simulate(state: ndarray) -> float:
-    """
-    Simulate a random game from the given state to completion.
-
-    This function is part of the simulation phase in Monte Carlo Tree Search. It plays out the game
-    from the given state using random moves until the game ends.
-
-    Parameters
-    ----------
-    state : np.ndarray
-        The starting state for the simulation.
+    node : Union[Decision, Chance]
+        The starting node for the simulation.
 
     Returns
     -------
@@ -148,21 +97,24 @@ def simulate(state: ndarray) -> float:
     - The total reward is the sum of rewards from each move in the simulation.
     """
     total_reward = 0.0
-    done = False
-    current_state = state.copy()
 
-    while not done:
-        legal_moves = legal_actions(current_state)
-        if not legal_moves:
-            break
-        current_state, reward = next_state(current_state, GENERATOR.choice(legal_moves))
-        done = is_done(current_state)
+    # ##: Initialize the state.
+    if isinstance(node, Chance):
+        states, priors = zip(*node.next_states)
+        state = GENERATOR.choice(states, p=priors)
+    else:
+        state = node.state.copy()
+
+    # ##: Simulate until done.
+    while not is_done(state):
+        action = GENERATOR.choice(legal_actions(state))
+        state, reward = next_state(state, action)
         total_reward += reward
 
     return total_reward
 
 
-def backpropagate(node: Node, reward: float) -> None:
+def backpropagate(node: Decision, reward: float) -> None:
     """
     Back-propagate the reward through the tree.
 
@@ -171,7 +123,7 @@ def backpropagate(node: Node, reward: float) -> None:
 
     Parameters
     ----------
-    node : Node
+    node : Decision
         The starting node for backpropagation (typically a leaf node).
     reward : float
         The reward value to back-propagate.
@@ -181,13 +133,12 @@ def backpropagate(node: Node, reward: float) -> None:
     - The function updates each node's visit count and cumulative value.
     - It continues updating until it reaches the root node (node with no parent).
     """
-    while node:
-        node.visits += 1
-        node.value += reward
+    while node is not None:
+        node.update(reward)
         node = node.parent
 
 
-def monte_carlo_search(root: Node, iterations: int, exploration_weight: float = 1.41) -> None:
+def monte_carlo_search(state: ndarray, iterations: int, exploration_weight: float = 1.41) -> Decision:
     """
     Perform Monte Carlo Tree Search from the given root node.
 
@@ -196,12 +147,17 @@ def monte_carlo_search(root: Node, iterations: int, exploration_weight: float = 
 
     Parameters
     ----------
-    root : Node
-        The root node of the search tree.
+    state : np.ndarray
+        The initial game state.
     iterations : int
         The number of iterations to perform the search.
     exploration_weight : float, optional
         The exploration weight for the UCB1 formula (default is 1.41).
+
+    Returns
+    -------
+    Decision
+        The root node of the search tree.
 
     Notes
     -----
@@ -210,19 +166,15 @@ def monte_carlo_search(root: Node, iterations: int, exploration_weight: float = 
     - After the search, the root's children represent the possible next moves, with visit counts
       indicating their estimated strength.
     """
+    root = Decision(state=state, final=False, prior=0.0)
     for _ in range(iterations):
-        node = root
+        # ##: Select a node and expand.
+        node = select_child(root, exploration_weight)
+        if not is_done(node.state):
+            node = node.add_child()
 
-        # ##: Select a node to expand.
-        while node.expanded:
-            node = select_child(node, exploration_weight)
-
-        # ##: Expand the node by adding a child node.
-        expand_node(node)
-        node = select_child(node, exploration_weight)
-
-        # ##: Simulate a random game.
-        reward = simulate(node.state)
-
-        # ##: Back-propagate the reward through the tree.
+        # ##: Simulate and backpropagate.
+        reward = simulate(node)
         backpropagate(node, reward)
+
+    return root

@@ -16,7 +16,7 @@ ACTORS = {
 }
 
 
-def evaluate(method: str, length: int = 1) -> Dict[int, int]:
+def evaluate(method: str, length: int = 10) -> Dict[int, int]:
     """
     Evaluate a method of reinforcement learning.
 

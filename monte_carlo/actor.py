@@ -4,8 +4,8 @@ Monte Carlo Tree Search for 2048.
 """
 from numpy import ndarray, sqrt
 
-from .node import Node
-from .search import expand_node, monte_carlo_search
+from .node import Decision
+from .search import monte_carlo_search
 
 
 class MonteCarloAgent:
@@ -17,11 +17,11 @@ class MonteCarloAgent:
 
     Methods
     -------
-    choose_action(state: np.ndarray) -> int
+    choose_action(state: ndarray)
         Choose the best action for the given game state using MCTS.
     """
 
-    def __init__(self, iterations: int = 100, exploration_weight: float = sqrt(2)):
+    def __init__(self, iterations: int = 200, exploration_weight: float = sqrt(2)):
         """
         Initialize the Monte Carlo agent.
 
@@ -36,7 +36,7 @@ class MonteCarloAgent:
         self._exploration_weight = exploration_weight
 
     @classmethod
-    def _best_action(cls, root: Node) -> int:
+    def _best_action(cls, root: Decision) -> int:
         """
         Choose the best action based on visit counts.
 
@@ -45,7 +45,7 @@ class MonteCarloAgent:
 
         Parameters
         ----------
-        root : Node
+        root : Decision
             The root node of the search tree.
 
         Returns
@@ -72,9 +72,5 @@ class MonteCarloAgent:
         int
             The chosen action.
         """
-        root = Node(state=state, prior=0.0, is_chance=False)
-        expand_node(root)
-
-        monte_carlo_search(root, iterations=self._iterations, exploration_weight=self._exploration_weight)
-
+        root = monte_carlo_search(state, iterations=self._iterations, exploration_weight=self._exploration_weight)
         return self._best_action(root)

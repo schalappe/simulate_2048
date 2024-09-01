@@ -2,7 +2,7 @@
 """
 Simulator for the 2048 game.
 """
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
 from numpy import all as np_all
 from numpy import any as np_any
@@ -130,7 +130,7 @@ def slide_and_merge(board: ndarray) -> Tuple[float, ndarray]:
     return score, result
 
 
-def latent_state(state: ndarray, action: int) -> ndarray:
+def latent_state(state: ndarray, action: int) -> Tuple[ndarray, float]:
     """
     Compute the next state after applying an action, without adding a new tile.
 
@@ -146,8 +146,8 @@ def latent_state(state: ndarray, action: int) -> ndarray:
 
     Returns
     -------
-    ndarray
-        The new state of the board after applying the action, before adding a new tile.
+    Tuple[ndarray, float]
+        The new state of the board after applying the action, before adding a new tile and the reward.
 
     Notes
     -----
@@ -155,8 +155,8 @@ def latent_state(state: ndarray, action: int) -> ndarray:
     - It's useful for calculating possible next states in game tree search algorithms.
     """
     rotated_board = rot90(state, k=action)
-    _, updated_board = slide_and_merge(rotated_board)
-    return rot90(updated_board, k=-action)
+    reward, updated_board = slide_and_merge(rotated_board)
+    return rot90(updated_board, k=-action), reward
 
 
 def after_state(state: ndarray) -> List[Tuple[ndarray, float]]:
