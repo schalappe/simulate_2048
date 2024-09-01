@@ -161,7 +161,7 @@ class Chance(Node):
     action: int
     parent: Decision
     next_states: List[Tuple[ndarray, float]] = field(default_factory=list)
-    widening_alpha: float = 0.25
+    widening_alpha: float = 0.5
     widening_constant: float = 1.0
 
     def __post_init__(self):

@@ -42,6 +42,42 @@ def uct_select(node: Decision, exploration_weight: float) -> Chance:
     )
 
 
+def puct_select(node: Decision, exploration_weight: float) -> Chance:
+    """
+    Select a child node using the PUCT formula.
+
+    Parameters
+    ----------
+    node : Decision
+        The parent node from which to select a child.
+    exploration_weight : float
+        The exploration weight parameter in the PUCT formula.
+
+    Returns
+    -------
+    Chance
+        The selected child node.
+
+    Notes
+    -----
+    Uses the PUCT formula: Q(s,a) + c_puct * P(s,a) * sqrt(N(s)) / (1 + N(s,a))
+    where:
+    - Q(s,a) is the average value of the child node
+    - P(s,a) is the prior probability of selecting the action
+    - N(s) is the visit count of the parent node
+    - N(s,a) is the visit count of the child node
+    - c_puct is the exploration weight
+    """
+    if isinstance(node, Chance):
+        raise ValueError("PUCT is only defined for Decision nodes.")
+
+    def puct_score(child: Chance) -> float:
+        q_value = child.values / child.visits if child.visits > 0 else 0
+        return q_value + exploration_weight * child.parent.prior * sqrt(node.visits) / (1 + child.visits)
+
+    return max(node.children, key=puct_score)
+
+
 def select_child(node: Node, exploration_weight: float) -> Node:
     """
     Select a child node for expansion using the UCB1 algorithm with progressive widening.
@@ -65,7 +101,7 @@ def select_child(node: Node, exploration_weight: float) -> Node:
         if not node.fully_expanded():
             return node
         if isinstance(node, Decision):
-            node = uct_select(node, exploration_weight)
+            node = puct_select(node, exploration_weight)
         else:
             all_visits = sum(child.visits for child in node.children)
             node = GENERATOR.choice(node.children, p=[child.visits / all_visits for child in node.children])
