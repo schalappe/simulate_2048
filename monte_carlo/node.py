@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-from numpy import array_equal, ndarray
+from numpy import array_equal, ndarray, power
 from numpy.random import PCG64DXSM, default_rng
 
 from simulate.utils import after_state, is_done, latent_state, legal_actions
@@ -48,6 +48,10 @@ class Node(ABC):
     @abstractmethod
     def fully_expanded(self) -> bool:
         """Check if the node is fully expanded."""
+
+    @abstractmethod
+    def add_child(self) -> Node:
+        """Add a new chance node as a child."""
 
     def update(self, reward: float) -> None:
         """
@@ -110,7 +114,7 @@ class Decision(Node):
 
         Returns
         -------
-        Chance
+        ChanceWithWidening
             The newly created chance node.
 
         Raises
@@ -141,6 +145,10 @@ class Chance(Node):
         The parent decision node.
     next_states : List[Tuple[np.ndarray, float]]
         Possible next states and their probabilities.
+    widening_alpha : float
+        Exponent for outcome progressive widening.
+    widening_constant : float
+        Constant for outcome progressive widening.
 
     Methods
     -------
@@ -153,14 +161,18 @@ class Chance(Node):
     action: int
     parent: Decision
     next_states: List[Tuple[ndarray, float]] = field(default_factory=list)
+    widening_alpha: float = 0.25
+    widening_constant: float = 1.0
 
     def __post_init__(self):
         """Initialize possible next states."""
         self.next_states = after_state(self.state)
 
     def fully_expanded(self) -> bool:
-        """Check if all possible next states have been explored."""
-        return len(self.children) == len(self.next_states)
+        """Check if all possible next states have been explored according to progressive widening."""
+        return len(self.children) >= min(
+            len(self.next_states), self.widening_constant * power(self.visits, self.widening_alpha)
+        )
 
     def add_child(self) -> Decision:
         """

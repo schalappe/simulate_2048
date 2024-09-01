@@ -2,14 +2,12 @@
 """
 List of functions for Monte Carlo Tree Search.
 """
-from typing import Union
-
 from numpy import log, ndarray, sqrt
 from numpy.random import PCG64DXSM, default_rng
 
 from simulate.utils import is_done, legal_actions, next_state
 
-from .node import Chance, Decision
+from .node import Chance, Decision, Node
 
 GENERATOR = default_rng(PCG64DXSM())
 
@@ -44,23 +42,23 @@ def uct_select(node: Decision, exploration_weight: float) -> Chance:
     )
 
 
-def select_child(node: Union[Decision, Chance], exploration_weight: float) -> Union[Decision, Chance]:
+def select_child(node: Node, exploration_weight: float) -> Node:
     """
-    Select a child node for expansion using the UCB1 algorithm.
+    Select a child node for expansion using the UCB1 algorithm with progressive widening.
 
     This function is a key part of the selection phase in Monte Carlo Tree Search. It chooses the most promising
     child node based on the UCB1 scores.
 
     Parameters
     ----------
-    node : Union[Decision, Chance]
+    node : Node
         The current node from which to select a child.
     exploration_weight : float
         The exploration weight for the UCB1 calculation.
 
     Returns
     -------
-    Union[Decision, Chance]
+    Node
         The selected child node.
     """
     while node.children:
@@ -69,11 +67,12 @@ def select_child(node: Union[Decision, Chance], exploration_weight: float) -> Un
         if isinstance(node, Decision):
             node = uct_select(node, exploration_weight)
         else:
-            node = GENERATOR.choice(node.children, p=[child.prior for child in node.children])
+            all_visits = sum(child.visits for child in node.children)
+            node = GENERATOR.choice(node.children, p=[child.visits / all_visits for child in node.children])
     return node
 
 
-def simulate(node: Union[Decision, Chance]) -> float:
+def simulate(node: Node) -> float:
     """
     Perform a rollout simulation from the given node.
 
@@ -82,7 +81,7 @@ def simulate(node: Union[Decision, Chance]) -> float:
 
     Parameters
     ----------
-    node : Union[Decision, Chance]
+    node : Node
         The starting node for the simulation.
 
     Returns
@@ -114,7 +113,7 @@ def simulate(node: Union[Decision, Chance]) -> float:
     return total_reward
 
 
-def backpropagate(node: Decision, reward: float) -> None:
+def backpropagate(node: Node, reward: float) -> None:
     """
     Back-propagate the reward through the tree.
 
@@ -123,7 +122,7 @@ def backpropagate(node: Decision, reward: float) -> None:
 
     Parameters
     ----------
-    node : Decision
+    node : Node
         The starting node for backpropagation (typically a leaf node).
     reward : float
         The reward value to back-propagate.
@@ -140,7 +139,7 @@ def backpropagate(node: Decision, reward: float) -> None:
 
 def monte_carlo_search(state: ndarray, iterations: int, exploration_weight: float = 1.41) -> Decision:
     """
-    Perform Monte Carlo Tree Search from the given root node.
+    Perform Monte Carlo Tree Search with Progressive Widening from the given root node.
 
     This function implements the main loop of the Monte Carlo Tree Search algorithm. It repeatedly selects, expands,
     simulates, and back-propagates for a specified  number of iterations.
@@ -163,6 +162,7 @@ def monte_carlo_search(state: ndarray, iterations: int, exploration_weight: floa
     -----
     - Each iteration consists of four phases: selection, expansion, simulation, and backpropagation.
     - The search builds a tree of possible game states and actions, estimating their values.
+    - Progressive Widening is applied to manage the branching factor in outcome spaces.
     - After the search, the root's children represent the possible next moves, with visit counts
       indicating their estimated strength.
     """
@@ -173,7 +173,7 @@ def monte_carlo_search(state: ndarray, iterations: int, exploration_weight: floa
         if not is_done(node.state):
             node = node.add_child()
 
-        # ##: Simulate and backpropagate.
+        # ##: Simulate and back-propagate.
         reward = simulate(node)
         backpropagate(node, reward)
 
