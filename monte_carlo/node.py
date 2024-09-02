@@ -25,6 +25,8 @@ class Node(ABC):
     ----------
     state : np.ndarray
         The current state representation.
+    depth : float
+        The depth of the node in the tree.
     values : float
         Accumulated rewards from simulations.
     visits : int
@@ -41,6 +43,7 @@ class Node(ABC):
     """
 
     state: ndarray
+    depth: float = 0.0
     values: float = 0.0
     visits: int = 0
     children: List = field(default_factory=list)
@@ -127,7 +130,7 @@ class Decision(Node):
             raise ValueError("All actions have been tried. Node should be fully expanded.")
         action = int(GENERATOR.choice(list(untried_actions)))
         child_state, _ = latent_state(self.state, action)
-        child = Chance(state=child_state, parent=self, action=action)
+        child = Chance(state=child_state, parent=self, action=action, depth=self.depth + 0.5)
         self.children.append(child)
         return child
 
@@ -200,6 +203,6 @@ class Chance(Node):
             raise ValueError("All outcomes have been tried. Node should be fully expanded.")
 
         outcome, prior = unvisited_outcomes[GENERATOR.choice(len(unvisited_outcomes))]
-        child = Decision(state=outcome, prior=prior, final=is_done(outcome), parent=self)
+        child = Decision(state=outcome, prior=prior, final=is_done(outcome), parent=self, depth=self.depth + 0.5)
         self.children.append(child)
         return child
