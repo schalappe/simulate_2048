@@ -38,15 +38,17 @@ def evaluate(method: str, length: int = 10) -> Dict[int, int]:
     with trange(length) as period:
         for num in period:
             env = TwentyFortyEight()
+            rewards, done = 0, False
 
             # ##: Play a game.
-            while not env.is_finished:
+            while not done:
                 # ##: Interact with environment
-                env.step(actor.choose_action(env.observation))
+                _, reward, done = env.step(actor.choose_action(env.observation))
+                rewards += reward
 
                 # ##: Log.
                 period.set_description(f"Evaluation: {num + 1}")
-                period.set_postfix(score=np.sum(env.observation), max=np.max(env.observation))
+                period.set_postfix(score=rewards, max=np.max(env.observation))
 
             # ##: Save max cells.
             score.append(int(np.max(env.observation)))
@@ -64,4 +66,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     result = evaluate(method=args.method)
-    print(f"Evalation de la methode {args.method}, score: {result}")
+    print(f"Evaluation de la methode {args.method}, score: {result}")

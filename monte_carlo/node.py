@@ -181,7 +181,7 @@ class Chance(Node):
         """
         Add a new decision node as a child.
 
-        This method selects an unexplored outcome and creates a new Decision node.
+        Selects an unexplored outcome and creates a new Decision node.
 
         Returns
         -------
@@ -193,16 +193,16 @@ class Chance(Node):
         ValueError
             If all possible outcomes have been tried.
         """
-        unvisited_outcomes = [
+        unvisited = [
             (outcome, prior)
             for outcome, prior in self.next_states
             if not any(array_equal(outcome, child.state) for child in self.children)
         ]
 
-        if not unvisited_outcomes:
+        if not unvisited:
             raise ValueError("All outcomes have been tried. Node should be fully expanded.")
 
-        outcome, prior = unvisited_outcomes[GENERATOR.choice(len(unvisited_outcomes))]
+        outcome, prior = unvisited[GENERATOR.choice(len(unvisited))]
         child = Decision(state=outcome, prior=prior, final=is_done(outcome), parent=self, depth=self.depth + 0.5)
         self.children.append(child)
         return child

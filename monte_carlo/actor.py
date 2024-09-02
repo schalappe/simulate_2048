@@ -21,14 +21,14 @@ class MonteCarloAgent:
         Choose the best action for the given game state using MCTS.
     """
 
-    def __init__(self, iterations: int = 200, exploration_weight: float = sqrt(2)):
+    def __init__(self, iterations: int = 10, exploration_weight: float = sqrt(2)):
         """
         Initialize the Monte Carlo agent.
 
         Parameters
         ----------
         iterations : int, optional
-            The number of iterations for each search (default is 100).
+            The number of iterations for each search (default is 10).
         exploration_weight : float, optional
             The exploration weight for UCB1 (default is sqrt(2)).
         """

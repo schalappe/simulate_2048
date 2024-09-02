@@ -3,7 +3,6 @@
 List of functions for Monte Carlo Tree Search.
 """
 from math import log, sqrt
-from typing import List
 
 from numpy import log2, ndarray
 from numpy.random import PCG64DXSM, default_rng
@@ -231,12 +230,7 @@ def backpropagate(node: Node, reward: float) -> None:
 
 
 def monte_carlo_search(
-    state: ndarray,
-    iterations: int,
-    base_simulations: int = 2,
-    exploration_weight: float = 1.41,
-    convergence_window: int = 100,
-    convergence_threshold: float = 0.95,
+    state: ndarray, iterations: int, base_simulations: int = 10, exploration_weight: float = 1.41
 ) -> Decision:
     """
     Perform Monte Carlo Tree Search.
@@ -251,13 +245,9 @@ def monte_carlo_search(
     iterations : int
         The number of iterations to perform the search.
     base_simulations : int, optional
-        The base number of simulations to perform for each node (default is 5).
+        The base number of simulations to perform for each node (default is 10).
     exploration_weight : float, optional
         The exploration weight for the UCB1 formula (default is 1.41).
-    convergence_window : int, optional
-        The number of recent iterations to consider for convergence (default is 100).
-    convergence_threshold : float, optional
-        The threshold for considering the search converged (default is 0.95).
 
     Returns
     -------
@@ -266,19 +256,12 @@ def monte_carlo_search(
 
     Notes
     -----
-    - Each iteration consists of four phases: selection, expansion, simulation, and backpropagation.
     - Uses adaptive simulation count to allocate more computational resources to important nodes.
-    - The search builds a tree of possible game states and actions, estimating their values.
     - Progressive Widening is applied to manage the branching factor in outcome spaces.
-    - After the search, the root's children represent the possible next moves, with visit counts
-      indicating their estimated strength.
-    - The search is considered converged if the best action remains the same for a certain
-      percentage (convergence_threshold) of the recent iterations (convergence_window).
     """
     root = Decision(state=state, final=False, prior=1.0)
-    best_action_history: List[int] = []
 
-    for iteration in range(iterations):
+    for _ in range(iterations):
         # ##: Select a node and expand.
         node = select_child(root, exploration_weight)
         if not is_done(node.state):
@@ -288,15 +271,5 @@ def monte_carlo_search(
         simulation_count = adaptive_simulation_count(node, base_simulations)
         reward = simulate(node, simulation_count)
         backpropagate(node, reward)
-
-        # ##: Check for convergence.
-        current_best_action = max(root.children, key=lambda child: child.visits).action
-        best_action_history.append(current_best_action)
-
-        if iteration >= convergence_window:
-            recent_actions = best_action_history[-convergence_window:]
-            most_common_action = max(set(recent_actions), key=recent_actions.count)
-            if recent_actions.count(most_common_action) / convergence_window >= convergence_threshold:
-                break
 
     return root
