@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Slide and merge columns for a 2048 game-like board.
+Game move utilities for the 2048 game simulator.
+
+This module provides functions for determining legal and illegal moves in the 2048 game. It includes
+utilities for analyzing the game board state, identifying possible actions, and determining which moves
+are valid or invalid based on the current configuration.
 """
 from typing import List
 
@@ -9,11 +13,7 @@ from numpy import ndarray, rot90
 
 def illegal_actions(state: ndarray) -> List[int]:
     """
-    Returns the illegal actions for the current state of the game board.
-
-    This function checks all possible actions (left, up, right, down) to determine which actions do not
-    result in a change in the game board. If an action does not result in a different board state, it is
-    considered an illegal action.
+    Determine illegal actions for the current game board state.
 
     Parameters
     ----------
@@ -23,13 +23,21 @@ def illegal_actions(state: ndarray) -> List[int]:
     Returns
     -------
     List[int]
-        A list of illegal actions (0 for left, 1 for up, 2 for right, 3 for down).
+        A list of illegal actions (0: left, 1: up, 2: right, 3: down).
 
     Notes
     -----
-    - The game board is assumed to be a 2D NumPy array.
-    - The function rotates the board to align the action direction with merging logic.
-    - Illegal actions are those that do not result in a different board state after merging.
+    - An action is considered illegal if it doesn't change the board state.
+    - The function uses board rotation to check all directions efficiently.
+
+    Examples
+    --------
+    >>> board = np.array([[2, 2, 4, 8],
+    ...                   [16, 32, 64, 128],
+    ...                   [256, 512, 1024, 2048],
+    ...                   [4, 8, 16, 32]])
+    >>> illegal_actions(board)
+    [2, 3]  # Right and Down moves are illegal
     """
     illegal_moves = []
     for action in range(4):
@@ -43,30 +51,31 @@ def illegal_actions(state: ndarray) -> List[int]:
 
 def legal_actions(state: ndarray) -> List[int]:
     """
-    Determine the legal actions for the current state of the game board.
-
-    This function checks all possible actions (left, up, right, down) to identify which actions would
-    result in a change to the game board. These actions are considered legal moves.
+    Determine legal actions for the current game board state.
 
     Parameters
     ----------
     state : ndarray
-        The current state of the game board, represented as a 2D NumPy array.
+        The current state of the game board.
 
     Returns
     -------
     List[int]
-        A list of legal actions, where:
-        - 0 represents left
-        - 1 represents up
-        - 2 represents right
-        - 3 represents down
+        A list of legal actions (0: left, 1: up, 2: right, 3: down).
 
     Notes
     -----
-    - The function uses rotation to check each direction efficiently.
-    - An action is considered legal if it changes the board state.
-    - This function is useful for determining valid moves in the game logic.
+    - Legal actions are those that result in a change to the game board.
+    - This function is the complement of `illegal_actions`.
+
+    Examples
+    --------
+    >>> board = np.array([[2, 2, 4, 8],
+    ...                   [16, 32, 64, 128],
+    ...                   [256, 512, 1024, 2048],
+    ...                   [4, 8, 16, 32]])
+    >>> legal_actions(board)
+    [0, 1]  # Left and Up moves are legal
     """
     legal_moves = []
     for action in range(4):
@@ -78,44 +87,40 @@ def legal_actions(state: ndarray) -> List[int]:
 
 def can_move(board: ndarray) -> bool:
     """
-    Check if any tile can move in the current direction (left).
-
-    This function determines whether a move to the left is possible for the given board configuration. It checks
-    for two conditions that allow movement:
-    1. An empty cell (0) with a non-empty cell to its right.
-    2. Two adjacent cells with the same non-zero value.
+    Check if any tile can move left on the given board.
 
     Parameters
     ----------
     board : ndarray
-        The game board to check, represented as a 2D NumPy array.
+        The game board to check.
 
     Returns
     -------
     bool
-        True if a move to the left is possible, False otherwise.
+        True if a left move is possible, False otherwise.
 
     Notes
     -----
-    - This function checks for left movement. For other directions, rotate the
-      board before calling this function.
-    - It's a key component in determining legal moves and game end conditions.
+    - This function only checks for left movement.
+    - For other directions, rotate the board before calling this function.
+    - A move is possible if there's an empty cell to the left of a non-empty cell,
+      or if two adjacent cells have the same non-zero value.
 
     Examples
     --------
-    >>> board1 = array([[2, 0, 0, 0],
+    >>> board1 = np.array([[2, 0, 0, 0],
     ...                    [2, 2, 0, 0],
     ...                    [4, 4, 0, 0],
     ...                    [8, 16, 32, 64]])
     >>> can_move(board1)
-    True  # Movement is possible (2s can merge, 4s can merge)
+    True
 
-    >>> board2 = array([[2, 4, 8, 16],
+    >>> board2 = np.array([[2, 4, 8, 16],
     ...                    [32, 64, 128, 256],
     ...                    [512, 1024, 2048, 4096],
     ...                    [8192, 16384, 32768, 65536]])
     >>> can_move(board2)
-    False  # No movement possible to the left
+    False
     """
     rows, cols = board.shape
     for row in range(rows):

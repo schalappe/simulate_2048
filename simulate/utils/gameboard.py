@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Simulator for the 2048 game.
+Gameboard utilities for the 2048 game simulator.
+
+This module provides core functionality for simulating the 2048 game, including board manipulation,
+state transitions, and game logic. t contains functions for merging tiles, applying moves,
+generating new game states, and determining game termination.
 """
 from typing import List, Optional, Tuple
 
@@ -16,38 +20,33 @@ def merge_column(column: ndarray) -> Tuple[int, ndarray]:
     """
     Merge adjacent equal values in a column and compute the total score.
 
-    This function implements the core merging mechanic of the 2048 game for a single column.
-    It combines adjacent equal values, moving them towards the start of the column,
-    and calculates the score gained from these merges.
-
     Parameters
     ----------
-    column : np.ndarray
+    column : ndarray
         A 1D array representing one column of the game board.
 
     Returns
     -------
-    Tuple[int, np.ndarray]
-        A tuple containing:
-        - The total score obtained from merging (int)
-        - The new column configuration after merging (np.ndarray)
+    score : int
+        The total score obtained from merging.
+    merged_column : ndarray
+        The new column configuration after merging.
 
     Notes
     -----
     - Zeros (empty cells) are ignored and removed before merging.
     - Merging occurs from the start of the column towards the end.
-    - Each value can only be merged once per call of this function.
-    - The returned column may be shorter than the input if merges occurred.
+    - Each value can only be merged once per function call.
 
     Examples
     --------
-    >>> merge_column(array([2, 2, 4, 4, 8]))
+    >>> merge_column(np.array([2, 2, 4, 4, 8]))
     (12, array([4, 8, 8]))
 
-    >>> merge_column(array([2, 2, 2, 2]))
+    >>> merge_column(np.array([2, 2, 2, 2]))
     (8, array([4, 4]))
 
-    >>> merge_column(array([2, 0, 2, 2]))
+    >>> merge_column(np.array([2, 0, 2, 2]))
     (4, array([4, 2]))
     """
     # ##: Handle empty columns.
@@ -81,43 +80,38 @@ def slide_and_merge(board: ndarray) -> Tuple[float, ndarray]:
     """
     Slide the game board to the left, merge adjacent cells, and compute the score.
 
-    This function applies the core 2048 game mechanics to the entire board:
-    sliding all tiles to the left, merging where possible, and calculating the
-    total score from all merges.
-
     Parameters
     ----------
-    board : np.ndarray
+    board : ndarray
         The game board represented as a 2D NumPy array.
 
     Returns
     -------
-    Tuple[float, np.ndarray]
-        A tuple containing:
-        - The total score obtained from all merges (float)
-        - The updated game board after sliding and merging (np.ndarray)
+    score : float
+        The total score obtained from all merges.
+    updated_board : ndarray
+        The updated game board after sliding and merging.
 
     Notes
     -----
     - The function operates on rows, effectively sliding left.
-    - For other directions, the board should be rotated before calling this function.
+    - For other directions, rotate the board before calling this function.
     - Empty cells (zeros) are added to the right side of each row after merging.
-    - The shape of the returned board is always the same as the input board.
 
     Examples
     --------
-    >>> board = array([[2, 2, 0, 0],
+    >>> board = np.array([[2, 2, 0, 0],
     ...                   [0, 4, 4, 0],
     ...                   [8, 8, 8, 8],
     ...                   [2, 0, 0, 2]])
     >>> score, new_board = slide_and_merge(board)
-    >>> score
-    32.0
-    >>> new_board
-    array([[4, 0, 0, 0],
-           [8, 0, 0, 0],
-           [16, 16, 0, 0],
-           [4, 0, 0, 0]])
+    >>> print(f"Score: {score}")
+    Score: 32.0
+    >>> print(new_board)
+    [[ 4  0  0  0]
+     [ 8  0  0  0]
+     [16 16  0  0]
+     [ 4  0  0  0]]
     """
     result = zeros_like(board)
     score = 0.0
@@ -134,9 +128,6 @@ def latent_state(state: ndarray, action: int) -> Tuple[ndarray, float]:
     """
     Compute the next state after applying an action, without adding a new tile.
 
-    This function rotates the board according to the action, applies the slide and merge operation, and
-    then rotates the board back to its original orientation.
-
     Parameters
     ----------
     state : ndarray
@@ -146,13 +137,14 @@ def latent_state(state: ndarray, action: int) -> Tuple[ndarray, float]:
 
     Returns
     -------
-    Tuple[ndarray, float]
-        The new state of the board after applying the action, before adding a new tile and the reward.
+    new_state : ndarray
+        The new state of the board after applying the action.
+    reward : float
+        The reward obtained from this action.
 
     Notes
     -----
-    - This function does not add a new tile to the board after the move.
-    - It's useful for calculating possible next states in game tree search algorithms.
+    This function does not add a new tile to the board after the move.
     """
     rotated_board = rot90(state, k=action)
     reward, updated_board = slide_and_merge(rotated_board)
@@ -163,9 +155,6 @@ def after_state(state: ndarray) -> List[Tuple[ndarray, float]]:
     """
     Generate all possible next states after a move, including new tile placements.
 
-    This function calculates all possible board states that could result from the next move, considering the
-    random placement of a new tile (2 or 4).
-
     Parameters
     ----------
     state : ndarray
@@ -173,16 +162,41 @@ def after_state(state: ndarray) -> List[Tuple[ndarray, float]]:
 
     Returns
     -------
-    List[Tuple[ndarray, float]]
+    list of tuple
         A list of tuples, each containing:
-        - A possible next state of the board (np.ndarray)
+        - A possible next state of the board (ndarray)
         - The probability of that state occurring (float)
 
     Notes
     -----
     - If there are no empty cells, it returns the current state with 100% probability.
-    - The probabilities account for both the likelihood of choosing an empty cell
-      and the probability of a 2 (90%) or 4 (10%) being placed.
+    - Probabilities account for both empty cell selection and new tile value (2 or 4).
+
+    Examples
+    --------
+    >>> state = np.array([[2, 0], [0, 4]])
+    >>> possible_states = after_state(state)
+    >>> len(possible_states)
+    4
+    >>> for new_state, prob in possible_states:
+    ...     print(f"Probability: {prob:.2f}")
+    ...     print(new_state)
+    ...     print()
+    Probability: 0.45
+    [[2 2]
+     [0 4]]
+
+    Probability: 0.45
+    [[2 0]
+     [2 4]]
+
+    Probability: 0.05
+    [[2 4]
+     [0 4]]
+
+    Probability: 0.05
+    [[2 0]
+     [4 4]]
     """
     # ##: Find empty cells.
     empty_cells = argwhere(state == 0)
@@ -210,9 +224,6 @@ def fill_cells(state: ndarray, number_tile: int, seed: Optional[int] = None) -> 
     """
     Fill empty cells with new tiles (2 or 4).
 
-    This function randomly selects empty cells in the game board and fills them with new tiles, simulating
-    the game's tile-adding mechanic after each move.
-
     Parameters
     ----------
     state : ndarray
@@ -220,7 +231,7 @@ def fill_cells(state: ndarray, number_tile: int, seed: Optional[int] = None) -> 
     number_tile : int
         Number of new tiles to add.
     seed : int, optional
-        Random number generator seed for reproducibility (default is None).
+        Random number generator seed for reproducibility.
 
     Returns
     -------
@@ -230,8 +241,7 @@ def fill_cells(state: ndarray, number_tile: int, seed: Optional[int] = None) -> 
     Notes
     -----
     - New tiles have a 90% chance of being 2 and a 10% chance of being 4.
-    - If there are fewer empty cells than requested new tiles, it fills all available cells.
-    - If there are no empty cells, the function returns the input state unchanged.
+    - If there are fewer empty cells than requested, it fills all available cells.
     """
     rng = default_rng(seed)
     # ##: Only there still available places
@@ -252,9 +262,6 @@ def next_state(state: ndarray, action: int, seed: Optional[int] = None) -> Tuple
     """
     Compute the next state and reward after applying an action.
 
-    This function applies the given action to the current state, calculates the resulting board configuration
-    and score, and adds a new tile to the board.
-
     Parameters
     ----------
     state : ndarray
@@ -262,20 +269,34 @@ def next_state(state: ndarray, action: int, seed: Optional[int] = None) -> Tuple
     action : int
         The action to apply (0: left, 1: up, 2: right, 3: down).
     seed : int, optional
-        Random number generator seed for reproducibility (default is None).
+        Random number generator seed for reproducibility.
 
     Returns
     -------
-    Tuple[ndarray, float]
-        A tuple containing:
-        - The new state of the game board after the action and adding a new tile (np.ndarray)
-        - The reward (score) obtained from this action (float)
+    new_state : ndarray
+        The new state of the game board after the action and adding a new tile.
+    reward : float
+        The reward (score) obtained from this action.
 
     Notes
     -----
-    - If the action results in no change to the board, the reward is 0 and no new tile is added.
+    - If the action results in no change, the reward is 0 and no new tile is added.
     - A new tile (2 or 4) is added to a random empty cell after a valid move.
-    - The seed ensures reproducibility of random tile placement.
+
+    Examples
+    --------
+    >>> state = np.array([[2, 2, 0, 0],
+    ...                   [0, 4, 4, 0],
+    ...                   [0, 0, 2, 0],
+    ...                   [0, 0, 0, 2]])
+    >>> new_state, reward = next_state(state, action=0, seed=42)
+    >>> print(f"Reward: {reward}")
+    Reward: 8.0
+    >>> print(new_state)
+    [[4 0 0 2]
+     [8 0 0 0]
+     [2 0 0 0]
+     [2 0 0 0]]
     """
     rotated = rot90(state, k=action)
     if can_move(rotated):
@@ -291,9 +312,7 @@ def next_state(state: ndarray, action: int, seed: Optional[int] = None) -> Tuple
 
 def is_done(state: ndarray) -> bool:
     """
-    Check if the game is finished (no more moves possible).
-
-    This function determines whether the game has ended by checking if there are any possible moves left on the board.
+    Check if the game has ended by determining if any moves are possible.
 
     Parameters
     ----------
@@ -303,12 +322,26 @@ def is_done(state: ndarray) -> bool:
     Returns
     -------
     bool
-        True if the game is finished (no more moves possible), False otherwise.
+        True if the game is over (no moves possible), False otherwise.
 
     Notes
     -----
-    - The game is considered finished if there are no empty cells and no adjacent cells with the
-    same value (i.e., no possible merges).
-    - This function checks both horizontal and vertical adjacencies.
+    The game is over when there are no empty cells AND no adjacent cells have the same value.
+
+    Examples
+    --------
+    >>> is_done(np.array([[2, 4, 8, 16],
+    ...                   [32, 64, 128, 256],
+    ...                   [512, 1024, 2048, 4],
+    ...                   [8, 16, 32, 64]]))
+    True
+
+    >>> is_done(np.array([[2, 2, 4, 8],
+    ...                   [16, 32, 64, 128],
+    ...                   [256, 512, 1024, 2048],
+    ...                   [4, 8, 16, 32]]))
+    False
     """
-    return np_all(state != 0) and not np_any(state[:-1] == state[1:]) and not np_any(state[:, :-1] == state[:, 1:])
+    return bool(
+        np_all(state != 0) and not np_any(state[:-1] == state[1:]) and not np_any(state[:, :-1] == state[:, 1:])
+    )

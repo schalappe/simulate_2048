@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Class describing the 2048 game for an agent.
+2048 Game Environment for Reinforcement Learning Agents
+
+This module implements a customizable 2048 game environment designed for training and
+evaluating reinforcement learning agents. It provides a flexible and efficient interface
+for interacting with the game, allowing agents to learn optimal strategies for achieving
+high scores and reaching the 2048 tile.
 """
-from typing import Optional, Tuple
+from typing import Tuple
 
 from numpy import int64, ndarray, zeros
 
@@ -33,6 +38,19 @@ class TwentyFortyEight:
         Applies an action to the game state and returns the result.
     render(mode: str = "human") -> None
         Renders the current game state.
+
+    Notes
+    -----
+    - This class implements the core game logic for 2048.
+    - The game board is represented as a 2D numpy array.
+    - Actions are encoded as integers: 0 (left), 1 (up), 2 (right), 3 (down).
+
+    Examples
+    --------
+    >>> env = TwentyFortyEight()
+    >>> initial_state = env.reset()
+    >>> next_state, reward, done = env.step(TwentyFortyEight.ACTIONS['left'])
+    >>> env.render()
     """
 
     # ##: All Actions.
@@ -48,7 +66,7 @@ class TwentyFortyEight:
             The size of the square grid (default is 4).
         """
         self.size = size
-        self._board: Optional[ndarray] = None
+        self._board: ndarray = zeros((self.size, self.size), dtype=int64)
         self.reset()
 
     @property
@@ -86,6 +104,21 @@ class TwentyFortyEight:
         -------
         ndarray
             The new game board as a 2D numpy array.
+
+        Notes
+        -----
+        - The initial board will have two tiles, typically 2's, placed randomly.
+        - There's a small chance (10%) that one of the initial tiles will be a 4.
+
+        Examples
+        --------
+        >>> env = TwentyFortyEight()
+        >>> initial_state = env.reset()
+        >>> print(initial_state)
+        [[0 0 2 0]
+         [0 0 0 0]
+         [0 0 2 0]
+         [0 0 0 0]]
         """
         self._board = zeros((self.size, self.size), dtype=int64)
         self._board = fill_cells(state=self._board, number_tile=2)
@@ -110,6 +143,20 @@ class TwentyFortyEight:
             - The updated game board (ndarray)
             - The reward obtained from this action (float)
             - Whether the game has finished after this action (bool)
+
+        Notes
+        -----
+        - The reward is the sum of merged tile values in this step.
+        - The game is considered finished if no more moves are possible.
+        - A new tile (2 or 4) is added to the board after each successful move.
+
+        Examples
+        --------
+        >>> env = TwentyFortyEight()
+        >>> env.reset()
+        >>> next_state, reward, done = env.step(TwentyFortyEight.ACTIONS['left'])
+        >>> print(f"Reward: {reward}, Game Over: {done}")
+        Reward: 4.0, Game Over: False
         """
         self._board, reward = next_state(state=self._board, action=action)
         return self._board, reward, self.is_finished
@@ -128,7 +175,7 @@ class TwentyFortyEight:
 
         Notes
         -----
-        This method provides a simple text-based visualization of the game board. For more advanced rendering,
+        - This method provides a simple text-based visualization of the game board. For more advanced rendering,
         consider implementing a graphical interface.
         """
         if mode == "human":

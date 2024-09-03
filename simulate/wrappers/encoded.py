@@ -1,6 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Encode the game state in binary representation.
+Encode the 2048 game state using a binary representation.
+
+This module provides an encoded version of the 2048 game environment, where the game state is represented
+as a binary matrix. Each cell's value is encoded using a one-hot vector, allowing for more efficient
+processing by machine learning algorithms.
+
+The encoding preserves all information from the original game state while transforming it into a format
+that is often more suitable for neural networks and other ML models. This can lead to improved learning
+performance and faster convergence in reinforcement learning tasks.
 """
 from typing import Tuple
 
@@ -28,8 +36,22 @@ class EncodedTwentyFortyEight(TwentyFortyEight):
 
     Notes
     -----
-    The encoding process converts each cell value to its base-2 logarithm and then applies one-hot encoding.
-    This results in a 3D array where each cell is represented by a one-hot vector.
+    - This class extends TwentyFortyEight to provide an encoded representation of the game state.
+    - The encoding uses a one-hot representation for each cell value.
+    - The encoded state is a 2D array where each row represents a cell and each column a possible value.
+    - The encoding process involves taking the log2 of each cell value and then one-hot encoding it.
+    - The resulting array has shape (board_size^2, block_size), where block_size is typically 31.
+    - This encoding allows for easier processing by machine learning models.
+
+    Examples
+    --------
+    >>> env = EncodedTwentyFortyEight()
+    >>> encoded_state = env.reset()
+    >>> print(encoded_state.shape)
+    (16, 31)
+    >>> next_state, reward, done = env.step(EncodedTwentyFortyEight.ACTIONS['left'])
+    >>> print(next_state.shape)
+    (16, 31)
     """
 
     def __init__(self, size: int = 4, block_size: int = 31):
@@ -99,15 +121,19 @@ class EncodedTwentyFortyEight(TwentyFortyEight):
 
         Notes
         -----
-        The encoding process involves the following steps:
-        1. Flatten the game board state.
-        2. Replace zeros with ones to avoid issues with logarithm calculations.
-        3. Take the base-2 logarithm of each cell value.
-        4. Apply one-hot encoding to the logarithmic values.
-        5. Reshape the result into a 3D array.
+        - The encoding process involves taking the log2 of each cell value and then one-hot encoding it.
+        - The resulting array has shape (board_size^2, block_size), where block_size is typically 31.
+        - This encoding allows for easier processing by machine learning models.
 
-        The resulting array has shape (board_size, board_size, block_size),
-        where each cell is represented by a one-hot vector of length block_size.
+        Examples
+        --------
+        >>> env = EncodedTwentyFortyEight()
+        >>> env.reset()
+        >>> encoded_obs = env.observation
+        >>> print(encoded_obs.shape)
+        (16, 31)
+        >>> print(encoded_obs[0])  # First cell's encoding
+        [1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
         """
         obs = super().observation.flatten()
         obs[obs == 0] = 1

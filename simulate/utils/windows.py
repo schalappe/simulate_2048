@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Display the environment in a window.
+Graphical User Interface for 2048 Game Environment
+
+This module provides functionality to create and manage a graphical window for displaying the
+2048 game board. It utilizes Matplotlib for rendering and handling user interactions, offering
+a visual representation of the game state and allowing for real-time updates as the game progresses.
 """
 from typing import Callable, Optional
 
@@ -12,9 +16,6 @@ from numpy import ndarray
 class WindowBoard:
     """
     A class for rendering and managing the 2048 game board using Matplotlib.
-
-    This class provides a graphical representation of the 2048 game board, allowing for real-time visualization
-    and updates of the game state in a window. It uses Matplotlib for rendering and handles window events.
 
     Methods
     -------
@@ -29,8 +30,20 @@ class WindowBoard:
 
     Notes
     -----
-    This class is inspired by the Minigrid environment from Farama Foundation. It provides a simple yet effective
-    way to visualize the 2048 game board and can be easily integrated into game logic or AI agents.
+    - This class uses Matplotlib for rendering, which allows for interactive
+      visualization of the game board.
+    - The window can be updated in real-time as the game progresses.
+    - Keyboard events can be captured for user input or control.
+
+    Examples
+    --------
+    >>> board = np.array([[2, 4, 8, 16],
+    ...                   [32, 64, 128, 256],
+    ...                   [512, 1024, 2048, 4],
+    ...                   [8, 16, 32, 64]])
+    >>> window = WindowBoard("2048 Game", 4)
+    >>> window.show_image(board)
+    >>> window.show(block=False)
     """
 
     # ##: Colors mapping for different tile values.
@@ -81,16 +94,25 @@ class WindowBoard:
         size : int
             The size of the game board.
         """
-        self.fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0.1, hspace=0.1)
+        self.fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0.05, hspace=0.05)
         self.axe.set_facecolor("#BBADA0")
-        self.axe.axis("off")
+
+        # ##: Remove all ticks and labels for a cleaner game board appearance.
+        self.axe.tick_params(axis="both", which="both", length=0)
+        self.axe.set_xticklabels([])
+        self.axe.set_yticklabels([])
+        self.axe.set_xticks([])
+        self.axe.set_yticks([])
 
         self.texts = []
         self.axes = [self.fig.add_subplot(size, size, r * size + c + 1) for r in range(size) for c in range(size)]
         for ax in self.axes:
             text = ax.text(0.5, 0.5, "", ha="center", va="center", fontsize="x-large", fontweight="demibold")
             self.texts.append(text)
-            ax.axis("off")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
 
     def _close_handler(self, event: Optional[Event] = None):
         """
@@ -109,13 +131,23 @@ class WindowBoard:
         """
         Show or update the game board.
 
-        This method updates the display with the current state of the game board, setting appropriate
-        colors and values for each tile.
-
         Parameters
         ----------
         board : ndarray
             The current state of the game board to be displayed.
+
+        Notes
+        -----
+        - This method updates the colors and text of each cell in the display.
+        - It uses the COLORS dictionary to map tile values to colors.
+
+        Examples
+        --------
+        >>> board = np.array([[2, 4, 8, 16],
+        ...                   [32, 64, 128, 256],
+        ...                   [512, 1024, 2048, 4],
+        ...                   [8, 16, 32, 64]])
+        >>> window.show_image(board)
         """
         for ax, text, value in zip(self.axes, self.texts, board.flat):
             value = int(value)
@@ -130,12 +162,21 @@ class WindowBoard:
         """
         Register a keyboard event handler.
 
-        This method allows the registration of a custom function to handle keyboard events in the game window.
-
         Parameters
         ----------
         key_handler : Callable
             A function to handle keyboard events.
+
+        Notes
+        -----
+        - The registered function will be called whenever a key is pressed in the window.
+        - This can be used to implement user controls or AI input for the game.
+
+        Examples
+        --------
+        >>> def on_key_press(event):
+        ...     print(f"Key pressed: {event.key}")
+        >>> window.register_key_handler(on_key_press)
         """
         self.fig.canvas.mpl_connect("key_press_event", key_handler)
 
