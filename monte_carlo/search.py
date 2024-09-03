@@ -1,6 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-List of functions for Monte Carlo Tree Search.
+Monte Carlo Tree Search (MCTS) implementation for the 2048 game.
+
+This module provides a collection of functions that implement the core components of
+the Monte Carlo Tree Search algorithm, specifically tailored for the 2048 game.
+It includes functions for tree traversal, node selection, expansion, simulation,
+and backpropagation.
+
+This implementation takes into account the stochastic nature of the 2048 game,
+handling both decision nodes (where the player chooses a move) and chance nodes
+(where a new tile is randomly added to the board).
 """
 from math import log, sqrt
 
@@ -18,12 +27,15 @@ def normalize_reward(reward: float, max_tile: int = 2 ** (4**2)) -> float:
     """
     Normalize the reward using logarithmic scaling.
 
+    This function compresses the range of rewards to make the learning process more
+    stable across different stages of the game.
+
     Parameters
     ----------
     reward : float
         The raw reward obtained from a move.
-    max_tile : int
-        The maximum tile value for the given board size.
+    max_tile : int, optional
+        The maximum tile value for the given board size, by default 2**(4**2).
 
     Returns
     -------
@@ -32,9 +44,16 @@ def normalize_reward(reward: float, max_tile: int = 2 ** (4**2)) -> float:
 
     Notes
     -----
-    This method uses logarithmic normalization to compress the range of rewards,
-    making the learning process more stable across different stages of the game.
     The normalization is based on the maximum theoretical tile value for the given board size.
+    This logarithmic normalization helps in maintaining consistent reward scales throughout
+    the game progression.
+
+    Examples
+    --------
+    >>> normalize_reward(1024)
+    0.5
+    >>> normalize_reward(0)
+    0.0
     """
     if reward == 0:
         return 0.0
@@ -73,7 +92,10 @@ def uct_select(node: Decision, exploration_weight: float) -> Chance:
 
 def puct_select(node: Decision, exploration_weight: float) -> Chance:
     """
-    Select a child node using the PUCT formula.
+    Select a child node using the PUCT (Predictor + UCT) formula.
+
+    This function implements the selection strategy used in AlphaGo and similar algorithms,
+    balancing exploration and exploitation.
 
     Parameters
     ----------
@@ -89,13 +111,26 @@ def puct_select(node: Decision, exploration_weight: float) -> Chance:
 
     Notes
     -----
-    Uses the PUCT formula: Q(s,a) + c_puct * P(s,a) * sqrt(N(s)) / (1 + N(s,a))
+    The PUCT formula is: Q(s,a) + c_puct * P(s,a) * sqrt(N(s)) / (1 + N(s,a))
     where:
     - Q(s,a) is the average value of the child node
     - P(s,a) is the prior probability of selecting the action
     - N(s) is the visit count of the parent node
     - N(s,a) is the visit count of the child node
     - c_puct is the exploration weight
+
+    This method provides a balance between exploring promising actions and exploiting known
+    good actions.
+
+    Raises
+    ------
+    ValueError
+        If the input node is not a Decision node.
+
+    Examples
+    --------
+    >>> root = Decision(state=initial_state, prior=1.0, final=False)
+    >>> best_child = puct_select(root, exploration_weight=1.0)
     """
     if isinstance(node, Chance):
         raise ValueError("PUCT is only defined for Decision nodes.")
@@ -111,8 +146,8 @@ def select_child(node: Node, exploration_weight: float) -> Node:
     """
     Select a child node for expansion using the UCB1 algorithm with progressive widening.
 
-    This function is a key part of the selection phase in Monte Carlo Tree Search. It chooses the most promising
-    child node based on the UCB1 scores.
+    This function is a key part of the selection phase in Monte Carlo Tree Search. It chooses
+    the most promising child node based on the UCB1 scores.
 
     Parameters
     ----------
@@ -209,8 +244,8 @@ def backpropagate(node: Node, reward: float) -> None:
     """
     Back-propagate the reward through the tree.
 
-    This function is part of the backpropagation phase in Monte Carlo Tree Search. It updates the visit count
-    and value of each node in the path from the simulated leaf node to the root.
+    This function is part of the backpropagation phase in Monte Carlo Tree Search. It updates
+    the visit count and value of each node in the path from the simulated leaf node to the root.
 
     Parameters
     ----------
@@ -233,21 +268,21 @@ def monte_carlo_search(
     state: ndarray, iterations: int, base_simulations: int = 10, exploration_weight: float = 1.41
 ) -> Decision:
     """
-    Perform Monte Carlo Tree Search.
+    Perform Monte Carlo Tree Search on the given game state.
 
-    This function implements the main loop of the Monte Carlo Tree Search algorithm. It repeatedly selects, expands,
-    simulates, and back-propagates for a specified  number of iterations.
+    This function implements the main loop of the Monte Carlo Tree Search algorithm, iteratively
+    building a search tree to find the best action.
 
     Parameters
     ----------
-    state : np.ndarray
+    state : ndarray
         The initial game state.
     iterations : int
         The number of iterations to perform the search.
     base_simulations : int, optional
-        The base number of simulations to perform for each node (default is 10).
+        The base number of simulations to perform for each node, by default 10.
     exploration_weight : float, optional
-        The exploration weight for the UCB1 formula (default is 1.41).
+        The exploration weight for the PUCT formula, by default 1.41.
 
     Returns
     -------
@@ -256,8 +291,21 @@ def monte_carlo_search(
 
     Notes
     -----
-    - Uses adaptive simulation count to allocate more computational resources to important nodes.
-    - Progressive Widening is applied to manage the branching factor in outcome spaces.
+    The function uses adaptive simulation count to allocate more computational resources to
+    important nodes. Progressive Widening is applied to manage the branching factor in
+    outcome spaces.
+
+    The search process consists of four main steps:
+    1. Selection: Traverse the tree to select a promising node.
+    2. Expansion: Add a new child to the selected node.
+    3. Simulation: Perform rollouts from the new node.
+    4. Backpropagation: Update node statistics based on simulation results.
+
+    Examples
+    --------
+    >>> initial_state = create_initial_state()
+    >>> root = monte_carlo_search(initial_state, iterations=1000)
+    >>> best_action = max(root.children, key=lambda c: c.visits).action
     """
     root = Decision(state=state, final=False, prior=1.0)
 

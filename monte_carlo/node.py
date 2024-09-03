@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Monte Carlo Tree Search node classes for decision-making in stochastic environments.
+Monte Carlo Tree Search (MCTS) node classes for decision-making in stochastic environments.
+
+This module defines the node structures used in the Monte Carlo Tree Search algorithm,
+specifically tailored for stochastic environments like the 2048 game. It provides
+abstract and concrete node classes that represent different states in the search tree,
+enabling efficient exploration and decision-making.
 """
 from __future__ import annotations
 
@@ -19,42 +24,55 @@ GENERATOR = default_rng(PCG64DXSM())
 @dataclass(kw_only=True)
 class Node(ABC):
     """
-    Base class for Monte Carlo Tree Search nodes.
+    Abstract base class for Monte Carlo Tree Search nodes.
+
+    This class represents a node in the Monte Carlo Tree Search algorithm, containing common attributes
+    and methods for both decision and chance nodes.
 
     Attributes
     ----------
-    state : np.ndarray
-        The current state representation.
+    state : ndarray
+        The game state represented by this node.
     depth : float
-        The depth of the node in the tree.
+        The depth of the node in the search tree.
     values : float
         Accumulated rewards from simulations.
     visits : int
-        Number of times the node has been visited.
+        Number of times the node has been visited during search.
     children : List
         List of child nodes.
+    parent : Node
+        The parent node.
 
     Methods
     -------
     fully_expanded()
-        Check if the node is fully expanded.
+        Check if the node has explored all possible children.
+    add_child()
+        Add a new child node.
     update(reward)
         Update node statistics after a simulation.
+
+    Notes
+    -----
+    This abstract base class ensures that all node types in the MCTS implement the necessary methods for
+    tree traversal and updates.
     """
 
     state: ndarray
     depth: float = 0.0
     values: float = 0.0
     visits: int = 0
+    parent: Node
     children: List = field(default_factory=list)
 
     @abstractmethod
     def fully_expanded(self) -> bool:
-        """Check if the node is fully expanded."""
+        """Check if the node has explored all possible children."""
 
     @abstractmethod
     def add_child(self) -> Node:
-        """Add a new chance node as a child."""
+        """Add a new child node."""
 
     def update(self, reward: float) -> None:
         """
@@ -76,14 +94,17 @@ class Decision(Node):
     """
     Represents a decision node in the Monte Carlo Tree Search.
 
+    A decision node corresponds to a state where the agent must choose an action. It contains information
+    about legal moves and manages child chance nodes.
+
     Attributes
     ----------
     prior : float
         Prior probability of selecting this node.
     final : bool
         Whether this node represents a terminal state.
-    parent : Optional[Chance]
-        The parent chance node.
+    parent : Chance, optional
+        The parent chance node, if any.
     legal_moves : List[int]
         List of legal actions from this state.
 
@@ -93,6 +114,10 @@ class Decision(Node):
         Check if all legal moves have been explored.
     add_child()
         Add a new chance node as a child.
+
+    Notes
+    -----
+    Decision nodes are key points in the MCTS where the algorithm decides which action to explore or exploit next.
     """
 
     prior: float
@@ -117,7 +142,7 @@ class Decision(Node):
 
         Returns
         -------
-        ChanceWithWidening
+        Chance
             The newly created chance node.
 
         Raises
@@ -140,6 +165,9 @@ class Chance(Node):
     """
     Represents a chance node in the Monte Carlo Tree Search.
 
+    A chance node corresponds to a state after an action has been taken, but before the
+    environment's stochastic response. It manages the transition to possible next states.
+
     Attributes
     ----------
     action : int
@@ -159,6 +187,11 @@ class Chance(Node):
         Check if all possible next states have been explored.
     add_child()
         Add a new decision node as a child.
+
+    Notes
+    -----
+    Chance nodes implement progressive widening to manage the branching factor in stochastic
+    environments with large or continuous outcome spaces.
     """
 
     action: int

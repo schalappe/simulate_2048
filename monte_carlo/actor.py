@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Monte Carlo Tree Search for 2048.
+Monte Carlo Tree Search implementation for the 2048 game.
+
+This module provides a Monte Carlo Tree Search (MCTS) based agent for playing the 2048 game.
+It includes classes and functions for performing MCTS, evaluating game states, and making
+decisions based on the search results.
+
+The MCTS algorithm used here is specifically tailored for the 2048 game, taking into account
+its unique characteristics such as the stochastic nature of tile spawns and the large state space.
 """
 from numpy import ndarray, sqrt
 
@@ -15,10 +22,27 @@ class MonteCarloAgent:
     This agent implements the Monte Carlo Tree Search (MCTS) algorithm to make decisions in the 2048 game.
     It explores possible game states and actions to choose the most promising move.
 
+    Attributes
+    ----------
+    iterations : int
+        The number of iterations for each search.
+    exploration_weight : float
+        The exploration weight for the PUCT formula.
+
     Methods
     -------
     choose_action(state: ndarray)
         Choose the best action for the given game state using MCTS.
+
+    Notes
+    -----
+    The agent uses the PUCT (Predictor + UCT) formula for node selection,
+    which balances exploration and exploitation during the search process.
+
+    Examples
+    --------
+    >>> agent = MonteCarloAgent(iterations=100, exploration_weight=1.41)
+    >>> best_action = agent.choose_action(current_game_state)
     """
 
     def __init__(self, iterations: int = 10, exploration_weight: float = sqrt(2)):
@@ -32,8 +56,8 @@ class MonteCarloAgent:
         exploration_weight : float, optional
             The exploration weight for UCB1 (default is sqrt(2)).
         """
-        self._iterations = iterations
-        self._exploration_weight = exploration_weight
+        self.iterations = iterations
+        self.exploration_weight = exploration_weight
 
     @classmethod
     def _best_action(cls, root: Decision) -> int:
@@ -59,8 +83,9 @@ class MonteCarloAgent:
         """
         Choose the best action using Monte Carlo Tree Search.
 
-        This method performs MCTS on the given game state to determine the best action to take. It creates a search
-        tree, expands it through multiple iterations, and then selects the most promising action.
+        This method performs MCTS on the given game state to determine the best action to take.
+        It creates a search tree, expands it through multiple iterations, and then selects the most
+        promising action.
 
         Parameters
         ----------
@@ -71,6 +96,17 @@ class MonteCarloAgent:
         -------
         int
             The chosen action.
+
+        Notes
+        -----
+        The method uses the number of visits to each child node as the criterion for selecting the best action,
+        which is a common approach in MCTS implementations.
+
+        Examples
+        --------
+        >>> current_state = get_current_game_state()
+        >>> action = agent.choose_action(current_state)
+        >>> new_state = apply_action(current_state, action)
         """
-        root = monte_carlo_search(state, iterations=self._iterations, exploration_weight=self._exploration_weight)
+        root = monte_carlo_search(state, iterations=self.iterations, exploration_weight=self.exploration_weight)
         return self._best_action(root)
