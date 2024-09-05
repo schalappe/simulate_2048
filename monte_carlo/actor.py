@@ -38,11 +38,6 @@ class MonteCarloAgent:
     -----
     The agent uses the PUCT (Predictor + UCT) formula for node selection,
     which balances exploration and exploitation during the search process.
-
-    Examples
-    --------
-    >>> agent = MonteCarloAgent(iterations=100, exploration_weight=1.41)
-    >>> best_action = agent.choose_action(current_game_state)
     """
 
     def __init__(self, iterations: int = 10, exploration_weight: float = sqrt(2)):
@@ -101,12 +96,6 @@ class MonteCarloAgent:
         -----
         The method uses the number of visits to each child node as the criterion for selecting the best action,
         which is a common approach in MCTS implementations.
-
-        Examples
-        --------
-        >>> current_state = get_current_game_state()
-        >>> action = agent.choose_action(current_state)
-        >>> new_state = apply_action(current_state, action)
         """
         root = monte_carlo_search(state, iterations=self.iterations, exploration_weight=self.exploration_weight)
         return self._best_action(root)

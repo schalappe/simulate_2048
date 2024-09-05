@@ -37,17 +37,6 @@ def merge_column(column: ndarray) -> Tuple[int, ndarray]:
     - Zeros (empty cells) are ignored and removed before merging.
     - Merging occurs from the start of the column towards the end.
     - Each value can only be merged once per function call.
-
-    Examples
-    --------
-    >>> merge_column(np.array([2, 2, 4, 4, 8]))
-    (12, array([4, 8, 8]))
-
-    >>> merge_column(np.array([2, 2, 2, 2]))
-    (8, array([4, 4]))
-
-    >>> merge_column(np.array([2, 0, 2, 2]))
-    (4, array([4, 2]))
     """
     # ##: Handle empty columns.
     non_zero = column[column != 0]
@@ -97,21 +86,6 @@ def slide_and_merge(board: ndarray) -> Tuple[float, ndarray]:
     - The function operates on rows, effectively sliding left.
     - For other directions, rotate the board before calling this function.
     - Empty cells (zeros) are added to the right side of each row after merging.
-
-    Examples
-    --------
-    >>> board = np.array([[2, 2, 0, 0],
-    ...                   [0, 4, 4, 0],
-    ...                   [8, 8, 8, 8],
-    ...                   [2, 0, 0, 2]])
-    >>> score, new_board = slide_and_merge(board)
-    >>> print(f"Score: {score}")
-    Score: 32.0
-    >>> print(new_board)
-    [[ 4  0  0  0]
-     [ 8  0  0  0]
-     [16 16  0  0]
-     [ 4  0  0  0]]
     """
     result = zeros_like(board)
     score = 0.0
@@ -171,32 +145,6 @@ def after_state(state: ndarray) -> List[Tuple[ndarray, float]]:
     -----
     - If there are no empty cells, it returns the current state with 100% probability.
     - Probabilities account for both empty cell selection and new tile value (2 or 4).
-
-    Examples
-    --------
-    >>> state = np.array([[2, 0], [0, 4]])
-    >>> possible_states = after_state(state)
-    >>> len(possible_states)
-    4
-    >>> for new_state, prob in possible_states:
-    ...     print(f"Probability: {prob:.2f}")
-    ...     print(new_state)
-    ...     print()
-    Probability: 0.45
-    [[2 2]
-     [0 4]]
-
-    Probability: 0.45
-    [[2 0]
-     [2 4]]
-
-    Probability: 0.05
-    [[2 4]
-     [0 4]]
-
-    Probability: 0.05
-    [[2 0]
-     [4 4]]
     """
     # ##: Find empty cells.
     empty_cells = argwhere(state == 0)
@@ -282,21 +230,6 @@ def next_state(state: ndarray, action: int, seed: Optional[int] = None) -> Tuple
     -----
     - If the action results in no change, the reward is 0 and no new tile is added.
     - A new tile (2 or 4) is added to a random empty cell after a valid move.
-
-    Examples
-    --------
-    >>> state = np.array([[2, 2, 0, 0],
-    ...                   [0, 4, 4, 0],
-    ...                   [0, 0, 2, 0],
-    ...                   [0, 0, 0, 2]])
-    >>> new_state, reward = next_state(state, action=0, seed=42)
-    >>> print(f"Reward: {reward}")
-    Reward: 8.0
-    >>> print(new_state)
-    [[4 0 0 2]
-     [8 0 0 0]
-     [2 0 0 0]
-     [2 0 0 0]]
     """
     rotated = rot90(state, k=action)
     if can_move(rotated):
@@ -327,20 +260,6 @@ def is_done(state: ndarray) -> bool:
     Notes
     -----
     The game is over when there are no empty cells AND no adjacent cells have the same value.
-
-    Examples
-    --------
-    >>> is_done(np.array([[2, 4, 8, 16],
-    ...                   [32, 64, 128, 256],
-    ...                   [512, 1024, 2048, 4],
-    ...                   [8, 16, 32, 64]]))
-    True
-
-    >>> is_done(np.array([[2, 2, 4, 8],
-    ...                   [16, 32, 64, 128],
-    ...                   [256, 512, 1024, 2048],
-    ...                   [4, 8, 16, 32]]))
-    False
     """
     return bool(
         np_all(state != 0) and not np_any(state[:-1] == state[1:]) and not np_any(state[:, :-1] == state[:, 1:])

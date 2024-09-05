@@ -92,13 +92,6 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         Tuple[ndarray, ...]
             A tuple containing batches of states, actions, rewards, next_states, dones,
             and importance sampling weights.
-
-        Examples
-        --------
-        >>> buffer = PrioritizedReplayBuffer(1000)
-        >>> buffer.add(np.array([1, 2, 3]), 0, 1.0, np.array([2, 3, 4]), False)
-        >>> result = buffer.sample(1)
-        >>> states, actions, rewards, next_states, dones, weights = result
         """
         probs = self.priorities[: len(self.buffer)] ** self.alpha
         probs /= probs.sum()
@@ -109,7 +102,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         weights /= weights.max()
 
         states, actions, rewards, next_states, dones = zip(*samples)
-        return (array(states), array(actions), array(rewards), array(next_states), array(dones), weights)
+        return array(states), array(actions), array(rewards), array(next_states), array(dones), weights
 
     def update_priorities(self, indices: List[int], priorities: List[float]) -> None:
         """

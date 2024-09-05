@@ -34,16 +34,6 @@ class WindowBoard:
       visualization of the game board.
     - The window can be updated in real-time as the game progresses.
     - Keyboard events can be captured for user input or control.
-
-    Examples
-    --------
-    >>> board = np.array([[2, 4, 8, 16],
-    ...                   [32, 64, 128, 256],
-    ...                   [512, 1024, 2048, 4],
-    ...                   [8, 16, 32, 64]])
-    >>> window = WindowBoard("2048 Game", 4)
-    >>> window.show_image(board)
-    >>> window.show(block=False)
     """
 
     # ##: Colors mapping for different tile values.
@@ -140,14 +130,6 @@ class WindowBoard:
         -----
         - This method updates the colors and text of each cell in the display.
         - It uses the COLORS dictionary to map tile values to colors.
-
-        Examples
-        --------
-        >>> board = np.array([[2, 4, 8, 16],
-        ...                   [32, 64, 128, 256],
-        ...                   [512, 1024, 2048, 4],
-        ...                   [8, 16, 32, 64]])
-        >>> window.show_image(board)
         """
         for ax, text, value in zip(self.axes, self.texts, board.flat):
             value = int(value)
@@ -171,12 +153,6 @@ class WindowBoard:
         -----
         - The registered function will be called whenever a key is pressed in the window.
         - This can be used to implement user controls or AI input for the game.
-
-        Examples
-        --------
-        >>> def on_key_press(event):
-        ...     print(f"Key pressed: {event.key}")
-        >>> window.register_key_handler(on_key_press)
         """
         self.fig.canvas.mpl_connect("key_press_event", key_handler)
 

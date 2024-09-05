@@ -44,13 +44,6 @@ class TwentyFortyEight:
     - This class implements the core game logic for 2048.
     - The game board is represented as a 2D numpy array.
     - Actions are encoded as integers: 0 (left), 1 (up), 2 (right), 3 (down).
-
-    Examples
-    --------
-    >>> env = TwentyFortyEight()
-    >>> initial_state = env.reset()
-    >>> next_state, reward, done = env.step(TwentyFortyEight.ACTIONS['left'])
-    >>> env.render()
     """
 
     # ##: All Actions.
@@ -109,16 +102,6 @@ class TwentyFortyEight:
         -----
         - The initial board will have two tiles, typically 2's, placed randomly.
         - There's a small chance (10%) that one of the initial tiles will be a 4.
-
-        Examples
-        --------
-        >>> env = TwentyFortyEight()
-        >>> initial_state = env.reset()
-        >>> print(initial_state)
-        [[0 0 2 0]
-         [0 0 0 0]
-         [0 0 2 0]
-         [0 0 0 0]]
         """
         self._board = zeros((self.size, self.size), dtype=int64)
         self._board = fill_cells(state=self._board, number_tile=2)
@@ -149,14 +132,6 @@ class TwentyFortyEight:
         - The reward is the sum of merged tile values in this step.
         - The game is considered finished if no more moves are possible.
         - A new tile (2 or 4) is added to the board after each successful move.
-
-        Examples
-        --------
-        >>> env = TwentyFortyEight()
-        >>> env.reset()
-        >>> next_state, reward, done = env.step(TwentyFortyEight.ACTIONS['left'])
-        >>> print(f"Reward: {reward}, Game Over: {done}")
-        Reward: 4.0, Game Over: False
         """
         self._board, reward = next_state(state=self._board, action=action)
         return self._board, reward, self.is_finished
@@ -175,8 +150,8 @@ class TwentyFortyEight:
 
         Notes
         -----
-        - This method provides a simple text-based visualization of the game board. For more advanced rendering,
-        consider implementing a graphical interface.
+        This method provides a simple text-based visualization of the game board. For more advanced
+        rendering, consider implementing a graphical interface.
         """
         if mode == "human":
             for row in self._board.tolist():

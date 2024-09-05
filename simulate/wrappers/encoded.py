@@ -42,16 +42,6 @@ class EncodedTwentyFortyEight(TwentyFortyEight):
     - The encoding process involves taking the log2 of each cell value and then one-hot encoding it.
     - The resulting array has shape (board_size^2, block_size), where block_size is typically 31.
     - This encoding allows for easier processing by machine learning models.
-
-    Examples
-    --------
-    >>> env = EncodedTwentyFortyEight()
-    >>> encoded_state = env.reset()
-    >>> print(encoded_state.shape)
-    (16, 31)
-    >>> next_state, reward, done = env.step(EncodedTwentyFortyEight.ACTIONS['left'])
-    >>> print(next_state.shape)
-    (16, 31)
     """
 
     def __init__(self, size: int = 4, block_size: int = 31):
@@ -124,16 +114,6 @@ class EncodedTwentyFortyEight(TwentyFortyEight):
         - The encoding process involves taking the log2 of each cell value and then one-hot encoding it.
         - The resulting array has shape (board_size^2, block_size), where block_size is typically 31.
         - This encoding allows for easier processing by machine learning models.
-
-        Examples
-        --------
-        >>> env = EncodedTwentyFortyEight()
-        >>> env.reset()
-        >>> encoded_obs = env.observation
-        >>> print(encoded_obs.shape)
-        (16, 31)
-        >>> print(encoded_obs[0])  # First cell's encoding
-        [1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
         """
         obs = super().observation.flatten()
         obs[obs == 0] = 1

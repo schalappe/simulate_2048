@@ -71,12 +71,6 @@ class UniformReplayBuffer(ReplayBuffer):
         -------
         Tuple[ndarray, ...]
             A tuple containing batches of states, actions, rewards, next_states, and dones.
-
-        Examples
-        --------
-        >>> buffer = ReplayBuffer(1000)
-        >>> buffer.add(np.array([1, 2, 3]), 0, 1.0, np.array([2, 3, 4]), False)
-        >>> states, actions, rewards, next_states, dones = buffer.sample(1)
         """
         indices = GENERATOR.choice(len(self.buffer), batch_size, replace=False)
         batch = [self.buffer[i] for i in indices]

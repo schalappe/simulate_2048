@@ -47,13 +47,6 @@ def normalize_reward(reward: float, max_tile: int = 2 ** (4**2)) -> float:
     The normalization is based on the maximum theoretical tile value for the given board size.
     This logarithmic normalization helps in maintaining consistent reward scales throughout
     the game progression.
-
-    Examples
-    --------
-    >>> normalize_reward(1024)
-    0.5
-    >>> normalize_reward(0)
-    0.0
     """
     if reward == 0:
         return 0.0
@@ -126,11 +119,6 @@ def puct_select(node: Decision, exploration_weight: float) -> Chance:
     ------
     ValueError
         If the input node is not a Decision node.
-
-    Examples
-    --------
-    >>> root = Decision(state=initial_state, prior=1.0, final=False)
-    >>> best_child = puct_select(root, exploration_weight=1.0)
     """
     if isinstance(node, Chance):
         raise ValueError("PUCT is only defined for Decision nodes.")
@@ -300,12 +288,6 @@ def monte_carlo_search(
     2. Expansion: Add a new child to the selected node.
     3. Simulation: Perform rollouts from the new node.
     4. Backpropagation: Update node statistics based on simulation results.
-
-    Examples
-    --------
-    >>> initial_state = create_initial_state()
-    >>> root = monte_carlo_search(initial_state, iterations=1000)
-    >>> best_action = max(root.children, key=lambda c: c.visits).action
     """
     root = Decision(state=state, final=False, prior=1.0)
 
