@@ -10,8 +10,8 @@ from tqdm import trange
 
 from monte_carlo.actor import MonteCarloAgent
 from dqn.agent import DQNActor
-from simulate.envs import TwentyFortyEight
-from simulate.wrappers import EncodedTwentyFortyEight
+from twentyfortyeight.envs import TwentyFortyEight
+from twentyfortyeight.wrappers import EncodedTwentyFortyEight
 from pathlib import Path
 
 ACTORS = {

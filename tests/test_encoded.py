@@ -6,8 +6,8 @@ from unittest import TestCase, main
 
 import numpy as np
 
-from simulate.envs import TwentyFortyEight
-from simulate.wrappers import EncodedTwentyFortyEight
+from twentyfortyeight.envs import TwentyFortyEight
+from twentyfortyeight.wrappers import EncodedTwentyFortyEight
 
 
 class TestEncodedGameBoard(TestCase):

@@ -3,10 +3,10 @@
 Play 2048 Game
 """
 from typing import Any
-from simulate.envs import TwentyFortyEight
+from twentyfortyeight.envs import TwentyFortyEight
 import numpy as np
 
-from simulate.utils import WindowBoard
+from twentyfortyeight.utils import WindowBoard
 
 
 def redraw(window: WindowBoard, board: np.ndarray):
@@ -85,15 +85,15 @@ def key_handler(envs: TwentyFortyEight, window: WindowBoard, event: Any):
 
     if event.key == "escape":
         window.close()
-        return
+        return None
 
     if event.key == "backspace":
         reset(envs, window)
-        return
+        return None
 
     if event.key in envs.ACTIONS:
         step(envs, window, envs.ACTIONS[event.key])
-        return
+        return None
 
 
 if __name__ == "__main__":

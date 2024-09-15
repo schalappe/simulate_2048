@@ -4,7 +4,8 @@ Provides functions for binary encoding of state observations, including a standa
 and a flatten-and-encode variant.
 """
 from __future__ import annotations
-from numpy import ndarray, log2, eye, int64
+
+from numpy import eye, int64, log2, ndarray
 
 
 def encode(state: ndarray, encodage_size: int) -> ndarray:

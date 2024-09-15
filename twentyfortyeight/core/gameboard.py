@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gameboard utilities for the 2048 game simulator.
-
-This module provides core functionality for simulating the 2048 game, including board manipulation,
-state transitions, and game logic. t contains functions for merging tiles, applying moves,
-generating new game states, and determining game termination.
+Core functionality for simulating the 2048 game, including board manipulation and game logic.
 """
 from typing import List, Optional, Tuple
 
@@ -13,7 +9,7 @@ from numpy import any as np_any
 from numpy import argwhere, array, ndarray, rot90, zeros_like
 from numpy.random import default_rng
 
-from .gamemove import can_move
+from twentyfortyeight.core.gamemove import can_move
 
 
 def merge_column(column: ndarray) -> Tuple[int, ndarray]:

@@ -16,8 +16,8 @@ from math import log, sqrt
 from numpy import ndarray
 from numpy.random import PCG64DXSM, default_rng
 
-from simulate.utils import is_done, legal_actions, next_state
-from simulate.wrappers import normalize_reward
+from twentyfortyeight.utils import is_done, legal_actions, next_state
+from twentyfortyeight.wrappers import normalize_reward
 
 from .node import Chance, Decision, Node
 

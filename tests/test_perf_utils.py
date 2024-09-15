@@ -1,7 +1,7 @@
 import timeit
 import numpy as np
 from typing import Callable, List
-from simulate.utils import slide_and_merge, illegal_actions
+from twentyfortyeight.utils import slide_and_merge, illegal_actions
 
 
 generator = np.random.default_rng(42)

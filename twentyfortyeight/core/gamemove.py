@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Game move utilities for the 2048 game simulator.
-
-This module provides functions for determining legal and illegal moves in the 2048 game. It includes
-utilities for analyzing the game board state, identifying possible actions, and determining which moves
-are valid or invalid based on the current configuration.
+Game move utilities for the 2048 game simulator, providing functions for determining legal and illegal moves.
 """
 from typing import List
 

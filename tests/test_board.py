@@ -6,8 +6,8 @@ from unittest import TestCase, main
 
 import numpy as np
 
-from simulate.envs import TwentyFortyEight
-from simulate.utils import merge_column, slide_and_merge, next_state, is_done, illegal_actions
+from twentyfortyeight.envs import TwentyFortyEight
+from twentyfortyeight.utils import merge_column, slide_and_merge, next_state, is_done, illegal_actions
 
 
 class TestGameBoard(TestCase):

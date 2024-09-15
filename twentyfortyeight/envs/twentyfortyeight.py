@@ -1,17 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-2048 Game Environment for Reinforcement Learning Agents
-
-This module implements a customizable 2048 game environment designed for training and
-evaluating reinforcement learning agents. It provides a flexible and efficient interface
-for interacting with the game, allowing agents to learn optimal strategies for achieving
-high scores and reaching the 2048 tile.
+2048 game environment for reinforcement learning agents.
 """
-from typing import Tuple
+from typing import Optional, Tuple
 
 from numpy import int64, ndarray, zeros
 
-from simulate.utils import fill_cells, is_done, next_state
+from twentyfortyeight.core import fill_cells, is_done, next_state
+from twentyfortyeight.utils import encode_flatten, normalize_reward
 
 
 class TwentyFortyEight:
@@ -20,36 +16,16 @@ class TwentyFortyEight:
 
     This class implements the core mechanics of the 2048 game, providing methods to initialize the game board,
     make moves, and check the game state.
-
-    Attributes
-    ----------
-    ACTIONS : dict
-        A dictionary mapping action names to their corresponding integer values.
-
-    Methods
-    -------
-    is_finished : bool
-        Property that checks if the game is finished.
-    observation : ndarray
-        Property that returns the current state of the game board.
-    reset() -> ndarray
-        Resets the game to its initial state.
-    step(action: int) -> Tuple[ndarray, float, bool]
-        Applies an action to the game state and returns the result.
-    render(mode: str = "human") -> None
-        Renders the current game state.
-
-    Notes
-    -----
-    - This class implements the core game logic for 2048.
-    - The game board is represented as a 2D numpy array.
-    - Actions are encoded as integers: 0 (left), 1 (up), 2 (right), 3 (down).
     """
+
+    # ##: Current game state.
+    _current_state: Optional[ndarray] = None
+    _current_reward: Optional[float] = None
 
     # ##: All Actions.
     ACTIONS = {"left": 0, "up": 1, "right": 2, "down": 3}
 
-    def __init__(self, size: int = 4):
+    def __init__(self, size: int = 4, encoded: Optional[bool] = False, normalize: Optional[bool] = False):
         """
         Initialize the 2048 game board.
 
@@ -57,9 +33,15 @@ class TwentyFortyEight:
         ----------
         size : int, optional
             The size of the square grid (default is 4).
+        encoded : bool, optional
+            Whether to binary encode the board or not (default is False).
+        normalize : bool, optional
+            Whether to normalize the reward or not (default is False).
         """
         self.size = size
-        self._board: ndarray = zeros((self.size, self.size), dtype=int64)
+        self._encoded = encoded
+        self._normalize = normalize
+
         self.reset()
 
     @property
@@ -72,19 +54,7 @@ class TwentyFortyEight:
         bool
             True if the game is finished (no more moves possible), False otherwise.
         """
-        return is_done(self._board)
-
-    @property
-    def board(self) -> ndarray:
-        """
-        Get the current state of the game board.
-
-        Returns
-        -------
-        ndarray
-            The current state of the game board as a 2D numpy array.
-        """
-        return self._board
+        return is_done(self._current_state)
 
     @property
     def observation(self) -> ndarray:
@@ -96,9 +66,25 @@ class TwentyFortyEight:
         ndarray
             The current state of the game board as a 2D numpy array.
         """
-        return self._board
+        if self._encoded:
+            return encode_flatten(self._current_state, encodage_size=31)
+        return self._current_state
 
-    def reset(self) -> ndarray:
+    @property
+    def reward(self) -> float:
+        """
+        Get the current reward of the game.
+
+        Returns
+        -------
+        float
+            The current reward of the game.
+        """
+        if self._normalize:
+            return normalize_reward(self._current_reward)
+        return self._current_reward
+
+    def reset(self, seed: Optional[int] = None) -> ndarray:
         """
         Initialize an empty board and add two random tiles.
 
@@ -115,9 +101,10 @@ class TwentyFortyEight:
         - The initial board will have two tiles, typically 2's, placed randomly.
         - There's a small chance (10%) that one of the initial tiles will be a 4.
         """
-        self._board = zeros((self.size, self.size), dtype=int64)
-        self._board = fill_cells(state=self._board, number_tile=2)
-        return self._board
+        self._current_state = zeros((self.size, self.size), dtype=int64)
+        self._current_state = fill_cells(state=self._current_state, number_tile=2, seed=seed)
+        self._current_reward = 0
+        return self.observation
 
     def step(self, action: int) -> Tuple[ndarray, float, bool]:
         """
@@ -145,26 +132,12 @@ class TwentyFortyEight:
         - The game is considered finished if no more moves are possible.
         - A new tile (2 or 4) is added to the board after each successful move.
         """
-        self._board, reward = next_state(state=self._board, action=action)
-        return self._board, reward, self.is_finished
+        self._current_state, self._current_reward = next_state(state=self._current_state, action=action)
+        return self.observation, self.reward, self.is_finished
 
-    def render(self, mode: str = "human") -> None:
+    def render(self) -> None:
         """
-        Render the game board.
-
-        This method prints the current state of the game board to the console.
-
-        Parameters
-        ----------
-        mode : str, optional
-            The mode for rendering. Currently, only "human" mode is supported, which prints to
-            the console (default is "human").
-
-        Notes
-        -----
-        This method provides a simple text-based visualization of the game board. For more advanced
-        rendering, consider implementing a graphical interface.
+        Render the game board. This method prints the current state of the game board to the console.
         """
-        if mode == "human":
-            for row in self._board.tolist():
-                print(" \t".join(map(str, row)))
+        for row in self._current_state.tolist():
+            print(" \t".join(map(str, row)))
