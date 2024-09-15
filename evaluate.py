@@ -9,10 +9,14 @@ import numpy as np
 from tqdm import trange
 
 from monte_carlo.actor import MonteCarloAgent
+from dqn.agent import DQNActor
 from simulate.envs import TwentyFortyEight
+from simulate.wrappers import EncodedTwentyFortyEight
+from pathlib import Path
 
 ACTORS = {
     "mcts": MonteCarloAgent,
+    "deep_q": DQNActor,
 }
 
 
@@ -32,12 +36,19 @@ def evaluate(method: str, length: int = 10) -> Dict[int, int]:
     Dict[int, int]
         The evaluation results.
     """
-    actor = ACTORS[method]()
+    if method == "mcts":
+        actor = ACTORS[method]()
+        env = TwentyFortyEight()
+    else:
+        env = EncodedTwentyFortyEight()
+        storage = Path.cwd() / "zoo"
+        model_path = list(storage.glob(f"{method}*prioritized_identity*.keras"))
+        actor = ACTORS[method].from_path(path=model_path[0], epsilon=0.05)
     score = []
 
     with trange(length) as period:
         for num in period:
-            env = TwentyFortyEight()
+            env.reset()
             rewards, done = 0, False
 
             # ##: Play a game.
@@ -48,10 +59,10 @@ def evaluate(method: str, length: int = 10) -> Dict[int, int]:
 
                 # ##: Log.
                 period.set_description(f"Evaluation: {num + 1}")
-                period.set_postfix(score=rewards, max=np.max(env.observation))
+                period.set_postfix(score=rewards, max=np.max(env.board))
 
             # ##: Save max cells.
-            score.append(int(np.max(env.observation)))
+            score.append(int(np.max(env.board)))
 
     # ##: Final log.
     frequency = Counter(score)

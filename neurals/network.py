@@ -4,8 +4,7 @@ Provides a function to make predictions using a trained Keras model.
 """
 from __future__ import annotations
 from numpy import ndarray
-from keras import Model
-import keras
+from keras import Model, ops
 
 
 def make_prediction(model: Model, state: ndarray) -> ndarray:
@@ -35,10 +34,11 @@ def make_prediction(model: Model, state: ndarray) -> ndarray:
     Example
     -------
     >>> import numpy as np
+    >>> import keras
     >>> game_state = np.array([...])  # Your game state here
     >>> trained_model = keras.models.load_model('your_model.h5')
     >>> prediction = make_prediction(trained_model, game_state)
     """
-    obs_tensor = keras.ops.convert_to_tensor(state, dtype="float16")
-    obs_tensor = keras.ops.expand_dims(obs_tensor, 0)
-    return model(obs_tensor, training=False)
+    obs_tensor = ops.convert_to_tensor(state, dtype="float16")
+    obs_tensor = ops.expand_dims(obs_tensor, 0)
+    return model(obs_tensor, training=False)[0]

@@ -12,7 +12,8 @@ performance and faster convergence in reinforcement learning tasks.
 """
 from typing import Tuple
 
-from numpy import eye, int64, log2, ndarray, reshape
+from numpy import ndarray
+from .binary import encode_flatten
 
 from simulate.envs import TwentyFortyEight
 
@@ -56,7 +57,7 @@ class EncodedTwentyFortyEight(TwentyFortyEight):
             The size of the one-hot encoding block for each cell (default is 31).
             This should be large enough to represent the largest possible tile value.
         """
-        self._block_size = block_size
+        self.block_size = block_size
         super().__init__(size)
 
     def reset(self) -> ndarray:
@@ -115,8 +116,4 @@ class EncodedTwentyFortyEight(TwentyFortyEight):
         - The resulting array has shape (board_size^2, block_size), where block_size is typically 31.
         - This encoding allows for easier processing by machine learning models.
         """
-        obs = super().observation.flatten()
-        obs[obs == 0] = 1
-        obs = log2(obs).astype(int64)
-        encoded = eye(self._block_size, dtype=int64)[obs]
-        return reshape(encoded, -1)
+        return encode_flatten(state=super().observation, encodage_size=self.block_size)

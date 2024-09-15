@@ -1,58 +1,39 @@
 # -*- coding: utf-8 -*-
 """
-Replay buffer for reinforcement learning.
+Replay buffer for storing and sampling experiences in reinforcement learning. Enables efficient training
+by allowing random access to past interactions.
 """
-from abc import ABC, abstractmethod
-from typing import Tuple
-
-from numpy import ndarray
+from typing import Tuple, Protocol, Any
 
 
-class ReplayBuffer(ABC):
+class ReplayBuffer(Protocol):
     """
-    Abstract base class for replay buffers.
+    Protocol defining the interface for replay buffers in reinforcement learning.
 
-    This class defines the interface for replay buffers used in reinforcement learning algorithms.
+    A replay buffer stores and manages experiences (state, action, reward, next_state, done) collected during
+    the agent's interaction with the environment. It provides methods for adding new experiences and sampling
+    batches of experiences for training.
 
-    Attributes
-    ----------
-    capacity : int
-        Maximum number of experiences that can be stored in the buffer.
+    Implementing classes should define the following methods:
+    - add: Add a new experience to the buffer
+    - sample: Retrieve a random batch of experiences
+    - __len__: Return the current number of experiences in the buffer
+
+    This interface allows for different implementations of replay buffers, such as uniform sampling,
+    prioritized experience replay, or other variants.
     """
 
-    def __init__(self, capacity: int):
-        """
-        Initialize the AbstractReplayBuffer.
-
-        Parameters
-        ----------
-        capacity : int
-            Maximum number of experiences that can be stored.
-        """
-        self.capacity = capacity
-
-    @abstractmethod
-    def add(self, state: ndarray, action: int, reward: float, next_state: ndarray, done: bool) -> None:
+    def add(self, experience: Tuple[Any, ...]) -> None:
         """
         Add a new experience to the buffer.
 
         Parameters
         ----------
-        state : ndarray
-            The current state.
-        action : int
-            The action taken.
-        reward : float
-            The reward received.
-        next_state : ndarray
-            The resulting next state.
-        done : bool
-            Whether the episode has ended.
+        experience : Tuple[Any]
+            Experience to add to the buffer.
         """
-        pass
 
-    @abstractmethod
-    def sample(self, batch_size: int) -> Tuple[ndarray, ...]:
+    def sample(self, batch_size: int) -> Tuple[Any, ...]:
         """
         Sample a batch of experiences from the buffer.
 
@@ -63,12 +44,9 @@ class ReplayBuffer(ABC):
 
         Returns
         -------
-        Tuple[ndarray, ...]
+        Tuple[Any, ...]
             A tuple containing batches of experiences.
         """
-        pass
 
-    @abstractmethod
     def __len__(self) -> int:
         """Return the current size of the buffer."""
-        pass

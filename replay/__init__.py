@@ -10,7 +10,8 @@ Available Classes:
 PrioritizedReplayBuffer : Implements prioritized experience replay.
 UniformReplayBuffer : Implements uniform (standard) experience replay.
 """
-from .prioritized import PrioritizedReplayBuffer
-from .uniform import UniformReplayBuffer
+from .buffer import ReplayBuffer
+from .prioritized_buffer import PrioritizedReplayBuffer
+from .uniform_buffer import UniformReplayBuffer
 
-__all__ = ["PrioritizedReplayBuffer", "UniformReplayBuffer"]
+__all__ = ["ReplayBuffer", "PrioritizedReplayBuffer", "UniformReplayBuffer"]

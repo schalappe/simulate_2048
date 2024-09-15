@@ -2,85 +2,78 @@
 """
 Provides functions to construct neural network models for reinforcement learning tasks.
 """
-from typing import Tuple
 from keras import Model
 from keras import layers
 
 
-def build_resnet_model(state_size: Tuple[int, int, int], action_size: int = 4) -> Model:
+def identity_block_dense(input_tensor: layers.Layer, units: int) -> layers.Layer:
     """
-    Construct a ResNet-based model for Q-learning.
-
-    This function creates a deep neural network based on the ResNet architecture,
-    designed for reinforcement learning tasks, particularly Q-learning.
+    Creates an identity block with dense layers.
 
     Parameters
     ----------
-    state_size : Tuple[int, int, int]
-        The dimensions of the input state (height, width, channels).
+    input_tensor : layers.Layer
+        Input layer to the identity block.
+    units : int
+        Number of units for the dense layers.
+
+    Returns
+    -------
+    layers.Layer
+        Output tensor after applying the identity block.
+    """
+    x = layers.Dense(units)(input_tensor)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+
+    x = layers.Dense(units)(x)
+    x = layers.BatchNormalization()(x)
+
+    # Add the input_tensor to the output of the dense block
+    x = layers.Add()([x, input_tensor])
+    x = layers.ReLU()(x)
+
+    return x
+
+
+def build_model_with_identity_blocks(
+    state_size: int, action_size: int = 4, num_blocks: int = 3, units: int = 256
+) -> Model:
+    """
+    Construct a deep Q-Network model with dense identity blocks.
+
+    Parameters
+    ----------
+    state_size : int
+        The size of the input state (496 for the 2048 game with binary encoding).
     action_size : int, optional
-        The number of possible actions in the environment (default is 4).
+        The number of possible actions (default is 4).
+    num_blocks : int, optional
+        The number of identity blocks to include in the model.
+    units : int, optional
+        The number of units for the dense layers.
 
     Returns
     -------
     Model
-        A Keras Model instance representing the ResNet-based Q-network.
-
-    Notes
-    -----
-    The model architecture:
-    1. Initial convolutional layer
-    2. Five residual blocks
-    3. Global average pooling
-    4. Dense layers
-    5. Output layer producing Q-values for each action
-
-    The residual blocks help in training deeper networks by introducing skip connections,
-    which mitigate the vanishing gradient problem.
+        A Keras Model instance representing the DQN with dense identity blocks.
     """
+    inputs = layers.Input(shape=(state_size,))
 
-    def residual_block(input_layer: layers.Layer, filters: int, kernel_size: int = 3):
-        """
-            Create a residual block for the ResNet architecture.
-        Parameters
-        ----------
-            input_layer : layers.Layer
-                The input layer to the residual block.
-            filters : int
-                The number of filters in the convolutional layers.
-            kernel_size : int, optional
-                The size of the convolutional kernel (default is 3).
-        Returns
-        -------
-            layers.Layer
-                The output of the residual block.
-        """
-        y = layers.Conv2D(filters, kernel_size, padding="same")(input_layer)
-        y = layers.BatchNormalization()(y)
-        y = layers.ReLU()(y)
-        y = layers.Conv2D(filters, kernel_size, padding="same")(y)
-        y = layers.BatchNormalization()(y)
-        return layers.ReLU()(layers.Add()([input_layer, y]))
+    # Initial dense layer to process the input
+    x = layers.Dense(units, activation="relu")(inputs)
 
-    inputs = layers.Input(shape=state_size)
+    # Add identity blocks
+    for _ in range(num_blocks):
+        x = identity_block_dense(x, units)
 
-    # Convolution layers
-    x = layers.Conv2D(32, 3, padding="same")(inputs)
-    x = layers.BatchNormalization()(x)
-    x = layers.ReLU()(x)
-
-    # ResNet layers
-    for _ in range(5):  # 5 residual blocks
-        x = residual_block(x, 32)
-    # Dense layers
-    x = layers.GlobalAveragePooling2D()(x)
-    x = layers.Dense(256, activation="relu")(x)
+    # Output dense layer for Q-value prediction
     outputs = layers.Dense(action_size)(x)
 
     return Model(inputs=inputs, outputs=outputs)
 
 
-def build_attention_model(state_size: Tuple[int, int, int], action_size: int = 4) -> Model:
+def build_attention_model(game_size: int, encodage_size: int, action_size: int = 4) -> Model:
     """
     Construct an Attention-based model for Q-learning.
 
@@ -89,8 +82,10 @@ def build_attention_model(state_size: Tuple[int, int, int], action_size: int = 4
 
     Parameters
     ----------
-    state_size : Tuple[int, int, int]
-        The dimensions of the input state (height, width, channels).
+    game_size : int
+        The size of the game board (assuming a square board).
+    encodage_size : int
+        The size of the encoding for each cell in the game board.
     action_size : int, optional
         The number of possible actions in the environment (default is 4).
 
@@ -102,31 +97,42 @@ def build_attention_model(state_size: Tuple[int, int, int], action_size: int = 4
     Notes
     -----
     The model architecture:
-    1. Initial convolutional layers
+    1. Input layer
     2. Reshape layer to prepare for attention
-    3. Multi-head self-attention layer
+    3. Multiple attention blocks, each containing:
+       - Multi-head self-attention layer
+       - Add and normalize layers
+       - Feed-forward network
+       - Add and normalize layers
     4. Global average pooling
     5. Dense layers
     6. Output layer producing Q-values for each action
 
     The self-attention mechanism allows the model to focus on different parts of the input state,
-    potentially capturing long-range dependencies.
+    potentially capturing long-range dependencies across the game board.
     """
-    inputs = layers.Input(shape=state_size)
+    inputs = layers.Input(shape=(game_size * game_size * encodage_size,))
 
-    # Convolution layers
-    x = layers.Conv2D(64, 2, padding="same", activation="relu")(inputs)
-    x = layers.Conv2D(64, 2, padding="same", activation="relu")(x)
-    x = layers.Reshape((-1, 128))(x)
+    # ##: Reshape input to add sequence dimension.
+    x = layers.Reshape((game_size * game_size, encodage_size))(inputs)
 
-    # Self-attention layers
-    attention = layers.MultiHeadAttention(num_heads=4, key_dim=32)
-    x = attention(x, x)
+    # ##: Multiple attention blocks.
+    for _ in range(3):
+        attention = layers.MultiHeadAttention(num_heads=4, key_dim=32)
+        attention_output = attention(x, x)
+        x = layers.Add()([x, attention_output])
+        x = layers.LayerNormalization()(x)
 
-    # Dense layers
+        # ##: Feed-forward network
+        ff = layers.Dense(128, activation="relu")(x)
+        ff = layers.Dense(31, activation="relu")(ff)
+        x = layers.Add()([x, ff])
+        x = layers.LayerNormalization()(x)
+
+    # ##: Global pooling and dense layers.
     x = layers.GlobalAveragePooling1D()(x)
     x = layers.Dense(256, activation="relu")(x)
     x = layers.Dense(128, activation="relu")(x)
-    outputs = layers.Dense(action_size)(x)
 
+    outputs = layers.Dense(action_size)(x)
     return Model(inputs=inputs, outputs=outputs)

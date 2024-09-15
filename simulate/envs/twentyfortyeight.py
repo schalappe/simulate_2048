@@ -75,6 +75,18 @@ class TwentyFortyEight:
         return is_done(self._board)
 
     @property
+    def board(self) -> ndarray:
+        """
+        Get the current state of the game board.
+
+        Returns
+        -------
+        ndarray
+            The current state of the game board as a 2D numpy array.
+        """
+        return self._board
+
+    @property
     def observation(self) -> ndarray:
         """
         Get the current state of the game board.
