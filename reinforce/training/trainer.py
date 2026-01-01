@@ -320,6 +320,8 @@ class StochasticMuZeroTrainer:
             exploration_weight=self.config.exploration_weight,
             temperature=0.0,  # Greedy for evaluation
             add_noise=False,
+            search_mode=self.config.search_mode,
+            batch_size=self.config.mcts_batch_size,
         )
 
         env = TwentyFortyEight(encoded=False, normalize=False)

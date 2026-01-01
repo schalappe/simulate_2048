@@ -21,6 +21,8 @@ from reinforce.mcts.network_search import (
     run_network_mcts,
     select_action_from_root,
 )
+from reinforce.mcts.parallel_search import DecisionNode as ParDecisionNode
+from reinforce.mcts.parallel_search import ParallelMCTS
 from reinforce.neural.network import StochasticNetwork
 from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
 
@@ -33,7 +35,7 @@ class SelfPlayActor:
     Self-play actor that generates training data.
 
     Plays games using MCTS with the current network and records
-    trajectories for training.
+    trajectories for training. Supports both sequential and parallel MCTS.
 
     Attributes
     ----------
@@ -43,6 +45,8 @@ class SelfPlayActor:
         Neural network for MCTS guidance.
     env : TwentyFortyEight
         Game environment.
+    _parallel_mcts : ParallelMCTS | None
+        Parallel MCTS instance (created lazily when using parallel mode).
     """
 
     def __init__(
@@ -67,6 +71,23 @@ class SelfPlayActor:
         self.env = TwentyFortyEight(encoded=True, normalize=True)
 
         self._training_step = 0
+        self._parallel_mcts: ParallelMCTS | None = None
+
+        # ##>: Pre-create parallel MCTS if using parallel mode.
+        if config.search_mode == 'parallel':
+            self._create_parallel_mcts()
+
+    def _create_parallel_mcts(self) -> None:
+        """Create or recreate the parallel MCTS instance."""
+        self._parallel_mcts = ParallelMCTS(
+            network=self.network,
+            num_simulations=self.config.num_simulations,
+            batch_size=self.config.mcts_batch_size,
+            exploration_weight=self.config.exploration_weight,
+            add_exploration_noise=True,
+            dirichlet_alpha=self.config.root_dirichlet_alpha,
+            noise_fraction=self.config.root_dirichlet_fraction,
+        )
 
     def update_network(self, network: StochasticNetwork) -> None:
         """
@@ -78,6 +99,10 @@ class SelfPlayActor:
             New network weights.
         """
         self.network = network
+
+        # ##>: Recreate parallel MCTS with new network.
+        if self.config.search_mode == 'parallel':
+            self._create_parallel_mcts()
 
     def set_training_step(self, step: int) -> None:
         """
@@ -120,25 +145,29 @@ class SelfPlayActor:
             # ##>: Get raw state for MCTS (need 4x4 array).
             raw_state = self.env._current_state
 
-            # ##>: Run MCTS.
-            root = run_network_mcts(
-                game_state=raw_state,
-                network=self.network,
-                num_simulations=self.config.num_simulations,
-                exploration_weight=self.config.exploration_weight,
-                add_exploration_noise=True,
-                dirichlet_alpha=self.config.root_dirichlet_alpha,
-                noise_fraction=self.config.root_dirichlet_fraction,
-            )
-
-            # ##>: Get search statistics.
+            # ##>: Run MCTS (parallel or sequential based on config).
             temperature = self._get_temperature()
-            policy = get_policy_from_visits(root, temperature=1.0)  # Always store visit proportions
-            search_policy = self._policy_dict_to_array(policy, self.config.action_size)
-            search_value = self._compute_search_value(root)
 
-            # ##>: Select action.
-            action = select_action_from_root(root, temperature=temperature)
+            if self.config.search_mode == 'parallel' and self._parallel_mcts is not None:
+                root = self._parallel_mcts.search(raw_state)
+                policy = self._parallel_mcts.get_policy(root, temperature=1.0)
+                search_policy = self._policy_dict_to_array(policy, self.config.action_size)
+                search_value = self._compute_search_value_parallel(root)
+                action = self._parallel_mcts.select_action(root, temperature=temperature)
+            else:
+                root = run_network_mcts(
+                    game_state=raw_state,
+                    network=self.network,
+                    num_simulations=self.config.num_simulations,
+                    exploration_weight=self.config.exploration_weight,
+                    add_exploration_noise=True,
+                    dirichlet_alpha=self.config.root_dirichlet_alpha,
+                    noise_fraction=self.config.root_dirichlet_fraction,
+                )
+                policy = get_policy_from_visits(root, temperature=1.0)
+                search_policy = self._policy_dict_to_array(policy, self.config.action_size)
+                search_value = self._compute_search_value(root)
+                action = select_action_from_root(root, temperature=temperature)
 
             # ##>: Take action in environment.
             next_obs, reward, done = self.env.step(action)
@@ -197,7 +226,7 @@ class SelfPlayActor:
 
     def _compute_search_value(self, root: DecisionNode) -> float:
         """
-        Compute the search value from the root node.
+        Compute the search value from the root node (sequential MCTS).
 
         Uses the weighted average of child Q-values by visit count.
 
@@ -205,6 +234,32 @@ class SelfPlayActor:
         ----------
         root : DecisionNode
             Root node after MCTS.
+
+        Returns
+        -------
+        float
+            Search value estimate.
+        """
+        if not root.children:
+            return root.value
+
+        total_visits = sum(child.visit_count for child in root.children.values())
+        if total_visits == 0:
+            return root.value
+
+        weighted_value = sum(child.value_sum for child in root.children.values()) / total_visits
+        return weighted_value
+
+    def _compute_search_value_parallel(self, root: ParDecisionNode) -> float:
+        """
+        Compute the search value from the root node (parallel MCTS).
+
+        Uses the weighted average of child Q-values by visit count.
+
+        Parameters
+        ----------
+        root : ParDecisionNode
+            Root node after parallel MCTS.
 
         Returns
         -------

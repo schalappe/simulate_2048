@@ -490,49 +490,58 @@ class ParallelMCTS:
             trajectories[request.trajectory_idx].leaf_value = node.value
 
     def _batch_expand_chance_nodes(self, requests: list[ExpansionRequest], trajectories: list[Trajectory]) -> None:
-        """Expand multiple chance nodes in a single batched call."""
+        """Expand multiple chance nodes in batched calls."""
         afterstates = [r.afterstate for r in requests if r.afterstate is not None]
         if len(afterstates) != len(requests):
             raise ValueError('All chance requests must have afterstate')
 
-        # ##>: Batch afterstate prediction.
+        # ##>: Step 1: Batch afterstate prediction for Q-values and chance_probs.
         output = self.network.batch_afterstate_prediction(afterstates)
 
-        # ##>: Apply results.
+        # ##>: Step 2: Apply Q-values and chance_probs, then select outcomes.
+        outcome_indices = []
+        for i, request in enumerate(requests):
+            node = request.node
+            assert isinstance(node, ChanceNode)
+            node.q_value = float(output.values[i])
+            if output.chance_probs is not None:
+                node.chance_probs = output.chance_probs[i]
+            outcome_indices.append(select_chance_outcome(node))
+
+        # ##>: Step 3: Batch dynamics call for all selected outcomes.
+        chance_codes = [
+            utils.to_categorical([idx], num_classes=self.network.codebook_size)[0] for idx in outcome_indices
+        ]
+        next_states, rewards = self.network.batch_dynamics(afterstates, chance_codes)
+
+        # ##>: Step 4: Batch prediction for all new decision nodes.
+        hidden_states_list = [next_states[i] for i in range(len(requests))]
+        pred_output = self.network.batch_prediction(hidden_states_list)
+
+        # ##>: Step 5: Batch afterstate expansion for all new nodes.
+        all_afterstates = self.network.batch_expand_all_actions(hidden_states_list)
+
+        # ##>: Step 6: Apply results to each node.
         for i, request in enumerate(requests):
             node = request.node
             assert isinstance(node, ChanceNode)
 
-            node.q_value = float(output.values[i])
-            if output.chance_probs is not None:
-                node.chance_probs = output.chance_probs[i]
+            child = DecisionNode(
+                hidden_state=next_states[i], reward=float(rewards[i]), parent=node, legal_moves=list(range(4))
+            )
+            node.children[outcome_indices[i]] = child
 
-            # ##>: After expansion, we need to continue the trajectory.
-            # ##>: Select outcome and create dynamics request.
-            outcome_idx = select_chance_outcome(node)
+            if pred_output.policies is not None:
+                child.policy_prior = pred_output.policies[i]
+            child.value = float(pred_output.values[i])
 
-            # ##>: Create the decision child via dynamics.
-            chance_code = utils.to_categorical([outcome_idx], num_classes=self.network.codebook_size)[0]
-            next_state, reward = self.network.dynamics(node.afterstate, chance_code)
-
-            child = DecisionNode(hidden_state=next_state, reward=float(reward), parent=node)
-            node.children[outcome_idx] = child
-
-            # ##>: Expand the new child.
-            child_output = self.network.prediction(child.hidden_state)
-            child.policy_prior = child_output.policy
-            child.value = child_output.value
-            child.legal_moves = list(range(4))
-
-            # ##>: Create chance children for the new node.
-            child_afterstates = self.network.batch_expand_all_actions([child.hidden_state])[0]
+            # ##>: Create chance children.
             for action in child.legal_moves:
-                afterstate = child_afterstates[action]
+                afterstate = all_afterstates[i, action]
                 prior = float(child.policy_prior[action]) if child.policy_prior is not None else 0.25
                 grandchild = ChanceNode(afterstate=afterstate, action=action, prior=prior, parent=child)
                 child.children[action] = grandchild
 
-            # ##>: Update trajectory.
             trajectories[request.trajectory_idx].path.append(child)
             trajectories[request.trajectory_idx].leaf_value = child.value
 
