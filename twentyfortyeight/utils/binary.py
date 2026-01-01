@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """
 Provides functions for binary encoding of state observations, including a standard encoding function
 and a flatten-and-encode variant.
 """
+
 from __future__ import annotations
 
 from numpy import eye, int64, log2, ndarray
@@ -43,7 +43,7 @@ def encode(state: ndarray, encodage_size: int) -> ndarray:
            [0, 0, 1, 0],
            [0, 0, 0, 1]])
     """
-    obs = state.astype("float64")
+    obs = state.astype('float64')
     obs = log2(obs, where=obs != 0, out=obs)
     obs = obs.astype(int64, copy=False)
     return eye(encodage_size, dtype=int64)[obs]
@@ -82,5 +82,5 @@ def encode_flatten(state: ndarray, encodage_size: int) -> ndarray:
     >>> encode_flatten(state, encodage_size=4)
     array([0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
     """
-    obs = state.ravel().astype("float64")
+    obs = state.ravel().astype('float64')
     return encode(obs, encodage_size).ravel()

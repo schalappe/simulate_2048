@@ -1,7 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Normalize rewards using logarithmic scaling for stable learning across game stages.
-"""
+"""Normalize rewards using logarithmic scaling for stable learning across game stages."""
+
 from numpy import log2
 
 

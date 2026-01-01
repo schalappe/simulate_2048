@@ -1,13 +1,10 @@
-# -*- coding: utf-8 -*-
-"""
-2048 game environment for reinforcement learning agents.
-"""
-from typing import Optional, Tuple
+"""2048 game environment for reinforcement learning agents."""
 
 from numpy import int64, ndarray, zeros
 
-from twentyfortyeight.core import fill_cells, is_done, next_state
-from twentyfortyeight.utils import encode_flatten, normalize_reward
+from twentyfortyeight.core.gameboard import fill_cells, is_done, next_state
+from twentyfortyeight.utils.binary import encode_flatten
+from twentyfortyeight.utils.normalize import normalize_reward
 
 
 class TwentyFortyEight:
@@ -19,13 +16,13 @@ class TwentyFortyEight:
     """
 
     # ##: Current game state.
-    _current_state: Optional[ndarray] = None
-    _current_reward: Optional[float] = None
+    _current_state: ndarray | None = None
+    _current_reward: float | None = None
 
     # ##: All Actions.
-    ACTIONS = {"left": 0, "up": 1, "right": 2, "down": 3}
+    ACTIONS = {'left': 0, 'up': 1, 'right': 2, 'down': 3}
 
-    def __init__(self, size: int = 4, encoded: Optional[bool] = False, normalize: Optional[bool] = False):
+    def __init__(self, size: int = 4, encoded: bool = False, normalize: bool = False):
         """
         Initialize the 2048 game board.
 
@@ -84,7 +81,7 @@ class TwentyFortyEight:
             return normalize_reward(self._current_reward)
         return self._current_reward
 
-    def reset(self, seed: Optional[int] = None) -> ndarray:
+    def reset(self, seed: int | None = None) -> ndarray:
         """
         Initialize an empty board and add two random tiles.
 
@@ -106,7 +103,7 @@ class TwentyFortyEight:
         self._current_reward = 0
         return self.observation
 
-    def step(self, action: int) -> Tuple[ndarray, float, bool]:
+    def step(self, action: int) -> tuple[ndarray, float, bool]:
         """
         Apply the selected action to the board.
 
@@ -120,7 +117,7 @@ class TwentyFortyEight:
 
         Returns
         -------
-        Tuple[ndarray, float, bool]
+        tuple[ndarray, float, bool]
             A tuple containing:
             - The updated game board (ndarray)
             - The reward obtained from this action (float)
@@ -140,4 +137,4 @@ class TwentyFortyEight:
         Render the game board. This method prints the current state of the game board to the console.
         """
         for row in self._current_state.tolist():
-            print(" \t".join(map(str, row)))
+            print(' \t'.join(map(str, row)))

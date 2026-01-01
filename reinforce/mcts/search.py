@@ -1,25 +1,28 @@
-# -*- coding: utf-8 -*-
 """
 Monte Carlo Tree Search (MCTS) implementation for the 2048 game.
 
-This module provides a collection of functions that implement the core components of
-the Monte Carlo Tree Search algorithm, specifically tailored for the 2048 game.
-It includes functions for tree traversal, node selection, expansion, simulation,
-and backpropagation.
+This module provides a collection of functions that implement the core components of the Monte Carlo
+Tree Search algorithm, specifically tailored for the 2048 game. It includes functions for tree traversal,
+node selection, expansion, simulation, and backpropagation.
 
-This implementation takes into account the stochastic nature of the 2048 game,
-handling both decision nodes (where the player chooses a move) and chance nodes
-(where a new tile is randomly added to the board).
+This implementation takes into account the stochastic nature of the 2048 game, handling both decision
+nodes (where the player chooses a move) and chance nodes (where a new tile is randomly added to the board).
 """
+
 from math import log, sqrt
 
 from numpy import ndarray
 from numpy.random import PCG64DXSM, default_rng
 
-from twentyfortyeight.core import is_done, legal_actions, next_state
-from twentyfortyeight.utils import normalize_reward
+from twentyfortyeight.core.gameboard import TILE_SPAWN_PROBS, is_done, next_state
+from twentyfortyeight.core.gamemove import legal_actions
+from twentyfortyeight.utils.normalize import normalize_reward
 
 from .node import Chance, Decision, Node
+
+# ##>: Pre-computed tile values and probabilities for simulation sampling.
+_TILE_VALUES = list(TILE_SPAWN_PROBS.keys())
+_TILE_PROBS = list(TILE_SPAWN_PROBS.values())
 
 GENERATOR = default_rng(PCG64DXSM())
 
@@ -45,7 +48,7 @@ def uct_select(node: Decision, exploration_weight: float) -> Chance:
     Uses the UCB1 formula: exploitation + exploration_weight * sqrt(log(parent_visits) / child_visits)
     """
     if isinstance(node, Chance):
-        raise ValueError("UCB1 is only defined for Decision nodes.")
+        raise ValueError('UCB1 is only defined for Decision nodes.')
 
     log_visits = log(node.visits)
     return max(
@@ -92,7 +95,7 @@ def puct_select(node: Decision, exploration_weight: float) -> Chance:
         If the input node is not a Decision node.
     """
     if isinstance(node, Chance):
-        raise ValueError("PUCT is only defined for Decision nodes.")
+        raise ValueError('PUCT is only defined for Decision nodes.')
 
     def puct_score(child: Chance) -> float:
         q_value = child.values / child.visits if child.visits > 0 else 0
@@ -183,10 +186,15 @@ def simulate(node: Node, simulations: int) -> float:
     total_reward = 0.0
 
     for _ in range(simulations):
-        # ##>: Initialize the state.
+        # ##>: Initialize state from node (sample stochastic outcome for Chance nodes).
         if isinstance(node, Chance):
-            states, priors = zip(*node.next_states)
-            state = GENERATOR.choice(states, p=priors)
+            state = node.state.copy()
+            # ##>: Sample a random tile spawn if there are empty cells.
+            if node._num_empty > 0:
+                cell_idx = GENERATOR.integers(0, node._num_empty)
+                cell = node._empty_cells[cell_idx]
+                value = GENERATOR.choice(_TILE_VALUES, p=_TILE_PROBS)
+                state[cell] = value
         else:
             state = node.state.copy()
 

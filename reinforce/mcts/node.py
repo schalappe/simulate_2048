@@ -1,22 +1,22 @@
-# -*- coding: utf-8 -*-
 """
 Monte Carlo Tree Search (MCTS) node classes for decision-making in stochastic environments.
 
-This module defines the node structures used in the Monte Carlo Tree Search algorithm,
-specifically tailored for stochastic environments like the 2048 game. It provides
-abstract and concrete node classes that represent different states in the search tree,
-enabling efficient exploration and decision-making.
+This module defines the node structures used in the Monte Carlo Tree Search algorithm, specifically
+tailored for stochastic environments like the 2048 game. It provides abstract and concrete node
+classes that represent different states in the search tree, enabling efficient exploration and
+decision-making.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
-from numpy import array_equal, ndarray, power
+from numpy import ndarray, power
 from numpy.random import PCG64DXSM, default_rng
 
-from twentyfortyeight.core import after_state, is_done, latent_state, legal_actions
+from twentyfortyeight.core.gameboard import after_state_lazy, generate_outcome, is_done, latent_state
+from twentyfortyeight.core.gamemove import legal_actions
 
 GENERATOR = default_rng(PCG64DXSM())
 
@@ -64,7 +64,7 @@ class Node(ABC):
     values: float = 0.0
     visits: int = 0
     parent: Node
-    children: List = field(default_factory=list)
+    children: list = field(default_factory=list)
 
     @abstractmethod
     def fully_expanded(self) -> bool:
@@ -122,8 +122,8 @@ class Decision(Node):
 
     prior: float
     final: bool
-    parent: Optional[Chance] = None
-    legal_moves: List[int] = field(default_factory=list)
+    parent: Chance | None = None
+    legal_moves: list[int] = field(default_factory=list)
 
     def __post_init__(self):
         """Initialize legal moves if the node is not final."""
@@ -152,7 +152,7 @@ class Decision(Node):
         """
         untried_actions = set(self.legal_moves) - {child.action for child in self.children}
         if not untried_actions:
-            raise ValueError("All actions have been tried. Node should be fully expanded.")
+            raise ValueError('All actions have been tried. Node should be fully expanded.')
         action = int(GENERATOR.choice(list(untried_actions)))
         child_state, _ = latent_state(self.state, action)
         child = Chance(state=child_state, parent=self, action=action, depth=self.depth + 0.5)
@@ -174,8 +174,6 @@ class Chance(Node):
         The action taken to reach this node.
     parent : Decision
         The parent decision node.
-    next_states : List[Tuple[np.ndarray, float]]
-        Possible next states and their probabilities.
     widening_alpha : float
         Exponent for outcome progressive widening.
     widening_constant : float
@@ -192,29 +190,45 @@ class Chance(Node):
     -----
     Chance nodes implement progressive widening to manage the branching factor in stochastic
     environments with large or continuous outcome spaces.
+
+    This implementation uses lazy outcome generation: states are only created when
+    ``add_child()`` is called, avoiding upfront allocation of all 2N possible outcomes
+    (where N = number of empty cells).
     """
 
     action: int
     parent: Decision
-    next_states: List[Tuple[ndarray, float]] = field(default_factory=list)
     widening_alpha: float = 0.5
     widening_constant: float = 1.0
 
+    # ##>: Lazy generation fields - populated in __post_init__.
+    _empty_cells: list[tuple[int, int]] = field(default_factory=list)
+    _num_empty: int = 0
+    _generated_indices: list[int] = field(default_factory=list)
+
     def __post_init__(self):
-        """Initialize possible next states."""
-        self.next_states = after_state(self.state)
+        """Initialize lazy generation data (no state copies created)."""
+        _, self._empty_cells, self._num_empty = after_state_lazy(self.state)
+
+    @property
+    def max_outcomes(self) -> int:
+        """Total possible outcomes (2 tile values per empty cell)."""
+        return self._num_empty * 2
 
     def fully_expanded(self) -> bool:
         """Check if all possible next states have been explored according to progressive widening."""
+        # ##>: Full board (no empty cells) is always fully expanded.
+        if self.max_outcomes == 0:
+            return True
         return len(self.children) >= min(
-            len(self.next_states), self.widening_constant * power(self.visits, self.widening_alpha)
+            self.max_outcomes, self.widening_constant * power(self.visits, self.widening_alpha)
         )
 
     def add_child(self) -> Decision:
         """
         Add a new decision node as a child.
 
-        Selects an unexplored outcome and creates a new Decision node.
+        Generates an unexplored outcome on-demand and creates a new Decision node.
 
         Returns
         -------
@@ -226,16 +240,29 @@ class Chance(Node):
         ValueError
             If all possible outcomes have been tried.
         """
-        unvisited = [
-            (outcome, prior)
-            for outcome, prior in self.next_states
-            if not any(array_equal(outcome, child.state) for child in self.children)
-        ]
+        # ##!: Guard against full board edge case (no stochastic outcomes possible).
+        if self._num_empty == 0:
+            child = Decision(state=self.state.copy(), prior=1.0, final=True, parent=self, depth=self.depth + 0.5)
+            self.children.append(child)
+            return child
 
-        if not unvisited:
-            raise ValueError("All outcomes have been tried. Node should be fully expanded.")
+        # ##>: Find unvisited outcome indices (each cell has 2 outcomes: value 2 and 4).
+        all_indices = set(range(self.max_outcomes))
+        unvisited_indices = list(all_indices - set(self._generated_indices))
 
-        outcome, prior = unvisited[GENERATOR.choice(len(unvisited))]
+        if not unvisited_indices:
+            raise ValueError('All outcomes have been tried. Node should be fully expanded.')
+
+        # ##>: Select random unvisited outcome and generate it.
+        idx = int(GENERATOR.choice(unvisited_indices))
+        self._generated_indices.append(idx)
+
+        # ##>: Decode index: idx // 2 = cell position, idx % 2 = value (0->2, 1->4).
+        cell_idx = idx // 2
+        value = 2 if idx % 2 == 0 else 4
+        cell = self._empty_cells[cell_idx]
+
+        outcome, prior = generate_outcome(self.state, cell, value, self._num_empty)
         child = Decision(state=outcome, prior=prior, final=is_done(outcome), parent=self, depth=self.depth + 0.5)
         self.children.append(child)
         return child

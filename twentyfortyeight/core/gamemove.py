@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
 """
-Game move utilities for the 2048 game simulator, providing functions for determining legal and illegal moves.
+Game move utilities for the 2048 game simulator, providing functions for determining legal
+and illegal moves.
 """
-from typing import List
 
 from numpy import ndarray, rot90
 
 
-def illegal_actions(state: ndarray) -> List[int]:
+def illegal_actions(state: ndarray) -> list[int]:
     """
     Determine illegal actions for the current game board state.
 
@@ -18,7 +17,7 @@ def illegal_actions(state: ndarray) -> List[int]:
 
     Returns
     -------
-    List[int]
+    list[int]
         A list of illegal actions (0: left, 1: up, 2: right, 3: down).
 
     Notes
@@ -36,7 +35,7 @@ def illegal_actions(state: ndarray) -> List[int]:
     return illegal_moves
 
 
-def legal_actions(state: ndarray) -> List[int]:
+def legal_actions(state: ndarray) -> list[int]:
     """
     Determine legal actions for the current game board state.
 
@@ -47,7 +46,7 @@ def legal_actions(state: ndarray) -> List[int]:
 
     Returns
     -------
-    List[int]
+    list[int]
         A list of legal actions (0: left, 1: up, 2: right, 3: down).
 
     Notes

@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
-"""
-Play 2048 Game
-"""
+"""Play 2048 Game."""
+
 from typing import Any
-from twentyfortyeight.envs import TwentyFortyEight
+
 import numpy as np
 
+from twentyfortyeight.envs import TwentyFortyEight
 from twentyfortyeight.utils import WindowBoard
 
 
@@ -59,11 +58,11 @@ def step(envs: TwentyFortyEight, window: WindowBoard, action: int):
         Action to apply
     """
     obs, reward, terminated = envs.step(action)
-    print(f"reward={reward:.2f}")
+    print(f'reward={reward:.2f}')
 
     redraw(window, obs)
     if terminated:
-        print("terminated!")
+        print('terminated!')
 
 
 def key_handler(envs: TwentyFortyEight, window: WindowBoard, event: Any):
@@ -81,13 +80,13 @@ def key_handler(envs: TwentyFortyEight, window: WindowBoard, event: Any):
     event: Any
         event to handle
     """
-    print("pressed", event.key)
+    print('pressed', event.key)
 
-    if event.key == "escape":
+    if event.key == 'escape':
         window.close()
         return None
 
-    if event.key == "backspace":
+    if event.key == 'backspace':
         reset(envs, window)
         return None
 
@@ -96,14 +95,14 @@ def key_handler(envs: TwentyFortyEight, window: WindowBoard, event: Any):
         return None
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     env = TwentyFortyEight()
     env.reset()
 
-    window_board = WindowBoard(title="2048 Game", size=env.size)
+    window_board = WindowBoard(title='2048 Game', size=env.size)
     window_board.register_key_handler(lambda event: key_handler(env, window_board, event))
 
     reset(env, window_board)
 
-    # Blocking event loop
+    # ##>: Blocking event loop.
     window_board.show(block=True)

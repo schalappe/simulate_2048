@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
 """
 Core functionality for simulating the 2048 game, including board manipulation and game logic.
 """
-from typing import List, Optional, Tuple
 
 from numpy import all as np_all
 from numpy import any as np_any
@@ -11,8 +9,11 @@ from numpy.random import default_rng
 
 from twentyfortyeight.core.gamemove import can_move
 
+# ##>: Tile spawn probabilities for 2048 game (90% for 2, 10% for 4).
+TILE_SPAWN_PROBS: dict[int, float] = {2: 0.9, 4: 0.1}
 
-def merge_column(column: ndarray) -> Tuple[int, ndarray]:
+
+def merge_column(column: ndarray) -> tuple[int, ndarray]:
     """
     Merge adjacent equal values in a column and compute the total score.
 
@@ -61,7 +62,7 @@ def merge_column(column: ndarray) -> Tuple[int, ndarray]:
     return score, array(result, dtype=column.dtype)
 
 
-def slide_and_merge(board: ndarray) -> Tuple[float, ndarray]:
+def slide_and_merge(board: ndarray) -> tuple[float, ndarray]:
     """
     Slide the game board to the left, merge adjacent cells, and compute the score.
 
@@ -94,7 +95,7 @@ def slide_and_merge(board: ndarray) -> Tuple[float, ndarray]:
     return score, result
 
 
-def latent_state(state: ndarray, action: int) -> Tuple[ndarray, float]:
+def latent_state(state: ndarray, action: int) -> tuple[ndarray, float]:
     """
     Compute the next state after applying an action, without adding a new tile.
 
@@ -121,7 +122,7 @@ def latent_state(state: ndarray, action: int) -> Tuple[ndarray, float]:
     return rot90(updated_board, k=-action), reward
 
 
-def after_state(state: ndarray) -> List[Tuple[ndarray, float]]:
+def after_state(state: ndarray) -> list[tuple[ndarray, float]]:
     """
     Generate all possible next states after a move, including new tile placements.
 
@@ -157,21 +158,85 @@ def after_state(state: ndarray) -> List[Tuple[ndarray, float]]:
             new_state = state.copy()
             new_state[tuple(cell)] = new_value
 
-            # Calculate the probability of this state
-            prob = (0.9 if new_value == 2 else 0.1) / num_empty_cells
+            prob = TILE_SPAWN_PROBS[new_value] / num_empty_cells
             probable_states.append((new_state, prob))
 
     return probable_states
 
 
-def fill_cells(state: ndarray, number_tile: int, seed: Optional[int] = None) -> ndarray:
+def after_state_lazy(state: ndarray) -> tuple[ndarray, list[tuple[int, int]], int]:
+    """
+    Prepare lazy generation data for stochastic outcomes.
+
+    Unlike ``after_state()``, this does NOT create any state copies upfront. It returns
+    the base state and empty cell positions, allowing outcomes to be generated on-demand
+    via ``generate_outcome()``.
+
+    Parameters
+    ----------
+    state : ndarray
+        The current state of the game board (post-action, pre-tile-spawn).
+
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - state : ndarray - The base state reference (not copied).
+        - empty_cells : List[Tuple[int, int]] - Positions of empty cells as (row, col).
+        - num_empty : int - Number of empty cells.
+
+    Notes
+    -----
+    This is designed for MCTS with progressive widening, where only a subset of
+    possible outcomes are actually explored. Using lazy generation avoids creating
+    states that will never be visited.
+    """
+    empty_cells = argwhere(state == 0)
+    return state, [(int(c[0]), int(c[1])) for c in empty_cells], len(empty_cells)
+
+
+def generate_outcome(state: ndarray, cell: tuple[int, int], value: int, num_empty: int) -> tuple[ndarray, float]:
+    """
+    Generate a single stochastic outcome on demand.
+
+    Creates a copy of the state with a new tile placed at the specified cell.
+    Use with ``after_state_lazy()`` to generate outcomes incrementally.
+
+    Parameters
+    ----------
+    state : ndarray
+        The base state (will be copied, not mutated).
+    cell : Tuple[int, int]
+        Position (row, col) where the tile will be placed.
+    value : int
+        Tile value to place (2 or 4).
+    num_empty : int
+        Total number of empty cells for probability calculation.
+
+    Returns
+    -------
+    tuple
+        - new_state : ndarray - A new board state with the tile added.
+        - probability : float - The probability of this outcome.
+
+    Notes
+    -----
+    - The original state is NOT modified.
+    - Probability = P(value) / num_empty, where P(2)=0.9 and P(4)=0.1.
+    """
+    new_state = state.copy()
+    new_state[cell] = value
+    return new_state, TILE_SPAWN_PROBS[value] / num_empty
+
+
+def fill_cells(state: ndarray, number_tile: int, seed: int | None = None) -> ndarray:
     """
     Fill empty cells with new tiles (2 or 4).
 
     Parameters
     ----------
     state : ndarray
-        The current state of the game board.
+        The current state of the game board. **Modified in-place.**
     number_tile : int
         Number of new tiles to add.
     seed : int, optional
@@ -180,18 +245,21 @@ def fill_cells(state: ndarray, number_tile: int, seed: Optional[int] = None) -> 
     Returns
     -------
     ndarray
-        The updated state of the game board with new tiles added.
+        The same array reference with new tiles added.
 
     Notes
     -----
     - New tiles have a 90% chance of being 2 and a 10% chance of being 4.
     - If there are fewer empty cells than requested, it fills all available cells.
+    - **This function mutates the input array.** Pass ``state.copy()`` if the original must be preserved.
     """
     rng = default_rng(seed)
     # ##: Only there still available places
     if not state.all():
-        # ##: Randomly choose cell value between 2 and 4.
-        values = rng.choice([2, 4], size=number_tile, p=[0.9, 0.1])
+        # ##>: Values and probabilities from module constant for consistency.
+        tile_values = list(TILE_SPAWN_PROBS.keys())
+        tile_probs = list(TILE_SPAWN_PROBS.values())
+        values = rng.choice(tile_values, size=number_tile, p=tile_probs)
 
         # ##: Randomly choose cells positions in board.
         available_cells = argwhere(state == 0)
@@ -202,7 +270,7 @@ def fill_cells(state: ndarray, number_tile: int, seed: Optional[int] = None) -> 
     return state
 
 
-def next_state(state: ndarray, action: int, seed: Optional[int] = None) -> Tuple[ndarray, float]:
+def next_state(state: ndarray, action: int, seed: int | None = None) -> tuple[ndarray, float]:
     """
     Compute the next state and reward after applying an action.
 
