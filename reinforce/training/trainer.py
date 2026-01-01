@@ -14,7 +14,10 @@ from time import time
 from numpy import mean
 from tqdm import tqdm
 
-from .config import StochasticMuZeroConfig
+from reinforce.mcts.stochastic_agent import StochasticMuZeroAgent
+from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
+
+from .config import StochasticMuZeroConfig, default_2048_config
 from .learner import StochasticMuZeroLearner
 from .replay_buffer import ReplayBuffer
 from .self_play import generate_games
@@ -58,8 +61,6 @@ class StochasticMuZeroTrainer:
         checkpoint_dir : str | Path | None
             Directory for checkpoints. Creates if doesn't exist.
         """
-        from .config import default_2048_config
-
         if config is None:
             config = default_2048_config()
 
@@ -311,9 +312,6 @@ class StochasticMuZeroTrainer:
         dict[str, float]
             Evaluation metrics.
         """
-        from reinforce.mcts.stochastic_agent import StochasticMuZeroAgent
-        from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
-
         agent = StochasticMuZeroAgent(
             network=self.learner.get_network(),
             num_simulations=self.config.num_simulations,

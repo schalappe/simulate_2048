@@ -11,6 +11,7 @@ import numpy as np
 
 from reinforce.mcts.actor import MonteCarloAgent
 from reinforce.mcts.node import Decision
+from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
 
 
 class TestMonteCarloAgent(TestCase):
@@ -104,8 +105,6 @@ class TestMonteCarloAgentIntegration(TestCase):
 
     def test_agent_completes_game_without_errors(self):
         """Agent can play a full game from start to finish."""
-        from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
-
         env = TwentyFortyEight(size=4)
         agent = MonteCarloAgent(iterations=5)
 

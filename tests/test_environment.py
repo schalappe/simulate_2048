@@ -9,7 +9,14 @@ from unittest import TestCase, main
 
 import numpy as np
 
-from twentyfortyeight.core.gameboard import TILE_SPAWN_PROBS, after_state, is_done, next_state
+from twentyfortyeight.core.gameboard import (
+    TILE_SPAWN_PROBS,
+    after_state,
+    is_done,
+    merge_column,
+    next_state,
+    slide_and_merge,
+)
 from twentyfortyeight.core.gamemove import illegal_actions, legal_actions
 from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
 
@@ -179,8 +186,6 @@ class TestMergeLogic(TestCase):
 
     def test_merge_empty_column(self):
         """Empty column merges to empty with zero score."""
-        from twentyfortyeight.core.gameboard import merge_column
-
         column = np.array([0, 0, 0, 0])
         score, result = merge_column(column)
 
@@ -189,8 +194,6 @@ class TestMergeLogic(TestCase):
 
     def test_merge_single_tile(self):
         """Single tile column produces no merge."""
-        from twentyfortyeight.core.gameboard import merge_column
-
         column = np.array([0, 4, 0, 0])
         score, result = merge_column(column)
 
@@ -199,8 +202,6 @@ class TestMergeLogic(TestCase):
 
     def test_merge_cascade_all_same(self):
         """All same values merge in pairs correctly."""
-        from twentyfortyeight.core.gameboard import merge_column
-
         column = np.array([2, 2, 2, 2])
         score, result = merge_column(column)
 
@@ -210,8 +211,6 @@ class TestMergeLogic(TestCase):
 
     def test_score_accumulation_multiple_merges(self):
         """Score correctly sums across multiple merges."""
-        from twentyfortyeight.core.gameboard import slide_and_merge
-
         # ##>: Each row has one merge.
         board = np.array([[2, 2, 0, 0], [4, 4, 0, 0], [8, 8, 0, 0], [16, 16, 0, 0]])
         score, _ = slide_and_merge(board)

@@ -26,7 +26,8 @@ from reinforce.mcts.network_search import (
 )
 from reinforce.mcts.stochastic_agent import SearchStats, StochasticMuZeroAgent
 from reinforce.neural.network import create_stochastic_network
-from twentyfortyeight.core.gameboard import fill_cells
+from twentyfortyeight.core.gameboard import fill_cells, is_done, next_state
+from twentyfortyeight.core.gamemove import legal_actions
 
 # ##>: Test constants - smaller values for faster tests.
 STATE_SIZE = 64
@@ -427,8 +428,6 @@ class TestAgentPlaysGame:
         )
 
         # ##>: Make a few moves.
-        from twentyfortyeight.core.gameboard import is_done, next_state
-
         state = simple_game_state.copy()
         moves_made = 0
 
@@ -449,8 +448,6 @@ class TestAgentPlaysGame:
             codebook_size=CODEBOOK_SIZE,
             num_simulations=10,
         )
-
-        from twentyfortyeight.core.gamemove import legal_actions
 
         for _ in range(5):
             legal = legal_actions(simple_game_state)
