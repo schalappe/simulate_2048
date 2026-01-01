@@ -1,11 +1,11 @@
 from unittest import TestCase, main
+
 from numpy import array
 
 from twentyfortyeight.core.gamemove import illegal_actions, legal_actions
 
 
 class TestGameMove(TestCase):
-
     def test_illegal_actions(self):
         """
         Test if illegal actions are correctly identified.
@@ -23,5 +23,5 @@ class TestGameMove(TestCase):
         self.assertEqual(set(legal), {1, 2, 3})
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

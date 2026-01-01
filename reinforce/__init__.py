@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Reinforcement learning module for 2048.
 
@@ -15,7 +14,8 @@ neural : Neural network models
     - Network: Unified wrapper for representation, dynamics, and prediction models
 evaluate : Evaluation script for testing agents
 """
+
 from .mcts import MonteCarloAgent
 from .neural import Network
 
-__all__ = ["MonteCarloAgent", "Network"]
+__all__ = ['MonteCarloAgent', 'Network']

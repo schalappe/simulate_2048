@@ -131,8 +131,6 @@ class TestMoveValidation(TestCase):
     def test_valid_move_spawns_exactly_one_tile(self):
         """Valid move spawns exactly 1 new tile in empty cell."""
         board = np.array([[2, 2, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
-        original_count = np.count_nonzero(board)
-
         next_board, reward = next_state(board, 0, seed=42)
 
         # ##>: Reward positive for valid merge.

@@ -1,13 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 Unified neural network wrapper for MuZero-style models.
 
 This module provides the Network class that unifies the three MuZero models
 (representation, dynamics, prediction) into a single interface.
 """
-from __future__ import annotations
 
-from typing import Tuple
+from __future__ import annotations
 
 from keras import KerasTensor, Model, models, ops, utils
 from numpy import ndarray
@@ -45,7 +43,7 @@ def ndarray_to_tensor(inputs: ndarray, expand: bool = True) -> KerasTensor:
     >>> ndarray_to_tensor(np.array([[3.0], [4.0]]))
     <KerasTensor: shape=(1, 2), dtype=float16, name='ndarray_to_tensor/ExpandDims', tensorflow_grad>
     """
-    obs_tensor = ops.convert_to_tensor(inputs, dtype="float16")
+    obs_tensor = ops.convert_to_tensor(inputs, dtype='float16')
 
     if expand:
         return ops.expand_dims(obs_tensor, 0)
@@ -129,7 +127,7 @@ class Network:
         """
         return self._encoder(ndarray_to_tensor(observation))[0]
 
-    def dynamics(self, state: ndarray, action: int) -> Tuple[ndarray, float]:
+    def dynamics(self, state: ndarray, action: int) -> tuple[ndarray, float]:
         """
         Predict the next state and reward given current state and action.
 
@@ -145,13 +143,15 @@ class Network:
         Tuple[ndarray, float]
             The predicted next state and reward.
         """
-        next_state, reward = self._dynamic([
-            ndarray_to_tensor(state),
-            ndarray_to_tensor(utils.to_categorical([action], num_classes=NUM_ACTIONS), expand=False),
-        ])
+        next_state, reward = self._dynamic(
+            [
+                ndarray_to_tensor(state),
+                ndarray_to_tensor(utils.to_categorical([action], num_classes=NUM_ACTIONS), expand=False),
+            ]
+        )
         return next_state[0], reward[0][0]
 
-    def prediction(self, state: ndarray) -> Tuple[ndarray, float]:
+    def prediction(self, state: ndarray) -> tuple[ndarray, float]:
         """
         Predict policy and value from a hidden state.
 

@@ -1,9 +1,10 @@
 import timeit
+from collections.abc import Callable
+
 import numpy as np
-from typing import Callable, List
+
 from twentyfortyeight.core.gameboard import slide_and_merge
 from twentyfortyeight.core.gamemove import illegal_actions
-
 
 generator = np.random.default_rng(42)
 
@@ -18,7 +19,7 @@ def generate_random_board(size: int = 4) -> np.ndarray:
     return board
 
 
-def time_function(func: Callable, args: List, number: int = 1000, repeat: int = 5) -> float:
+def time_function(func: Callable, args: list, number: int = 1000, repeat: int = 5) -> float:
     """Time the execution of a function."""
     timer = timeit.Timer(lambda: func(*args))
     times = timer.repeat(repeat=repeat, number=number)
@@ -30,7 +31,7 @@ def benchmark_slide_and_merge(board_size: int = 4, num_boards: int = 100):
     boards = [generate_random_board(board_size) for _ in range(num_boards)]
     total_time = sum(time_function(slide_and_merge, [board]) for board in boards)
     avg_time = total_time / num_boards
-    print(f"Average time for slide_and_merge (board size {board_size}x{board_size}): {avg_time:.3f} ms")
+    print(f'Average time for slide_and_merge (board size {board_size}x{board_size}): {avg_time:.3f} ms')
 
 
 def benchmark_illegal_actions(board_size: int = 4, num_boards: int = 100):
@@ -38,14 +39,14 @@ def benchmark_illegal_actions(board_size: int = 4, num_boards: int = 100):
     boards = [generate_random_board(board_size) for _ in range(num_boards)]
     total_time = sum(time_function(illegal_actions, [board]) for board in boards)
     avg_time = total_time / num_boards
-    print(f"Average time for illegal_actions (board size {board_size}x{board_size}): {avg_time:.3f} ms")
+    print(f'Average time for illegal_actions (board size {board_size}x{board_size}): {avg_time:.3f} ms')
 
 
-if __name__ == "__main__":
-    print("Benchmarking slide_and_merge:")
+if __name__ == '__main__':
+    print('Benchmarking slide_and_merge:')
     for size in [4, 6, 8]:
         benchmark_slide_and_merge(board_size=size)
 
-    print("\nBenchmarking illegal_actions:")
+    print('\nBenchmarking illegal_actions:')
     for size in [4, 6, 8]:
         benchmark_illegal_actions(board_size=size)

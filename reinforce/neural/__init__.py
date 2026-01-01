@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Neural network module for MuZero-style reinforcement learning.
 
@@ -7,6 +6,7 @@ This module provides:
 - A unified Network class that wraps all three models
 - Utility functions for tensor conversion
 """
+
 from .models import (
     build_dynamics_model,
     build_prediction_model,
@@ -16,10 +16,10 @@ from .models import (
 from .network import Network, ndarray_to_tensor
 
 __all__ = [
-    "identity_block_dense",
-    "build_representation_model",
-    "build_dynamics_model",
-    "build_prediction_model",
-    "Network",
-    "ndarray_to_tensor",
+    'identity_block_dense',
+    'build_representation_model',
+    'build_dynamics_model',
+    'build_prediction_model',
+    'Network',
+    'ndarray_to_tensor',
 ]

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Monte Carlo Tree Search implementation for the 2048 game.
 
@@ -9,6 +8,7 @@ decisions based on the search results.
 The MCTS algorithm used here is specifically tailored for the 2048 game, taking into account
 its unique characteristics such as the stochastic nature of tile spawns and the large state space.
 """
+
 from numpy import ndarray, sqrt
 
 from .node import Decision

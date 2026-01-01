@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Neural network model builders for MuZero-style architecture.
 
@@ -7,7 +6,6 @@ This module provides functions to build the three core models:
 - Dynamics: Predicts next state and reward given state and action
 - Prediction: Outputs policy and value from hidden state
 """
-from typing import Tuple
 
 from keras import Model, layers
 from numpy import prod
@@ -43,7 +41,7 @@ def identity_block_dense(input_tensor: layers.Layer, units: int) -> layers.Layer
     return x
 
 
-def build_representation_model(input_shape: Tuple[int, ...], encodage_size: int = 512) -> Model:
+def build_representation_model(input_shape: tuple[int, ...], encodage_size: int = 512) -> Model:
     """
     Build the representation (encoder) model.
 
@@ -64,19 +62,19 @@ def build_representation_model(input_shape: Tuple[int, ...], encodage_size: int 
     inputs = layers.Input(shape=input_shape)
 
     # ##>: Initial dense layer to process the input.
-    x = layers.Dense(512, activation="relu")(inputs)
+    x = layers.Dense(512, activation='relu')(inputs)
 
     # ##>: Add identity blocks.
     for _ in range(5):
         x = identity_block_dense(x, 512)
 
     # ##>: Output dense layer for hidden state.
-    outputs = layers.Dense(encodage_size, activation="relu", name="representation_model")(x)
+    outputs = layers.Dense(encodage_size, activation='relu', name='representation_model')(x)
 
     return Model(inputs=inputs, outputs=outputs)
 
 
-def build_dynamics_model(state_shape: Tuple[int, ...], action_size: int) -> Model:
+def build_dynamics_model(state_shape: tuple[int, ...], action_size: int) -> Model:
     """
     Build the dynamics model.
 
@@ -96,11 +94,11 @@ def build_dynamics_model(state_shape: Tuple[int, ...], action_size: int) -> Mode
     """
     # ##>: Input layer for the state.
     input_state = layers.Input(shape=state_shape)
-    dense_state = layers.Dense(512, activation="relu")(input_state)
+    dense_state = layers.Dense(512, activation='relu')(input_state)
 
     # ##>: Input layer for the action.
     input_action = layers.Input(shape=(action_size,))
-    dense_action = layers.Dense(512, activation="relu")(input_action)
+    dense_action = layers.Dense(512, activation='relu')(input_action)
 
     # ##>: Initial dense layer to process the input.
     x = layers.Add()([dense_state, dense_action])
@@ -110,18 +108,18 @@ def build_dynamics_model(state_shape: Tuple[int, ...], action_size: int) -> Mode
         x = identity_block_dense(x, 512)
 
     # ##>: Hidden neuron layer for the next state.
-    hidden_state = layers.Dense(512, activation="relu")(x)
-    next_state = layers.Dense(prod(state_shape), activation="relu", name="next_state")(hidden_state)
+    hidden_state = layers.Dense(512, activation='relu')(x)
+    next_state = layers.Dense(prod(state_shape), activation='relu', name='next_state')(hidden_state)
     next_state = layers.Reshape(state_shape)(next_state)
 
     # ##>: Hidden neuron layer for the reward.
-    hidden_reward = layers.Dense(512, activation="relu")(x)
-    reward = layers.Dense(1, name="reward")(hidden_reward)
+    hidden_reward = layers.Dense(512, activation='relu')(x)
+    reward = layers.Dense(1, name='reward')(hidden_reward)
 
-    return Model([input_state, input_action], [next_state, reward], name="dynamics_model")
+    return Model([input_state, input_action], [next_state, reward], name='dynamics_model')
 
 
-def build_prediction_model(state_shape: Tuple[int, ...], action_size: int) -> Model:
+def build_prediction_model(state_shape: tuple[int, ...], action_size: int) -> Model:
     """
     Build the prediction model.
 
@@ -142,18 +140,18 @@ def build_prediction_model(state_shape: Tuple[int, ...], action_size: int) -> Mo
     inputs = layers.Input(shape=state_shape)
 
     # ##>: Initial dense layer to process the input.
-    x = layers.Dense(512, activation="relu")(inputs)
+    x = layers.Dense(512, activation='relu')(inputs)
 
     # ##>: Add identity blocks.
     for _ in range(5):
         x = identity_block_dense(x, 512)
 
     # ##>: Hidden neuron layer for the policy.
-    hidden_policy = layers.Dense(512, activation="relu")(x)
-    policy = layers.Dense(action_size, activation="softmax", name="policy")(hidden_policy)
+    hidden_policy = layers.Dense(512, activation='relu')(x)
+    policy = layers.Dense(action_size, activation='softmax', name='policy')(hidden_policy)
 
     # ##>: Hidden neuron layer for the value.
-    hidden_value = layers.Dense(512, activation="relu")(x)
-    value = layers.Dense(1, name="value")(hidden_value)
+    hidden_value = layers.Dense(512, activation='relu')(x)
+    value = layers.Dense(1, name='value')(hidden_value)
 
-    return Model(inputs, [policy, value], name="prediction_model")
+    return Model(inputs, [policy, value], name='prediction_model')

@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 """
 Evaluate reinforcement learning methods on the 2048 game.
 """
+
 from collections import Counter
-from typing import Dict
 
 import numpy as np
 from tqdm import trange
@@ -12,7 +11,7 @@ from reinforce.mcts import MonteCarloAgent
 from twentyfortyeight.envs import TwentyFortyEight
 
 
-def evaluate(method: str = "mcts", length: int = 10) -> Dict[int, int]:
+def evaluate(method: str = 'mcts', length: int = 10) -> dict[int, int]:
     """
     Evaluate a reinforcement learning method.
 
@@ -28,7 +27,7 @@ def evaluate(method: str = "mcts", length: int = 10) -> Dict[int, int]:
     Dict[int, int]
         Frequency distribution of maximum tiles achieved across games.
     """
-    if method != "mcts":
+    if method != 'mcts':
         raise ValueError(f"Unknown method: {method}. Currently only 'mcts' is supported.")
 
     actor = MonteCarloAgent()
@@ -47,7 +46,7 @@ def evaluate(method: str = "mcts", length: int = 10) -> Dict[int, int]:
                 rewards += reward
 
                 # ##>: Log.
-                period.set_description(f"Evaluation: {num + 1}")
+                period.set_description(f'Evaluation: {num + 1}')
                 period.set_postfix(score=rewards, max=np.max(env.observation))
 
             # ##>: Save max cells.
@@ -58,13 +57,13 @@ def evaluate(method: str = "mcts", length: int = 10) -> Dict[int, int]:
     return dict(frequency)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     from argparse import ArgumentParser
 
     parser = ArgumentParser()
-    parser.add_argument("--method", type=str, default="mcts")
-    parser.add_argument("--length", type=int, default=10)
+    parser.add_argument('--method', type=str, default='mcts')
+    parser.add_argument('--length', type=int, default=10)
     args = parser.parse_args()
 
     result = evaluate(method=args.method, length=args.length)
-    print(f"Evaluation of method {args.method}, score: {result}")
+    print(f'Evaluation of method {args.method}, score: {result}')

@@ -104,7 +104,7 @@ class WindowBoard:
             ax.set_xticklabels([])
             ax.set_yticklabels([])
 
-    def _close_handler(self, event: Event | None = None):
+    def _close_handler(self, _event: Event | None = None):
         """
         Handle the window close event.
 
@@ -131,7 +131,7 @@ class WindowBoard:
         - This method updates the colors and text of each cell in the display.
         - It uses the COLORS dictionary to map tile values to colors.
         """
-        for ax, text, value in zip(self.axes, self.texts, board.flat):
+        for ax, text, value in zip(self.axes, self.texts, board.flat, strict=True):
             value = int(value)
             text.set_text(str(value) if value != 0 else '')
             ax.set_facecolor(self.COLORS.get(value, '#FFFFFF'))
