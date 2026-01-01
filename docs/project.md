@@ -1,71 +1,83 @@
-# Project Documentation: 2048 AI Agent
+# 2048 AI Agent
 
-This document provides a comprehensive overview of the 2048 AI agent project, which implements the strategies outlined in the paper "Planning in Stochastic Environments with a Learned Model." The project uses a Monte Carlo Tree Search (MCTS) algorithm guided by a neural network to play the game of 2048, with the game environment implemented using Gymnasium.
+AI agent that plays 2048 using Monte Carlo Tree Search guided by neural networks, inspired by AlphaZero and Stochastic MuZero. Implements strategies from "Planning in Stochastic Environments with a Learned Model."
 
-## Project Goal
+## Overview
 
-The primary goal of this project is to replicate the findings of the research paper and develop an AI agent that can effectively play the game of 2048. The agent uses a learned model of the game's dynamics to plan its moves, leveraging the power of MCTS to explore the game tree and make optimal decisions.
+**Goal**: Train an agent to play 2048 effectively using learned models and MCTS planning.
 
-## Codebase Structure
+**Key Components**:
+- Game environment (Gymnasium interface)
+- MCTS planning algorithm with stochastic branching
+- Neural networks for state evaluation and transition modeling
 
-The project is organized into several key directories, each with a specific purpose:
+## Architecture
 
-- **`twentyfortyeight/`**: The core of the project, containing the 2048 game logic and environment.
-- **`monte_carlo/`**: Implements the Monte Carlo Tree Search algorithm.
-- **`neurals/`**: Contains the neural network models used by the agent.
-- **`notebooks/`**: Includes Jupyter notebooks for experimentation and analysis.
-- **`tests/`**: Unit tests for the various components of the project.
+### Data Flow
 
-### `twentyfortyeight/`
+```text
+Observation (4x4 board) → Encoder → Hidden State → Predictor → (Policy, Value)
+                                         ↓
+                         Action + State → Dynamic → (Next State, Reward)
+```
 
-This directory contains the 2048 game implementation, which is divided into three subdirectories:
+### Module Structure
 
-- **`core/`**: Implements the fundamental game logic, including:
-    - `gameboard.py`: Defines the game board, its state, and the rules of the game.
-    - `gamemove.py`: Manages the application of moves to the game board.
-- **`envs/`**: Contains the Gymnasium environment for the 2048 game.
-    - `twentyfortyeight.py`: Implements the `gym.Env` interface, allowing the agent to interact with the game in a standardized way.
-- **`utils/`**: Provides helper functions and utilities used throughout the project.
+**`twentyfortyeight/`** - Game implementation
+- `core/gameboard.py`: Board state and operations (numpy rotations for movement)
+- `core/gamemove.py`: Move validation and application
+- `envs/twentyfortyeight.py`: Gymnasium environment interface
 
-### `monte_carlo/`
+**`monte_carlo/`** - MCTS planning
+- `actor.py`: Action selection from search results
+- `node.py`: Decision and Chance nodes with progressive widening
+- `search.py`: PUCT selection, adaptive simulation, backpropagation
 
-This directory contains the implementation of the MCTS algorithm, which is central to the agent's decision-making process. The key files are:
+**`neurals/`** - Neural network models
+- `models.py`: Representation, Dynamics, and Prediction networks
+- `network.py`: Unified interface for all three models
 
-- **`actor.py`**: Defines the actor, which is responsible for selecting moves based on the MCTS search results.
-- **`node.py`**: Implements the nodes of the search tree, which store information about the game state and search statistics.
-- **`search.py`**: Contains the main MCTS search algorithm, which builds and explores the game tree.
+**`notebooks/`** - Analysis and visualization
+- `test_network.ipynb`: Network debugging
+- `visualize_model.ipynb`: State representation visualization
+- `visualize_trees.ipynb`: MCTS tree exploration
 
-### `neurals/`
+**`tests/`** - Unit tests
+- `test_board.py`: Game board logic
+- `test_encoded.py`: State encoding
+- `test_move.py`: Move application
+- `test_perf_utils.py`: Utility performance
 
-This directory contains the neural network models that guide the MCTS search. The models are used to evaluate the value of game states and to predict the probability of different moves.
+## Key Concepts
 
-- **`models.py`**: Defines the architectures of the neural networks.
-- **`network.py`**: Provides a wrapper for the neural network models, making them easy to use within the MCTS algorithm.
+### Stochastic State Handling
 
-### `notebooks/`
+The codebase distinguishes between deterministic and stochastic transitions:
 
-This directory contains Jupyter notebooks for various tasks, such as:
+- `latent_state()`: Deterministic - applies action without adding new tile
+- `after_state()`: Stochastic - generates all possible states after tile spawn with probabilities
+- `next_state()`: Full transition including random tile placement
 
-- **`test_network.ipynb`**: For testing and debugging the neural network models.
-- **`visualize_model.ipynb`**: For visualizing the learned representations of the game state.
-- **`visualize_trees.ipynb`**: For visualizing the MCTS search trees, which can help in understanding the agent's decision-making process.
+### Critical Implementation Patterns
 
-### `tests/`
+**Board Rotation**: All movement operations (left/up/right/down) are implemented by rotating the board, applying a left-slide, then rotating back. See `gameboard.py:119`.
 
-This directory contains unit tests for the project, ensuring the correctness of the implementation. The tests cover:
+**Reward Normalization**: Log-scale normalization compresses the reward range for stable learning. Maximum theoretical tile is 2^16.
 
-- **`test_board.py`**: The game board and its logic.
-- **`test_encoded.py`**: The encoding of the game state.
-- **`test_move.py`**: The application of moves.
-- **`test_perf_utils.py`**: The performance of utility functions.
+**Progressive Widening**: Chance nodes in MCTS use progressive widening to manage the stochastic branching factor efficiently.
 
-## Getting Started
+## Quick Start
 
-To run the project, you will need to install the dependencies listed in `requirements.txt`. You can then use the scripts in the root directory to train and evaluate the agent.
+```bash
+# Install dependencies
+uv sync
 
-- **`manuals_control.py`**: Allows you to play the game manually.
-- **`evaluate.py`**: Evaluates the performance of a trained agent.
+# Play manually
+uv run python manuals_control.py
 
-## Conclusion
+# Evaluate MCTS agent
+uv run python evaluate.py --method mcts
 
-This project provides a complete implementation of a sophisticated AI agent for the game of 2048, based on a state-of-the-art planning algorithm. The modular structure of the codebase makes it easy to understand, modify, and extend, providing a solid foundation for further research in this area.
+# Run tests
+uv run pytest tests/
+```
