@@ -26,7 +26,6 @@ class StochasticMuZeroConfig:
     num_residual_blocks: int = 10  # ResNet blocks per network
 
     # ##>: Self-play parameters.
-    num_actors: int = 4  # Parallel self-play workers
     num_simulations: int = 100  # MCTS simulations per move
     discount: float = 0.999  # Reward discount factor
 
@@ -126,7 +125,6 @@ def small_2048_config() -> StochasticMuZeroConfig:
     return StochasticMuZeroConfig(
         hidden_size=128,
         num_residual_blocks=5,
-        num_actors=2,
         num_simulations=50,
         replay_buffer_size=10_000,
         batch_size=256,

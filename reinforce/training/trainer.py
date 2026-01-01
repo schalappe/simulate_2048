@@ -95,9 +95,7 @@ class StochasticMuZeroTrainer:
         min_games : int
             Minimum number of games to generate.
         """
-        num_workers = self.config.num_actors
-        parallel_msg = f' (using {num_workers} workers)' if num_workers > 1 else ''
-        logger.info(f'Filling replay buffer with {min_games} games{parallel_msg}...')
+        logger.info(f'Filling replay buffer with {min_games} games...')
         start_time = time()
 
         trajectories = generate_games(
@@ -106,7 +104,6 @@ class StochasticMuZeroTrainer:
             num_games=min_games,
             training_step=0,
             show_progress=True,
-            num_workers=num_workers,
         )
 
         for traj in trajectories:
@@ -128,8 +125,6 @@ class StochasticMuZeroTrainer:
         """
         Generate self-play games and add to replay buffer.
 
-        Uses parallel workers when config.num_actors > 1.
-
         Parameters
         ----------
         num_games : int
@@ -140,7 +135,6 @@ class StochasticMuZeroTrainer:
             network=self.learner.get_network(),
             num_games=num_games,
             training_step=self.learner.training_step,
-            num_workers=self.config.num_actors,
         )
 
         for traj in trajectories:
