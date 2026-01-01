@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from numpy import max as np_max
 from numpy import ndarray, zeros
+from tqdm import tqdm
 
 from reinforce.mcts.network_search import (
     DecisionNode,
@@ -247,6 +248,7 @@ def generate_games(
     network: StochasticNetwork,
     num_games: int,
     training_step: int = 0,
+    show_progress: bool = False,
 ) -> list[Trajectory]:
     """
     Generate multiple games for training.
@@ -261,6 +263,8 @@ def generate_games(
         Number of games to generate.
     training_step : int
         Current training step.
+    show_progress : bool
+        Whether to show a progress bar.
 
     Returns
     -------
@@ -271,8 +275,21 @@ def generate_games(
     actor.set_training_step(training_step)
 
     trajectories = []
-    for _ in range(num_games):
+    game_iter = range(num_games)
+
+    if show_progress:
+        game_iter = tqdm(game_iter, desc='Self-play', unit='game', leave=False)
+
+    for _ in game_iter:
         traj = actor.play_game()
         trajectories.append(traj)
+
+        # ##>: Update progress bar with game stats.
+        if show_progress:
+            game_iter.set_postfix(
+                reward=f'{traj.total_reward:.0f}',
+                tile=traj.max_tile,
+                moves=len(traj),
+            )
 
     return trajectories

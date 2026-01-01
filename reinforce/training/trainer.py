@@ -12,6 +12,7 @@ from pathlib import Path
 from time import time
 
 from numpy import mean
+from tqdm import tqdm
 
 from .config import StochasticMuZeroConfig
 from .learner import StochasticMuZeroLearner
@@ -101,6 +102,7 @@ class StochasticMuZeroTrainer:
             network=self.learner.get_network(),
             num_games=min_games,
             training_step=0,
+            show_progress=True,
         )
 
         for traj in trajectories:
@@ -110,9 +112,13 @@ class StochasticMuZeroTrainer:
             self._max_tiles.append(traj.max_tile)
 
         elapsed = time() - start_time
-        logger.info(f'Generated {min_games} games in {elapsed:.1f}s')
-        logger.info(f'Average reward: {mean(self._episode_rewards[-min_games:]):.1f}')
-        logger.info(f'Average length: {mean(self._episode_lengths[-min_games:]):.1f}')
+        recent_rewards = self._episode_rewards[-min_games:]
+        recent_lengths = self._episode_lengths[-min_games:]
+        recent_tiles = self._max_tiles[-min_games:]
+        logger.info(f'Generated {min_games} games in {elapsed:.1f}s ({min_games / elapsed:.1f} games/s)')
+        logger.info(f'  Reward: avg={mean(recent_rewards):.1f}, max={max(recent_rewards):.1f}')
+        logger.info(f'  Length: avg={mean(recent_lengths):.1f}, max={max(recent_lengths)}')
+        logger.info(f'  MaxTile: avg={mean(recent_tiles):.0f}, max={max(recent_tiles)}')
 
     def _generate_self_play_games(self, num_games: int) -> None:
         """
@@ -174,7 +180,10 @@ class StochasticMuZeroTrainer:
         if len(self.replay_buffer) == 0:
             self._fill_replay_buffer(min_games=max(100, self.config.batch_size))
 
-        logger.info(f'Starting training for {num_steps} steps...')
+        logger.info(f'Starting training for {num_steps:,} steps...')
+        logger.info(f'  Batch size: {self.config.batch_size}')
+        logger.info(f'  Log interval: {log_interval}')
+        logger.info(f'  Checkpoint interval: {checkpoint_interval}')
         self._train_start_time = time()
 
         history = {
@@ -187,7 +196,10 @@ class StochasticMuZeroTrainer:
             'max_tile': [],
         }
 
-        for step in range(num_steps):
+        # ##>: Create progress bar for training loop.
+        pbar = tqdm(range(num_steps), desc='Training', unit='step')
+
+        for step in pbar:
             # ##>: Generate self-play games.
             if step % 10 == 0:  # Generate games periodically
                 self._generate_self_play_games(games_per_step)
@@ -205,6 +217,15 @@ class StochasticMuZeroTrainer:
             if len(self._episode_rewards) > 0:
                 history['episode_reward'].append(self._episode_rewards[-1])
                 history['max_tile'].append(self._max_tiles[-1])
+
+            # ##>: Update progress bar with key metrics.
+            recent_rewards = self._episode_rewards[-100:] if self._episode_rewards else [0]
+            recent_tiles = self._max_tiles[-100:] if self._max_tiles else [0]
+            pbar.set_postfix(
+                loss=f'{losses["total"]:.3f}',
+                reward=f'{mean(recent_rewards):.0f}',
+                tile=max(recent_tiles),
+            )
 
             # ##>: Logging.
             if step > 0 and step % log_interval == 0:
@@ -224,6 +245,8 @@ class StochasticMuZeroTrainer:
                 }
                 callback(step, metrics)
 
+        pbar.close()
+
         # ##>: Final checkpoint.
         self._save_checkpoint(num_steps)
         logger.info('Training complete!')
@@ -236,14 +259,15 @@ class StochasticMuZeroTrainer:
         steps_per_sec = step / elapsed if elapsed > 0 else 0
 
         recent_rewards = self._episode_rewards[-100:] if self._episode_rewards else [0]
+        recent_lengths = self._episode_lengths[-100:] if self._episode_lengths else [0]
         recent_tiles = self._max_tiles[-100:] if self._max_tiles else [0]
 
-        logger.info(
-            f'Step {step:,} | '
-            f'Loss: {losses["total"]:.4f} | '
-            f'Policy: {losses["policy"]:.4f} | '
-            f'Value: {losses["value"]:.4f} | '
+        # ##>: Use tqdm.write to avoid interfering with progress bar.
+        tqdm.write(
+            f'\n[Step {step:,}] '
+            f'Loss: {losses["total"]:.4f} (p={losses["policy"]:.3f}, v={losses["value"]:.3f}, r={losses["reward"]:.3f}) | '
             f'Reward: {mean(recent_rewards):.1f} | '
+            f'Length: {mean(recent_lengths):.0f} | '
             f'MaxTile: {max(recent_tiles)} | '
             f'Buffer: {len(self.replay_buffer):,} | '
             f'{steps_per_sec:.1f} steps/s'
