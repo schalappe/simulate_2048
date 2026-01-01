@@ -312,7 +312,7 @@ class TestIntegration(TestCase):
         env.reset(seed=42)
 
         max_steps = 1000
-        for step in range(max_steps):
+        for step in range(max_steps):  # noqa: B007
             legal = legal_actions(env._current_state)
 
             if not legal or env.is_finished:

@@ -18,7 +18,7 @@ from twentyfortyeight.core.gameboard import TILE_SPAWN_PROBS, is_done, next_stat
 from twentyfortyeight.core.gamemove import legal_actions
 from twentyfortyeight.utils.normalize import normalize_reward
 
-from .node import Chance, Decision, Node
+from .node import Chance, Decision
 
 # ##>: Pre-computed tile values and probabilities for simulation sampling.
 _TILE_VALUES = list(TILE_SPAWN_PROBS.keys())
@@ -107,7 +107,7 @@ def puct_select(node: Decision, exploration_weight: float) -> Chance:
     return max(node.children, key=puct_score)
 
 
-def select_child(node: Node, exploration_weight: float) -> Node:
+def select_child(node: Decision | Chance, exploration_weight: float) -> Decision | Chance:
     """
     Select a child node for expansion using the UCB1 algorithm with progressive widening.
 
@@ -116,28 +116,29 @@ def select_child(node: Node, exploration_weight: float) -> Node:
 
     Parameters
     ----------
-    node : Node
+    node : Decision | Chance
         The current node from which to select a child.
     exploration_weight : float
         The exploration weight for the UCB1 calculation.
 
     Returns
     -------
-    Node
+    Decision | Chance
         The selected child node.
     """
-    while node.children:
-        if not node.fully_expanded():
-            return node
-        if isinstance(node, Decision):
-            node = puct_select(node, exploration_weight)
+    current: Decision | Chance = node
+    while current.children:
+        if not current.fully_expanded():
+            return current
+        if isinstance(current, Decision):
+            current = puct_select(current, exploration_weight)
         else:
-            all_visits = sum(child.visits for child in node.children)
-            node = GENERATOR.choice(node.children, p=[child.visits / all_visits for child in node.children])
-    return node
+            all_visits = sum(child.visits for child in current.children)
+            current = GENERATOR.choice(current.children, p=[child.visits / all_visits for child in current.children])
+    return current
 
 
-def adaptive_simulation_count(node: Node, base_simulations: int) -> int:
+def adaptive_simulation_count(node: Decision | Chance, base_simulations: int) -> int:
     """
     Calculate the adaptive simulation count for a node using inverse logarithmic depth scaling.
 
@@ -165,13 +166,13 @@ def adaptive_simulation_count(node: Node, base_simulations: int) -> int:
     return max(1, int(base_simulations / (1 + log(node.depth + 1))))
 
 
-def simulate(node: Node, simulations: int) -> float:
+def simulate(node: Decision | Chance, simulations: int) -> float:
     """
     Perform multiple rollout simulations from the given node.
 
     Parameters
     ----------
-    node : Node
+    node : Decision | Chance
         The starting node for the simulations.
     simulations : int
         The number of simulations to perform.
@@ -211,7 +212,7 @@ def simulate(node: Node, simulations: int) -> float:
     return total_reward / simulations
 
 
-def backpropagate(node: Node, reward: float) -> None:
+def backpropagate(node: Decision | Chance, reward: float) -> None:
     """
     Back-propagate the reward through the tree.
 
@@ -220,7 +221,7 @@ def backpropagate(node: Node, reward: float) -> None:
 
     Parameters
     ----------
-    node : Node
+    node : Decision | Chance
         The starting node for backpropagation (typically a leaf node).
     reward : float
         The reward value to back-propagate.
@@ -230,9 +231,10 @@ def backpropagate(node: Node, reward: float) -> None:
     - The function updates each node's visit count and cumulative value.
     - It continues updating until it reaches the root node (node with no parent).
     """
-    while node is not None:
-        node.update(reward)
-        node = node.parent
+    current: Decision | Chance | None = node
+    while current is not None:
+        current.update(reward)
+        current = current.parent
 
 
 def monte_carlo_search(

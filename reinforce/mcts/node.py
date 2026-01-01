@@ -41,8 +41,6 @@ class Node(ABC):
         Number of times the node has been visited during search.
     children : List
         List of child nodes.
-    parent : Node
-        The parent node.
 
     Methods
     -------
@@ -63,7 +61,6 @@ class Node(ABC):
     depth: float = 0.0
     values: float = 0.0
     visits: int = 0
-    parent: Node
     children: list = field(default_factory=list)
 
     @abstractmethod

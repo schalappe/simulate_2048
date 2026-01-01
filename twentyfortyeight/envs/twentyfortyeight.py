@@ -15,10 +15,6 @@ class TwentyFortyEight:
     make moves, and check the game state.
     """
 
-    # ##: Current game state.
-    _current_state: ndarray | None = None
-    _current_reward: float | None = None
-
     # ##: All Actions.
     ACTIONS = {'left': 0, 'up': 1, 'right': 2, 'down': 3}
 
@@ -38,6 +34,10 @@ class TwentyFortyEight:
         self.size = size
         self._encoded = encoded
         self._normalize = normalize
+
+        # ##>: Initialize state attributes with proper types (will be set by reset()).
+        self._current_state: ndarray = zeros((size, size), dtype=int64)
+        self._current_reward: float = 0.0
 
         self.reset()
 

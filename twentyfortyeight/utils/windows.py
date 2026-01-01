@@ -68,7 +68,8 @@ class WindowBoard:
             The size of the game board (e.g., 4 for a 4x4 board).
         """
         self.fig, self.axe = plt.subplots()
-        self.fig.canvas.manager.set_window_title(title)
+        if self.fig.canvas.manager is not None:  # type: ignore[union-attr]
+            self.fig.canvas.manager.set_window_title(title)  # type: ignore[union-attr]
         self._setup_axes(size)
         self.closed = False
         self.fig.canvas.mpl_connect('close_event', self._close_handler)
@@ -89,10 +90,10 @@ class WindowBoard:
 
         # ##: Remove all ticks and labels for a cleaner game board appearance.
         self.axe.tick_params(axis='both', which='both', length=0)
-        self.axe.set_xticklabels([])
-        self.axe.set_yticklabels([])
+        self.axe.set_xticklabels([])  # type: ignore[arg-type]
+        self.axe.set_yticklabels([])  # type: ignore[arg-type]
         self.axe.set_xticks([])
-        self.axe.set_yticks([])
+        self.axe.set_yticks([])  # type: ignore[arg-type]
 
         self.texts = []
         self.axes = [self.fig.add_subplot(size, size, r * size + c + 1) for r in range(size) for c in range(size)]
@@ -100,9 +101,9 @@ class WindowBoard:
             text = ax.text(0.5, 0.5, '', ha='center', va='center', fontsize='x-large', fontweight='demibold')
             self.texts.append(text)
             ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xticklabels([])
-            ax.set_yticklabels([])
+            ax.set_yticks([])  # type: ignore[arg-type]
+            ax.set_xticklabels([])  # type: ignore[arg-type]
+            ax.set_yticklabels([])  # type: ignore[arg-type]
 
     def _close_handler(self, _event: Event | None = None):
         """

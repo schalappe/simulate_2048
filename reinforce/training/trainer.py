@@ -323,9 +323,9 @@ class StochasticMuZeroTrainer:
         )
 
         env = TwentyFortyEight(encoded=False, normalize=False)
-        rewards = []
-        max_tiles = []
-        lengths = []
+        rewards: list[float] = []
+        max_tiles: list[int] = []
+        lengths: list[int] = []
 
         for _ in range(num_games):
             env.reset()

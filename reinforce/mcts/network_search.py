@@ -65,7 +65,7 @@ class DecisionNode:
     hidden_state: ndarray
     game_state: ndarray | None = None
     is_terminal: bool = False
-    policy_prior: ndarray = field(default_factory=lambda: None)
+    policy_prior: ndarray | None = None
     value: float = 0.0
     visit_count: int = 0
     value_sum: float = 0.0
@@ -127,7 +127,7 @@ class ChanceNode:
     action: int
     prior: float = 1.0
     q_value: float = 0.0
-    chance_probs: ndarray = field(default_factory=lambda: None)
+    chance_probs: ndarray | None = None
     visit_count: int = 0
     value_sum: float = 0.0
     parent: DecisionNode | None = None
@@ -215,8 +215,16 @@ def select_action(node: DecisionNode, exploration_weight: float, min_max_stats: 
     -------
     int
         The selected action.
+
+    Raises
+    ------
+    ValueError
+        If node has no children.
     """
-    best_action = None
+    if not node.children:
+        raise ValueError('Cannot select action from node with no children')
+
+    best_action = -1
     best_score = float('-inf')
 
     for action, child in node.children.items():
@@ -244,7 +252,15 @@ def select_chance_outcome(node: ChanceNode) -> int:
     -------
     int
         The selected chance code index.
+
+    Raises
+    ------
+    ValueError
+        If chance_probs is None (node not expanded).
     """
+    if node.chance_probs is None:
+        raise ValueError('Cannot select chance outcome from unexpanded node')
+
     # ##>: Compute score for each possible outcome.
     scores = node.chance_probs / (1 + get_outcome_visits(node))
     return int(argmax(scores))
@@ -257,14 +273,22 @@ def get_outcome_visits(node: ChanceNode) -> ndarray:
     Parameters
     ----------
     node : ChanceNode
-        The chance node.
+        The chance node (must have chance_probs set).
 
     Returns
     -------
     ndarray
         Visit counts per outcome (0 for unexplored).
+
+    Raises
+    ------
+    ValueError
+        If chance_probs is None.
     """
     from numpy import zeros
+
+    if node.chance_probs is None:
+        raise ValueError('Cannot get outcome visits from node without chance_probs')
 
     visits = zeros(len(node.chance_probs))
     for code_idx, child in node.children.items():
@@ -301,7 +325,7 @@ def expand_decision_node(node: DecisionNode, network: StochasticNetwork, game_st
         afterstate = network.afterstate_dynamics(node.hidden_state, action)
 
         # ##>: Prior from the network policy (masked to legal moves).
-        prior = float(node.policy_prior[action])
+        prior = float(node.policy_prior[action]) if node.policy_prior is not None else 1.0 / len(node.legal_moves)
 
         child = ChanceNode(afterstate=afterstate, action=action, prior=prior, parent=node)
         node.children[action] = child
@@ -369,7 +393,7 @@ def backpropagate(node: DecisionNode | ChanceNode, value: float, min_max_stats: 
     min_max_stats : MinMaxStats
         For tracking value bounds.
     """
-    current = node
+    current: DecisionNode | ChanceNode | None = node
     while current is not None:
         current.visit_count += 1
         current.value_sum += value
@@ -434,8 +458,8 @@ def run_network_mcts(
 
     # ##>: Run simulations.
     for _ in range(num_simulations):
-        node = root
-        search_path = [node]
+        node: DecisionNode | ChanceNode = root
+        search_path: list[DecisionNode | ChanceNode] = [node]
 
         # ##>: Selection: traverse tree until we find a node to expand.
         while True:
@@ -504,7 +528,7 @@ def get_policy_from_visits(root: DecisionNode, temperature: float = 1.0) -> dict
 
     if temperature == 0.0:
         # ##>: Argmax selection.
-        best_action = max(visits, key=visits.get)
+        best_action = max(visits, key=lambda a: visits[a])
         return {action: 1.0 if action == best_action else 0.0 for action in visits}
 
     # ##>: Softmax with temperature.
@@ -543,12 +567,20 @@ def select_action_from_root(root: DecisionNode, temperature: float = 0.0) -> int
     -------
     int
         The selected action.
+
+    Raises
+    ------
+    ValueError
+        If root has no children.
     """
+    if not root.children:
+        raise ValueError('Cannot select action from root with no children')
+
     policy = get_policy_from_visits(root, temperature)
 
     if temperature == 0.0:
         # ##>: Deterministic selection (most visits, Q-value tiebreaker).
-        best_action = None
+        best_action = -1
         best_visits = -1
         best_q = float('-inf')
 

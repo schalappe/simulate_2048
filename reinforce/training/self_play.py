@@ -394,18 +394,16 @@ def _generate_games_sequential(
     actor.set_training_step(training_step)
 
     trajectories = []
-    game_iter = range(num_games)
-
-    if show_progress:
-        game_iter = tqdm(game_iter, desc='Self-play', unit='game', leave=False)
+    progress_bar = tqdm(range(num_games), desc='Self-play', unit='game', leave=False) if show_progress else None
+    game_iter = progress_bar if progress_bar is not None else range(num_games)
 
     for _ in game_iter:
         traj = actor.play_game()
         trajectories.append(traj)
 
         # ##>: Update progress bar with game stats.
-        if show_progress:
-            game_iter.set_postfix(
+        if progress_bar is not None:
+            progress_bar.set_postfix(
                 reward=f'{traj.total_reward:.0f}',
                 tile=traj.max_tile,
                 moves=len(traj),
@@ -472,13 +470,13 @@ def _generate_games_parallel(
 
                     # ##>: Skip failed games (worker returns None on error).
                     if traj is None:
-                        if show_progress:
+                        if pbar is not None:
                             pbar.update(1)
                         continue
 
                     trajectories.append(traj)
 
-                    if show_progress:
+                    if pbar is not None:
                         pbar.update(1)
                         pbar.set_postfix(
                             reward=f'{traj.total_reward:.0f}',

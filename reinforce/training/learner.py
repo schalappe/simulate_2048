@@ -103,11 +103,11 @@ class StochasticMuZeroLearner:
         dict[str, Any]
             Batch data with observations, actions, targets.
         """
-        batch_observations = []
-        batch_actions = []
-        batch_policy_targets = []
-        batch_value_targets = []
-        batch_reward_targets = []
+        batch_observations: list[list] = []
+        batch_actions: list[list[int]] = []
+        batch_policy_targets: list[list] = []
+        batch_value_targets: list[list[float]] = []
+        batch_reward_targets: list[list[float]] = []
 
         for trajectory, start_pos in samples:
             # ##>: Extract transitions for this sample.
@@ -250,6 +250,7 @@ class StochasticMuZeroLearner:
             hidden_state = self.network.representation(obs_0)
 
             pred_output = self.network.prediction(hidden_state)
+            assert pred_output.policy is not None, 'Policy should not be None from prediction network'
             sample_policy_losses.append(compute_policy_loss(pred_output.policy, policy_targets[i, 0]))
             sample_value_losses.append(
                 compute_value_loss(
@@ -282,6 +283,7 @@ class StochasticMuZeroLearner:
                 )
 
                 # ##>: Chance distribution loss.
+                assert as_output.chance_probs is not None, 'Chance probs should not be None from afterstate prediction'
                 sample_chance_losses.append(compute_chance_loss(as_output.chance_probs, chance_code))
 
                 # ##>: Dynamics: afterstate + chance_code -> (next_state, reward).
@@ -298,6 +300,7 @@ class StochasticMuZeroLearner:
 
                 # ##>: Prediction on new state.
                 pred_output = self.network.prediction(hidden_state)
+                assert pred_output.policy is not None, 'Policy should not be None from prediction network'
                 sample_policy_losses.append(compute_policy_loss(pred_output.policy, policy_targets[i, k]))
                 sample_value_losses.append(
                     compute_value_loss(

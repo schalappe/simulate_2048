@@ -43,7 +43,7 @@ def network():
 def game_state():
     """Create a simple game state for testing."""
     state = np.zeros((4, 4), dtype=np.int32)
-    fill_cells(state, num_cells=2)
+    fill_cells(state, number_tile=2)
     return state
 
 
@@ -407,11 +407,11 @@ class TestStochasticMuZeroAgent:
 
         agent.set_training_mode(True)
         assert agent.temperature == 1.0
-        assert agent.add_noise is True
+        assert agent.add_noise
 
         agent.set_training_mode(False)
         assert agent.temperature == 0.0
-        assert agent.add_noise is False
+        assert not agent.add_noise
 
 
 class TestAgentPlaysGame:

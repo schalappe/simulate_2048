@@ -370,7 +370,7 @@ class StraightThroughArgmax(layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def call(self, inputs):
+    def call(self, inputs):  # type: ignore[override]
         """
         Apply straight-through argmax.
 

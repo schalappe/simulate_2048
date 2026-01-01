@@ -5,12 +5,11 @@ Focuses on correctness of selection formulas, adaptive simulation count,
 and tree search integration.
 """
 
-from math import log, sqrt
 from unittest import TestCase, main
 
 import numpy as np
 
-from reinforce.mcts.node import Chance, Decision
+from reinforce.mcts.node import Decision
 from reinforce.mcts.search import adaptive_simulation_count, backpropagate, monte_carlo_search, puct_select, simulate
 
 

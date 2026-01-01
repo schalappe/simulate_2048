@@ -73,25 +73,26 @@ def evaluate(
     total_rewards = []
     episode_lengths = []
 
-    iterator = trange(length) if verbose else range(length)
+    progress_bar = trange(length) if verbose else None
+    iterator = progress_bar if progress_bar is not None else range(length)
+
     for num in iterator:
-        env.reset()
+        state = env.reset()
         rewards, done = 0.0, False
         steps = 0
 
         # ##>: Play a game.
         while not done:
-            state = env._current_state
             action = agent.choose_action(state)
-            _, reward, done = env.step(action)
+            state, reward, done = env.step(action)
             rewards += reward
             steps += 1
 
-            if verbose:
-                iterator.set_description(f'Game {num + 1}/{length}')
-                iterator.set_postfix(reward=int(rewards), max_tile=int(np.max(env._current_state)))
+            if progress_bar is not None:
+                progress_bar.set_description(f'Game {num + 1}/{length}')
+                progress_bar.set_postfix(reward=int(rewards), max_tile=int(np.max(state)))
 
-        max_tiles.append(int(np.max(env._current_state)))
+        max_tiles.append(int(np.max(state)))
         total_rewards.append(rewards)
         episode_lengths.append(steps)
 
