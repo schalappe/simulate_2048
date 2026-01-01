@@ -9,3 +9,7 @@ This module provides:
 
 Reference: "Planning in Stochastic Environments with a Learned Model" (ICLR 2022)
 """
+
+from .network import Network, StochasticNetwork, create_stochastic_network
+
+__all__ = ['Network', 'StochasticNetwork', 'create_stochastic_network']
