@@ -1,4 +1,4 @@
-.PHONY: install dev lint format check test clean play
+.PHONY: install dev lint format check test clean play train train-small train-full eval eval-mcts eval-muzero
 
 # Install dependencies
 install:
@@ -35,6 +35,33 @@ test-cov:
 # Play the game manually
 play:
 	uv run python manuals_control.py
+
+# --- Training ---
+
+# Train with small config (for testing/debugging)
+train-small:
+	uv run python reinforce/train.py --mode small --steps 1000
+
+# Train with full paper configuration
+train-full:
+	uv run python reinforce/train.py --mode full --steps 100000
+
+# Default training target (alias for train-small)
+train: train-small
+
+# --- Evaluation ---
+
+# Evaluate basic MCTS agent (no neural network)
+eval-mcts:
+	uv run python reinforce/evaluate.py --method mcts --length 10 --simulations 100
+
+# Evaluate Stochastic MuZero with a checkpoint
+# Usage: make eval-muzero CHECKPOINT=checkpoints/step_10000
+eval-muzero:
+	uv run python reinforce/evaluate.py --method stochastic_muzero --length 10 --checkpoint $(CHECKPOINT)
+
+# Default evaluation target (basic MCTS)
+eval: eval-mcts
 
 # Clean up cache files
 clean:
