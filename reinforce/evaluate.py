@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 from tqdm import trange
 
-from reinforce.mcts import MonteCarloAgent
+from reinforce.mcts.actor import MonteCarloAgent
 from reinforce.mcts.stochastic_agent import StochasticMuZeroAgent
 from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
 

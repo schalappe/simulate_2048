@@ -15,11 +15,8 @@ Usage:
 
 from argparse import ArgumentParser
 
-from reinforce.training import (
-    StochasticMuZeroTrainer,
-    default_2048_config,
-    small_2048_config,
-)
+from reinforce.training.config import default_2048_config, small_2048_config
+from reinforce.training.trainer import StochasticMuZeroTrainer
 
 
 def main():
