@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from keras import KerasTensor, Model, models, ops, utils
-from numpy import ndarray
+from numpy import ndarray, stack
 
 from .models import (
     HIDDEN_UNITS,
@@ -434,6 +434,131 @@ class StochasticNetwork:
             The chance code c (one-hot encoded).
         """
         return self._encoder(ndarray_to_tensor(observation))[0].numpy()
+
+    # -------------------------------------------------------------------------
+    # Batch inference methods for MCTS optimization
+    # -------------------------------------------------------------------------
+
+    def afterstate_dynamics_batch(self, state: ndarray, actions: list[int]) -> list[ndarray]:
+        """
+        Predict afterstates for multiple actions in a single batch.
+
+        This batches all afterstate dynamics calls for a single decision node,
+        reducing N sequential model calls to 1 batched call.
+
+        Parameters
+        ----------
+        state : ndarray
+            The current hidden state s^k (shared for all actions).
+        actions : list[int]
+            List of actions to evaluate.
+
+        Returns
+        -------
+        list[ndarray]
+            Afterstates as^k for each action.
+        """
+        if not actions:
+            return []
+
+        batch_size = len(actions)
+
+        # ##>: Repeat state for each action in the batch.
+        states_batch = ops.convert_to_tensor(stack([state] * batch_size, axis=0), dtype='float16')
+
+        # ##>: Create one-hot actions batch.
+        actions_batch = ops.convert_to_tensor(utils.to_categorical(actions, num_classes=NUM_ACTIONS), dtype='float16')
+
+        # ##>: Single batched model call.
+        afterstates = self._afterstate_dynamics([states_batch, actions_batch])
+
+        return [afterstates[i] for i in range(batch_size)]
+
+    def prediction_batch(self, states: list[ndarray]) -> list[NetworkOutput]:
+        """
+        Predict policy and value for multiple hidden states in a single batch.
+
+        Parameters
+        ----------
+        states : list[ndarray]
+            List of hidden states to evaluate.
+
+        Returns
+        -------
+        list[NetworkOutput]
+            NetworkOutput for each state containing policy and value.
+        """
+        if not states:
+            return []
+
+        batch_size = len(states)
+
+        # ##>: Stack states into batch tensor.
+        states_batch = ops.convert_to_tensor(stack(states, axis=0), dtype='float16')
+
+        # ##>: Single batched model call.
+        policies, values = self._prediction(states_batch)
+
+        return [NetworkOutput(value=float(values[i][0]), policy=policies[i].numpy()) for i in range(batch_size)]
+
+    def afterstate_prediction_batch(self, afterstates: list[ndarray]) -> list[NetworkOutput]:
+        """
+        Predict Q-value and chance distribution for multiple afterstates.
+
+        Parameters
+        ----------
+        afterstates : list[ndarray]
+            List of afterstates to evaluate.
+
+        Returns
+        -------
+        list[NetworkOutput]
+            NetworkOutput for each afterstate containing Q-value and chance_probs.
+        """
+        if not afterstates:
+            return []
+
+        batch_size = len(afterstates)
+
+        # ##>: Stack afterstates into batch tensor.
+        afterstates_batch = ops.convert_to_tensor(stack(afterstates, axis=0), dtype='float16')
+
+        # ##>: Single batched model call.
+        q_values, chance_probs = self._afterstate_prediction(afterstates_batch)
+
+        return [
+            NetworkOutput(value=float(q_values[i][0]), chance_probs=chance_probs[i].numpy()) for i in range(batch_size)
+        ]
+
+    def dynamics_batch(self, afterstates: list[ndarray], chance_codes: list[ndarray]) -> list[tuple[ndarray, float]]:
+        """
+        Predict next states and rewards for multiple afterstate-chance pairs.
+
+        Parameters
+        ----------
+        afterstates : list[ndarray]
+            List of afterstates.
+        chance_codes : list[ndarray]
+            List of chance codes (one-hot encoded).
+
+        Returns
+        -------
+        list[tuple[ndarray, float]]
+            List of (next_state, reward) tuples.
+        """
+        if not afterstates:
+            return []
+
+        batch_size = len(afterstates)
+
+        # ##>: Stack inputs into batch tensors.
+        afterstates_batch = ops.convert_to_tensor(stack(afterstates, axis=0), dtype='float16')
+        chance_codes_batch = ops.convert_to_tensor(stack(chance_codes, axis=0), dtype='float16')
+
+        # ##>: Single batched model call.
+        next_states, rewards = self._dynamics([afterstates_batch, chance_codes_batch])
+
+        return [(next_states[i], float(rewards[i][0])) for i in range(batch_size)]
 
 
 def create_stochastic_network(
