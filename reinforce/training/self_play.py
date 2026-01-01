@@ -343,6 +343,17 @@ def _play_game_worker(args: tuple) -> Trajectory | None:
     config, weights_dir, training_step, codebook_size = args
 
     try:
+        # ##!: Force CPU-only inference to avoid CUDA context inheritance issues.
+        # ##>: When ProcessPoolExecutor forks, workers inherit an invalid GPU context.
+        # ##>: Using CPU for self-play inference is efficient and avoids this conflict.
+        import os
+
+        os.environ['CUDA_VISIBLE_DEVICES'] = ''
+
+        import tensorflow as tf
+
+        tf.config.set_visible_devices([], 'GPU')
+
         # ##>: Import models to register custom Keras layers before loading.
         import reinforce.neural.models  # noqa: F401
 
