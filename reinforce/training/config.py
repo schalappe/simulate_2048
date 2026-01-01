@@ -6,6 +6,21 @@ Hyperparameters follow the paper "Planning in Stochastic Environments with a Lea
 """
 
 from dataclasses import dataclass, field
+from enum import Enum
+
+
+class MCTSMode(str, Enum):
+    """
+    MCTS execution mode for self-play.
+
+    SEQUENTIAL: Original MCTS with batched afterstate_dynamics (~4x speedup).
+    BATCHED: Leaf batching for improved throughput (~10x speedup).
+    THREADED: Parallel workers with virtual loss (~25-50x speedup).
+    """
+
+    SEQUENTIAL = 'sequential'
+    BATCHED = 'batched'
+    THREADED = 'threaded'
 
 
 @dataclass
@@ -28,6 +43,11 @@ class StochasticMuZeroConfig:
     # ##>: Self-play parameters.
     num_simulations: int = 100  # MCTS simulations per move
     discount: float = 0.999  # Reward discount factor
+
+    # ##>: MCTS execution mode (for batched inference).
+    mcts_mode: MCTSMode = MCTSMode.BATCHED  # Default to batched for ~10x speedup
+    mcts_batch_size: int = 8  # Batch size for leaf/threaded modes
+    mcts_num_workers: int = 4  # Number of workers for threaded mode
 
     # ##>: Exploration parameters.
     root_dirichlet_alpha: float = 0.25  # Dirichlet noise alpha (paper: 0.25)

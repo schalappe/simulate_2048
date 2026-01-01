@@ -359,7 +359,7 @@ class TestBatchedAgent:
         action = agent.choose_action(sample_state)
         assert 0 <= action <= 3
 
-    def test_agent_training_mode(self, _sample_state):
+    def test_agent_training_mode(self):
         """Training mode enables noise and temperature."""
         agent = BatchedMuZeroAgent.create_untrained(
             observation_shape=OBSERVATION_SHAPE,

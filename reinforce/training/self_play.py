@@ -2,25 +2,32 @@
 Self-play data generation for Stochastic MuZero.
 
 Generates training trajectories by playing games with MCTS.
+Supports three MCTS execution modes for different performance profiles.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from numpy import max as np_max
 from numpy import ndarray, zeros
 from tqdm import tqdm
 
-from reinforce.mcts.network_search import (
-    DecisionNode,
-    get_policy_from_visits,
-    run_network_mcts,
-    select_action_from_root,
-)
+from reinforce.mcts.batched_search import get_policy_from_visits as batched_get_policy
+from reinforce.mcts.batched_search import run_batched_mcts, run_threaded_mcts
+from reinforce.mcts.batched_search import select_action_from_root as batched_select_action
+from reinforce.mcts.network_search import get_policy_from_visits as seq_get_policy
+from reinforce.mcts.network_search import run_network_mcts
+from reinforce.mcts.network_search import select_action_from_root as seq_select_action
 from reinforce.neural.network import StochasticNetwork
 from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
 
-from .config import StochasticMuZeroConfig
+from .config import MCTSMode, StochasticMuZeroConfig
 from .replay_buffer import Trajectory, TransitionData
+
+if TYPE_CHECKING:
+    from reinforce.mcts.batched_search import DecisionNode as BatchedDecisionNode
+    from reinforce.mcts.network_search import DecisionNode as SeqDecisionNode
 
 
 class SelfPlayActor:
@@ -78,6 +85,72 @@ class SelfPlayActor:
         """Get action selection temperature for current training step."""
         return self.config.get_temperature(self._training_step)
 
+    def _run_mcts(self, raw_state: ndarray, temperature: float) -> tuple[ndarray, float, int]:
+        """
+        Run MCTS with the configured mode.
+
+        Parameters
+        ----------
+        raw_state : ndarray
+            The raw game state (4x4 array).
+        temperature : float
+            Temperature for action selection.
+
+        Returns
+        -------
+        tuple[ndarray, float, int]
+            (search_policy, search_value, selected_action)
+        """
+        mode = self.config.mcts_mode
+
+        if mode == MCTSMode.SEQUENTIAL:
+            root = run_network_mcts(
+                game_state=raw_state,
+                network=self.network,
+                num_simulations=self.config.num_simulations,
+                exploration_weight=self.config.exploration_weight,
+                add_exploration_noise=True,
+                dirichlet_alpha=self.config.root_dirichlet_alpha,
+                noise_fraction=self.config.root_dirichlet_fraction,
+            )
+            policy = seq_get_policy(root, temperature=1.0)
+            search_value = self._compute_search_value_seq(root)
+            action = seq_select_action(root, temperature=temperature)
+
+        elif mode == MCTSMode.BATCHED:
+            root = run_batched_mcts(
+                game_state=raw_state,
+                network=self.network,
+                num_simulations=self.config.num_simulations,
+                batch_size=self.config.mcts_batch_size,
+                exploration_weight=self.config.exploration_weight,
+                add_exploration_noise=True,
+                dirichlet_alpha=self.config.root_dirichlet_alpha,
+                noise_fraction=self.config.root_dirichlet_fraction,
+            )
+            policy = batched_get_policy(root, temperature=1.0)
+            search_value = self._compute_search_value_batched(root)
+            action = batched_select_action(root, temperature=temperature)
+
+        else:  # THREADED
+            root = run_threaded_mcts(
+                game_state=raw_state,
+                network=self.network,
+                num_simulations=self.config.num_simulations,
+                num_workers=self.config.mcts_num_workers,
+                batch_size=self.config.mcts_batch_size,
+                exploration_weight=self.config.exploration_weight,
+                add_exploration_noise=True,
+                dirichlet_alpha=self.config.root_dirichlet_alpha,
+                noise_fraction=self.config.root_dirichlet_fraction,
+            )
+            policy = batched_get_policy(root, temperature=1.0)
+            search_value = self._compute_search_value_batched(root)
+            action = batched_select_action(root, temperature=temperature)
+
+        search_policy = self._policy_dict_to_array(policy, self.config.action_size)
+        return search_policy, search_value, action
+
     def play_game(self, seed: int | None = None) -> Trajectory:
         """
         Play a complete game and return the trajectory.
@@ -104,22 +177,9 @@ class SelfPlayActor:
             # ##>: Get raw state for MCTS (need 4x4 array).
             raw_state = self.env._current_state
 
-            # ##>: Run MCTS.
+            # ##>: Run MCTS with configured mode.
             temperature = self._get_temperature()
-
-            root = run_network_mcts(
-                game_state=raw_state,
-                network=self.network,
-                num_simulations=self.config.num_simulations,
-                exploration_weight=self.config.exploration_weight,
-                add_exploration_noise=True,
-                dirichlet_alpha=self.config.root_dirichlet_alpha,
-                noise_fraction=self.config.root_dirichlet_fraction,
-            )
-            policy = get_policy_from_visits(root, temperature=1.0)
-            search_policy = self._policy_dict_to_array(policy, self.config.action_size)
-            search_value = self._compute_search_value(root)
-            action = select_action_from_root(root, temperature=temperature)
+            search_policy, search_value, action = self._run_mcts(raw_state, temperature)
 
             # ##>: Take action in environment.
             next_obs, reward, done = self.env.step(action)
@@ -176,7 +236,7 @@ class SelfPlayActor:
 
         return policy_array
 
-    def _compute_search_value(self, root: DecisionNode) -> float:
+    def _compute_search_value_seq(self, root: SeqDecisionNode) -> float:
         """
         Compute the search value from the root node (sequential MCTS).
 
@@ -184,8 +244,34 @@ class SelfPlayActor:
 
         Parameters
         ----------
-        root : DecisionNode
-            Root node after MCTS.
+        root : SeqDecisionNode
+            Root node after sequential MCTS.
+
+        Returns
+        -------
+        float
+            Search value estimate.
+        """
+        if not root.children:
+            return root.value
+
+        total_visits = sum(child.visit_count for child in root.children.values())
+        if total_visits == 0:
+            return root.value
+
+        weighted_value = sum(child.value_sum for child in root.children.values()) / total_visits
+        return weighted_value
+
+    def _compute_search_value_batched(self, root: BatchedDecisionNode) -> float:
+        """
+        Compute the search value from the root node (batched MCTS).
+
+        Uses the weighted average of child Q-values by visit count.
+
+        Parameters
+        ----------
+        root : BatchedDecisionNode
+            Root node after batched MCTS.
 
         Returns
         -------
