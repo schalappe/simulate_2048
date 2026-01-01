@@ -6,7 +6,6 @@ Hyperparameters follow the paper "Planning in Stochastic Environments with a Lea
 """
 
 from dataclasses import dataclass, field
-from typing import Literal
 
 
 @dataclass
@@ -21,11 +20,6 @@ class StochasticMuZeroConfig:
     observation_shape: tuple[int, ...] = (16,)  # Flattened 4x4 board
     action_size: int = 4  # left, up, right, down
     codebook_size: int = 32  # Number of chance codes (paper default)
-
-    # ##>: MCTS search mode.
-    # ##>: 'parallel' batches neural network calls for better GPU/TPU utilization.
-    search_mode: Literal['sequential', 'parallel'] = 'parallel'
-    mcts_batch_size: int = 16  # Trajectories to batch in parallel MCTS
 
     # ##>: Network architecture.
     hidden_size: int = 256  # Hidden state dimension

@@ -10,12 +10,12 @@ dev:
 
 # Lint code
 lint:
-	uv run ruff check .
+	uv run ruff check reinforce/ tests/ twentyfortyeight/
 
 # Format code
 format:
-	uv run ruff format .
-	uv run ruff check --fix .
+	uv run ruff format reinforce/ tests/ twentyfortyeight/
+	uv run ruff check --fix reinforce/ tests/ twentyfortyeight/
 
 # Type check
 typecheck:
@@ -53,7 +53,7 @@ train: train-small
 
 # Evaluate basic MCTS agent (no neural network)
 eval-mcts:
-	uv run python reinforce/evaluate.py --method mcts --length 10 --simulations 100
+	uv run python reinforce/evaluate.py --method mcts --length 10 --simulations 10
 
 # Evaluate Stochastic MuZero with a checkpoint
 # Usage: make eval-muzero CHECKPOINT=checkpoints/step_10000

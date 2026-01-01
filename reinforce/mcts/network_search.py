@@ -17,7 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from math import sqrt
 
-from numpy import argmax, ndarray
+from keras import utils
+from numpy import argmax, exp, ndarray, zeros
 from numpy.random import PCG64DXSM, default_rng
 
 from reinforce.neural.network import StochasticNetwork
@@ -285,8 +286,6 @@ def get_outcome_visits(node: ChanceNode) -> ndarray:
     ValueError
         If chance_probs is None.
     """
-    from numpy import zeros
-
     if node.chance_probs is None:
         raise ValueError('Cannot get outcome visits from node without chance_probs')
 
@@ -365,9 +364,6 @@ def add_decision_child(parent: ChanceNode, chance_code_idx: int, network: Stocha
     DecisionNode
         The newly created decision node.
     """
-    # ##>: Create one-hot chance code.
-    from keras import utils
-
     chance_code = utils.to_categorical([chance_code_idx], num_classes=network.codebook_size)[0]
 
     # ##>: Compute next state and reward using dynamics network.
@@ -522,8 +518,6 @@ def get_policy_from_visits(root: DecisionNode, temperature: float = 1.0) -> dict
     dict[int, float]
         Action probabilities keyed by action.
     """
-    from numpy import exp
-
     visits = {action: child.visit_count for action, child in root.children.items()}
 
     if temperature == 0.0:

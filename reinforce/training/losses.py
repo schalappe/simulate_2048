@@ -9,7 +9,8 @@ Implements the losses from Equations 1, 6, and 7 of the paper:
 
 from __future__ import annotations
 
-from numpy import ndarray, sign, sqrt
+from numpy import arange, clip, log, ndarray, sign, sqrt, zeros
+from numpy import sum as np_sum
 
 
 def scalar_to_support(
@@ -40,8 +41,6 @@ def scalar_to_support(
     ndarray
         Categorical distribution over the support.
     """
-    from numpy import clip, zeros
-
     # ##>: Clip to support range.
     scalar = clip(scalar, support_min, support_max)
 
@@ -88,9 +87,6 @@ def support_to_scalar(
     float
         The scalar value.
     """
-    from numpy import arange
-    from numpy import sum as np_sum
-
     support = arange(support_size)
     support_values = support_min + support * (support_max - support_min) / (support_size - 1)
     return float(np_sum(distribution * support_values))
@@ -161,9 +157,6 @@ def compute_policy_loss(predicted_policy: ndarray, target_policy: ndarray) -> fl
     float
         Cross-entropy loss.
     """
-    from numpy import clip, log
-    from numpy import sum as np_sum
-
     # ##>: Clip for numerical stability.
     predicted_policy = clip(predicted_policy, 1e-8, 1.0)
     return -float(np_sum(target_policy * log(predicted_policy)))
@@ -212,9 +205,6 @@ def compute_value_loss(
         target_dist = scalar_to_support(transformed_target, support_min, support_max, support_size)
 
         # ##>: Cross-entropy between distributions.
-        from numpy import clip, log
-        from numpy import sum as np_sum
-
         predicted_value = clip(predicted_value, 1e-8, 1.0)
         return -float(np_sum(target_dist * log(predicted_value)))
     else:
@@ -290,9 +280,6 @@ def compute_chance_loss(
     float
         Cross-entropy loss.
     """
-    from numpy import clip, log
-    from numpy import sum as np_sum
-
     predicted_chance_probs = clip(predicted_chance_probs, 1e-8, 1.0)
     return -float(np_sum(target_chance_code * log(predicted_chance_probs)))
 
@@ -365,8 +352,6 @@ def compute_commitment_loss(
     float
         Commitment loss.
     """
-    from numpy import sum as np_sum
-
     return float(np_sum((chance_code - encoder_output) ** 2))
 
 

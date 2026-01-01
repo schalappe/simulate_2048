@@ -9,6 +9,7 @@ Implements the training loop that:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -367,8 +368,6 @@ class StochasticMuZeroLearner:
         self.network._encoder.save(checkpoint_dir / 'encoder')
 
         # ##>: Save training state.
-        import json
-
         state = {
             'training_step': self.training_step,
             'codebook_size': self.network.codebook_size,
@@ -388,8 +387,6 @@ class StochasticMuZeroLearner:
         checkpoint_dir = Path(checkpoint_dir)
 
         # ##>: Load training state.
-        import json
-
         with open(checkpoint_dir / 'training_state.json') as f:
             state = json.load(f)
 
