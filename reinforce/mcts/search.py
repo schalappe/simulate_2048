@@ -97,9 +97,12 @@ def puct_select(node: Decision, exploration_weight: float) -> Chance:
     if isinstance(node, Chance):
         raise ValueError('PUCT is only defined for Decision nodes.')
 
+    # ##>: Hoist sqrt computation outside the loop for efficiency.
+    sqrt_parent_visits = sqrt(node.visits)
+
     def puct_score(child: Chance) -> float:
         q_value = child.values / child.visits if child.visits > 0 else 0
-        return q_value + exploration_weight * child.parent.prior * sqrt(node.visits) / (1 + child.visits)
+        return q_value + exploration_weight * child.prior * sqrt_parent_visits / (1 + child.visits)
 
     return max(node.children, key=puct_score)
 
@@ -136,7 +139,7 @@ def select_child(node: Node, exploration_weight: float) -> Node:
 
 def adaptive_simulation_count(node: Node, base_simulations: int) -> int:
     """
-    Calculate the adaptive simulation count for a node using logarithmic depth scaling.
+    Calculate the adaptive simulation count for a node using inverse logarithmic depth scaling.
 
     Parameters
     ----------
@@ -152,13 +155,14 @@ def adaptive_simulation_count(node: Node, base_simulations: int) -> int:
 
     Notes
     -----
-    Uses the formula: N_sim = N_base * (1 + log(depth + 1))
-    This formula provides a balanced approach to simulation allocation:
-    - Nodes closer to the root get more simulations, but the increase is logarithmic.
-    - The log(depth + 1) term ensures that even deep nodes get a reasonable number of simulations.
-    - Adding 1 to the depth prevents taking log(0) for the root node.
+    Uses the formula: N_sim = N_base / (1 + log(depth + 1))
+    This formula allocates more simulations near the root where decisions matter most:
+    - Depth 0 (root): N_base simulations
+    - Depth 1: ~N_base / 1.69 simulations
+    - Depth 5: ~N_base / 2.79 simulations
+    Deep nodes get fewer simulations since they are rarely revisited.
     """
-    return int(base_simulations * (1 + log(node.depth + 1)))
+    return max(1, int(base_simulations / (1 + log(node.depth + 1))))
 
 
 def simulate(node: Node, simulations: int) -> float:

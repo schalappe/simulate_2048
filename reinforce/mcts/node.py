@@ -155,7 +155,9 @@ class Decision(Node):
             raise ValueError('All actions have been tried. Node should be fully expanded.')
         action = int(GENERATOR.choice(list(untried_actions)))
         child_state, _ = latent_state(self.state, action)
-        child = Chance(state=child_state, parent=self, action=action, depth=self.depth + 0.5)
+        # ##>: Uniform prior (1/num_actions). Replace with policy network output when available.
+        uniform_prior = 1.0 / len(self.legal_moves)
+        child = Chance(state=child_state, parent=self, action=action, prior=uniform_prior, depth=self.depth + 0.5)
         self.children.append(child)
         return child
 
@@ -172,6 +174,8 @@ class Chance(Node):
     ----------
     action : int
         The action taken to reach this node.
+    prior : float
+        Prior probability of selecting this action (from policy network or uniform).
     parent : Decision
         The parent decision node.
     widening_alpha : float
@@ -197,6 +201,7 @@ class Chance(Node):
     """
 
     action: int
+    prior: float = 1.0
     parent: Decision
     widening_alpha: float = 0.5
     widening_constant: float = 1.0
@@ -204,11 +209,13 @@ class Chance(Node):
     # ##>: Lazy generation fields - populated in __post_init__.
     _empty_cells: list[tuple[int, int]] = field(default_factory=list)
     _num_empty: int = 0
-    _generated_indices: list[int] = field(default_factory=list)
+    _unvisited_indices: set[int] = field(default_factory=set)
 
     def __post_init__(self):
         """Initialize lazy generation data (no state copies created)."""
         _, self._empty_cells, self._num_empty = after_state_lazy(self.state)
+        # ##>: Pre-compute all outcome indices for O(1) removal during add_child.
+        self._unvisited_indices = set(range(self._num_empty * 2))
 
     @property
     def max_outcomes(self) -> int:
@@ -246,16 +253,12 @@ class Chance(Node):
             self.children.append(child)
             return child
 
-        # ##>: Find unvisited outcome indices (each cell has 2 outcomes: value 2 and 4).
-        all_indices = set(range(self.max_outcomes))
-        unvisited_indices = list(all_indices - set(self._generated_indices))
-
-        if not unvisited_indices:
+        if not self._unvisited_indices:
             raise ValueError('All outcomes have been tried. Node should be fully expanded.')
 
-        # ##>: Select random unvisited outcome and generate it.
-        idx = int(GENERATOR.choice(unvisited_indices))
-        self._generated_indices.append(idx)
+        # ##>: Select random unvisited outcome and remove from set (O(1) amortized).
+        idx = int(GENERATOR.choice(list(self._unvisited_indices)))
+        self._unvisited_indices.discard(idx)
 
         # ##>: Decode index: idx // 2 = cell position, idx % 2 = value (0->2, 1->4).
         cell_idx = idx // 2

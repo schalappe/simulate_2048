@@ -57,10 +57,10 @@ class MonteCarloAgent:
     @classmethod
     def _best_action(cls, root: Decision) -> int:
         """
-        Choose the best action based on visit counts.
+        Choose the best action based on visit counts, with Q-value tiebreaker.
 
         This method selects the child node with the highest number of visits, which represents the most
-        promising action.
+        promising action. If multiple children have equal visits, the one with higher Q-value wins.
 
         Parameters
         ----------
@@ -72,7 +72,13 @@ class MonteCarloAgent:
         int
             The action corresponding to the most visited child node.
         """
-        return max(root.children, key=lambda c: c.visits).action
+
+        # ##>: Tiebreak by Q-value (average reward) when visit counts are equal.
+        def selection_key(child):
+            q_value = child.values / child.visits if child.visits > 0 else 0.0
+            return (child.visits, q_value)
+
+        return max(root.children, key=selection_key).action
 
     def choose_action(self, state: ndarray) -> int:
         """
