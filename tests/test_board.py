@@ -6,17 +6,17 @@ from unittest import TestCase, main
 
 import numpy as np
 
-from twentyfortyeight.core import (
+from twentyfortyeight.core.gameboard import (
     after_state,
     after_state_lazy,
     generate_outcome,
-    illegal_actions,
     is_done,
     merge_column,
     next_state,
     slide_and_merge,
 )
-from twentyfortyeight.envs import TwentyFortyEight
+from twentyfortyeight.core.gamemove import illegal_actions
+from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
 
 
 class TestGameBoard(TestCase):

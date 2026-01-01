@@ -1,7 +1,8 @@
 import timeit
 import numpy as np
 from typing import Callable, List
-from twentyfortyeight.core import slide_and_merge, illegal_actions
+from twentyfortyeight.core.gameboard import slide_and_merge
+from twentyfortyeight.core.gamemove import illegal_actions
 
 
 generator = np.random.default_rng(42)
