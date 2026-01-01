@@ -17,7 +17,7 @@ Architecture follows the paper exactly:
 Reference: "Planning in Stochastic Environments with a Learned Model" (ICLR 2022)
 """
 
-from keras import Model, layers, ops
+from keras import Model, layers, ops, saving
 from numpy import prod
 
 # ##>: Paper-specified architecture constants.
@@ -357,6 +357,7 @@ def build_stochastic_dynamics_model(
     return Model([input_afterstate, input_chance], [next_state, reward], name='stochastic_dynamics_model')
 
 
+@saving.register_keras_serializable(package='reinforce')
 class StraightThroughArgmax(layers.Layer):
     """
     Straight-through estimator for argmax operation.
