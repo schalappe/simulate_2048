@@ -7,6 +7,7 @@ Supports parallel game generation using multiprocessing for faster training.
 
 from __future__ import annotations
 
+import multiprocessing
 import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -343,16 +344,11 @@ def _play_game_worker(args: tuple) -> Trajectory | None:
     config, weights_dir, training_step, codebook_size = args
 
     try:
-        # ##!: Force CPU-only inference to avoid CUDA context inheritance issues.
-        # ##>: When ProcessPoolExecutor forks, workers inherit an invalid GPU context.
-        # ##>: Using CPU for self-play inference is efficient and avoids this conflict.
+        # ##!: Force CPU-only inference in workers.
+        # ##>: GPU should be reserved for training; self-play inference is lightweight.
         import os
 
         os.environ['CUDA_VISIBLE_DEVICES'] = ''
-
-        import tensorflow as tf
-
-        tf.config.set_visible_devices([], 'GPU')
 
         # ##>: Import models to register custom Keras layers before loading.
         import reinforce.neural.models  # noqa: F401
@@ -523,8 +519,11 @@ def _generate_games_parallel(
         trajectories = []
         pbar = None
 
-        # ##>: Use ProcessPoolExecutor for true parallelism (bypasses GIL).
-        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # ##!: Use spawn context to avoid CUDA context inheritance from parent.
+        # ##>: Fork copies TensorFlow's initialized state, causing workers to fail.
+        # ##>: Spawn starts fresh Python processes without inherited GPU state.
+        spawn_context = multiprocessing.get_context('spawn')
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=spawn_context) as executor:
             futures = [executor.submit(_play_game_worker, args) for args in worker_args]
 
             try:
