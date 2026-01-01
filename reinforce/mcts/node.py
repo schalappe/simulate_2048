@@ -16,7 +16,7 @@ from typing import List, Optional, Tuple
 from numpy import array_equal, ndarray, power
 from numpy.random import PCG64DXSM, default_rng
 
-from twentyfortyeight.utils import after_state, is_done, latent_state, legal_actions
+from twentyfortyeight.core import after_state, is_done, latent_state, legal_actions
 
 GENERATOR = default_rng(PCG64DXSM())
 

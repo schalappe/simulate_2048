@@ -16,8 +16,8 @@ from math import log, sqrt
 from numpy import ndarray
 from numpy.random import PCG64DXSM, default_rng
 
-from twentyfortyeight.utils import is_done, legal_actions, next_state
-from twentyfortyeight.wrappers import normalize_reward
+from twentyfortyeight.core import is_done, legal_actions, next_state
+from twentyfortyeight.utils import normalize_reward
 
 from .node import Chance, Decision, Node
 
@@ -183,14 +183,14 @@ def simulate(node: Node, simulations: int) -> float:
     total_reward = 0.0
 
     for _ in range(simulations):
-        # ##: Initialize the state.
+        # ##>: Initialize the state.
         if isinstance(node, Chance):
             states, priors = zip(*node.next_states)
             state = GENERATOR.choice(states, p=priors)
         else:
             state = node.state.copy()
 
-        # ##: Simulate until done.
+        # ##>: Simulate until done.
         while not is_done(state):
             action = GENERATOR.choice(legal_actions(state))
             state, reward = next_state(state, action)
@@ -263,12 +263,12 @@ def monte_carlo_search(
     root = Decision(state=state, final=False, prior=1.0)
 
     for _ in range(iterations):
-        # ##: Select a node and expand.
+        # ##>: Select a node and expand.
         node = select_child(root, exploration_weight)
         if not is_done(node.state):
             node = node.add_child()
 
-        # ##: Simulate and back-propagate.
+        # ##>: Simulate and back-propagate.
         simulation_count = adaptive_simulation_count(node, base_simulations)
         reward = simulate(node, simulation_count)
         backpropagate(node, reward)
