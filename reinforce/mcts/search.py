@@ -11,7 +11,7 @@ nodes (where the player chooses a move) and chance nodes (where a new tile is ra
 
 from math import log, sqrt
 
-from numpy import ndarray
+from numpy import ndarray, zeros
 from numpy.random import PCG64DXSM, default_rng
 
 from twentyfortyeight.core.gameboard import TILE_SPAWN_PROBS, is_done, next_state
@@ -23,8 +23,14 @@ from .node import Chance, Decision
 # ##>: Pre-computed tile values and probabilities for simulation sampling.
 _TILE_VALUES = list(TILE_SPAWN_PROBS.keys())
 _TILE_PROBS = list(TILE_SPAWN_PROBS.values())
+_TILE_VALUES_ARR = [2, 4]
 
 GENERATOR = default_rng(PCG64DXSM())
+
+# ##>: Pre-allocated buffers for batched simulation (reused across calls).
+_MAX_SIMULATIONS = 32
+_BOARD_SIZE = 4
+_SIM_BUFFER = zeros((_MAX_SIMULATIONS, _BOARD_SIZE, _BOARD_SIZE), dtype='int32')
 
 
 def uct_select(node: Decision, exploration_weight: float) -> Chance:
@@ -186,27 +192,43 @@ def simulate(node: Decision | Chance, simulations: int) -> float:
     -----
     - Performs multiple simulations and returns the average reward.
     - Each simulation uses random legal moves until the game ends.
-    - The total reward is the sum of rewards from each move in the simulation.
+    - Uses pre-allocated buffer to reduce memory allocation overhead.
     """
+    # ##>: Clamp simulations to buffer size.
+    num_sims = min(simulations, _MAX_SIMULATIONS)
     total_reward = 0.0
 
-    for _ in range(simulations):
-        # ##>: Initialize state from node (sample stochastic outcome for Chance nodes).
-        if isinstance(node, Chance):
-            state = node.state.copy()
-            # ##>: Sample a random tile spawn if there are empty cells.
-            if node._num_empty > 0:
-                cell_idx = GENERATOR.integers(0, node._num_empty)
-                cell = node._empty_cells[cell_idx]
-                value = GENERATOR.choice(_TILE_VALUES, p=_TILE_PROBS)
-                state[cell] = value
-        else:
-            state = node.state.copy()
+    # ##>: Initialize states in pre-allocated buffer.
+    states = _SIM_BUFFER[:num_sims]
+    for i in range(num_sims):
+        states[i] = node.state
 
-        # ##>: Simulate until done.
-        while not is_done(state):
-            action = GENERATOR.choice(legal_actions(state))
-            state, reward = next_state(state, action)
+    # ##>: For Chance nodes, sample random tile spawns.
+    if isinstance(node, Chance) and node._num_empty > 0:
+        cell_indices = GENERATOR.integers(0, node._num_empty, size=num_sims)
+        tile_values = GENERATOR.choice(_TILE_VALUES_ARR, size=num_sims, p=_TILE_PROBS)
+        for i in range(num_sims):
+            cell = node._empty_cells[cell_indices[i]]
+            states[i, cell[0], cell[1]] = tile_values[i]
+
+    # ##>: Track which simulations are still active.
+    active = [True] * num_sims
+
+    # ##>: Simulate until all games are done.
+    while any(active):
+        for i in range(num_sims):
+            if not active[i]:
+                continue
+
+            state = states[i]
+            if is_done(state):
+                active[i] = False
+                continue
+
+            actions = legal_actions(state)
+            action = GENERATOR.choice(actions)
+            new_state, reward = next_state(state, action)
+            states[i] = new_state
             total_reward += normalize_reward(reward)
 
     return total_reward / simulations

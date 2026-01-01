@@ -5,12 +5,19 @@ Core functionality for simulating the 2048 game, including board manipulation an
 from numpy import all as np_all
 from numpy import any as np_any
 from numpy import argwhere, array, ndarray, rot90, zeros_like
-from numpy.random import default_rng
+from numpy.random import PCG64DXSM, default_rng
 
 from twentyfortyeight.core.gamemove import can_move
 
 # ##>: Tile spawn probabilities for 2048 game (90% for 2, 10% for 4).
 TILE_SPAWN_PROBS: dict[int, float] = {2: 0.9, 4: 0.1}
+
+# ##>: Pre-computed tile values and probabilities for fast sampling.
+_TILE_VALUES = [2, 4]
+_TILE_PROBS = [0.9, 0.1]
+
+# ##>: Module-level generator for performance (avoids repeated initialization).
+_GENERATOR = default_rng(PCG64DXSM())
 
 
 def merge_column(column: ndarray) -> tuple[int, ndarray]:
@@ -253,15 +260,14 @@ def fill_cells(state: ndarray, number_tile: int, seed: int | None = None) -> nda
     - If there are fewer empty cells than requested, it fills all available cells.
     - **This function mutates the input array.** Pass ``state.copy()`` if the original must be preserved.
     """
-    rng = default_rng(seed)
-    # ##: Only there still available places
-    if not state.all():
-        # ##>: Values and probabilities from module constant for consistency.
-        tile_values = list(TILE_SPAWN_PROBS.keys())
-        tile_probs = list(TILE_SPAWN_PROBS.values())
-        values = rng.choice(tile_values, size=number_tile, p=tile_probs)
+    # ##>: Use module-level generator for performance unless seed is specified.
+    rng = default_rng(seed) if seed is not None else _GENERATOR
 
-        # ##: Randomly choose cells positions in board.
+    # ##: Only if there are still available places.
+    if not state.all():
+        values = rng.choice(_TILE_VALUES, size=number_tile, p=_TILE_PROBS)
+
+        # ##: Randomly choose cell positions in board.
         available_cells = argwhere(state == 0)
         chosen_indices = rng.choice(len(available_cells), size=number_tile, replace=False)
 
