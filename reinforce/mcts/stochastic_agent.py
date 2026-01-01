@@ -7,23 +7,26 @@ neural network predictions combined with MCTS for decision making.
 The agent can operate in two modes:
 1. With trained network: Uses network for policy priors and value estimates
 2. Without network (evaluation): Uses random initialization for benchmarking
+
+The agent supports both sequential and parallel MCTS:
+- Sequential: Original implementation, simpler, good for debugging
+- Parallel: Batched inference, faster on GPU/TPU, recommended for training
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from numpy import ndarray
 
 from reinforce.neural.network import StochasticNetwork, create_stochastic_network
 
-from .network_search import (
-    DecisionNode,
-    get_policy_from_visits,
-    run_network_mcts,
-    select_action_from_root,
-)
+from .network_search import DecisionNode as SeqDecisionNode
+from .network_search import get_policy_from_visits, run_network_mcts, select_action_from_root
+from .parallel_search import DecisionNode as ParDecisionNode
+from .parallel_search import ParallelMCTS
 
 
 @dataclass
@@ -61,6 +64,10 @@ class StochasticMuZeroAgent:
     - Value estimates for leaf evaluation
     - Afterstate predictions for stochastic transitions
 
+    Supports two search modes:
+    - 'sequential': Original MCTS, one simulation at a time
+    - 'parallel': Batched inference, faster on GPU/TPU
+
     Attributes
     ----------
     network : StochasticNetwork
@@ -73,11 +80,15 @@ class StochasticMuZeroAgent:
         Action selection temperature (0 = greedy, 1 = proportional).
     add_noise : bool
         Whether to add Dirichlet noise at root.
+    search_mode : Literal['sequential', 'parallel']
+        Which MCTS implementation to use.
+    batch_size : int
+        Number of trajectories to batch (parallel mode only).
 
     Examples
     --------
     >>> from reinforce.mcts.stochastic_agent import StochasticMuZeroAgent
-    >>> agent = StochasticMuZeroAgent.create_untrained()
+    >>> agent = StochasticMuZeroAgent.create_untrained(search_mode='parallel')
     >>> action = agent.choose_action(game_state)
     """
 
@@ -90,6 +101,8 @@ class StochasticMuZeroAgent:
         add_noise: bool = False,
         dirichlet_alpha: float = 0.25,
         noise_fraction: float = 0.25,
+        search_mode: Literal['sequential', 'parallel'] = 'sequential',
+        batch_size: int = 16,
     ):
         """
         Initialize the Stochastic MuZero agent.
@@ -110,6 +123,10 @@ class StochasticMuZeroAgent:
             Dirichlet noise alpha parameter.
         noise_fraction : float
             Fraction of noise to mix with priors.
+        search_mode : Literal['sequential', 'parallel']
+            Which MCTS implementation to use.
+        batch_size : int
+            Number of trajectories to batch together (parallel mode).
         """
         self.network = network
         self.num_simulations = num_simulations
@@ -118,9 +135,24 @@ class StochasticMuZeroAgent:
         self.add_noise = add_noise
         self.dirichlet_alpha = dirichlet_alpha
         self.noise_fraction = noise_fraction
+        self.search_mode = search_mode
+        self.batch_size = batch_size
 
         # ##>: Store last search for stats retrieval.
-        self._last_root: DecisionNode | None = None
+        self._last_root: SeqDecisionNode | ParDecisionNode | None = None
+        self._parallel_mcts: ParallelMCTS | None = None
+
+        # ##>: Pre-create parallel MCTS if using parallel mode.
+        if search_mode == 'parallel':
+            self._parallel_mcts = ParallelMCTS(
+                network=network,
+                num_simulations=num_simulations,
+                batch_size=batch_size,
+                exploration_weight=exploration_weight,
+                add_exploration_noise=add_noise,
+                dirichlet_alpha=dirichlet_alpha,
+                noise_fraction=noise_fraction,
+            )
 
     @classmethod
     def create_untrained(
@@ -211,7 +243,12 @@ class StochasticMuZeroAgent:
         int
             The chosen action (0-3 for left/up/right/down).
         """
-        # ##>: Run MCTS.
+        if self.search_mode == 'parallel':
+            return self._choose_action_parallel(state)
+        return self._choose_action_sequential(state)
+
+    def _choose_action_sequential(self, state: ndarray) -> int:
+        """Run sequential MCTS and select action."""
         root = run_network_mcts(
             game_state=state,
             network=self.network,
@@ -221,12 +258,25 @@ class StochasticMuZeroAgent:
             dirichlet_alpha=self.dirichlet_alpha,
             noise_fraction=self.noise_fraction,
         )
-
-        # ##>: Store for stats retrieval.
         self._last_root = root
-
-        # ##>: Select action.
         return select_action_from_root(root, temperature=self.temperature)
+
+    def _choose_action_parallel(self, state: ndarray) -> int:
+        """Run parallel MCTS and select action."""
+        if self._parallel_mcts is None:
+            # ##>: Create if not already initialized.
+            self._parallel_mcts = ParallelMCTS(
+                network=self.network,
+                num_simulations=self.num_simulations,
+                batch_size=self.batch_size,
+                exploration_weight=self.exploration_weight,
+                add_exploration_noise=self.add_noise,
+                dirichlet_alpha=self.dirichlet_alpha,
+                noise_fraction=self.noise_fraction,
+            )
+        root = self._parallel_mcts.search(state)
+        self._last_root = root
+        return self._parallel_mcts.select_action(root, temperature=self.temperature)
 
     def get_search_stats(self) -> SearchStats | None:
         """
@@ -242,7 +292,18 @@ class StochasticMuZeroAgent:
 
         root = self._last_root
         visit_counts = {action: child.visit_count for action, child in root.children.items()}
-        policy = get_policy_from_visits(root, temperature=1.0)  # Normalized visits
+
+        # ##>: Get policy based on search mode.
+        if self.search_mode == 'parallel' and self._parallel_mcts is not None:
+            # ##>: Type narrowing: in parallel mode, root is ParDecisionNode.
+            assert isinstance(root, ParDecisionNode)
+            policy = self._parallel_mcts.get_policy(root, temperature=1.0)
+            selected = self._parallel_mcts.select_action(root, temperature=self.temperature)
+        else:
+            # ##>: Type narrowing: in sequential mode, root is SeqDecisionNode.
+            assert isinstance(root, SeqDecisionNode)
+            policy = get_policy_from_visits(root, temperature=1.0)
+            selected = select_action_from_root(root, temperature=self.temperature)
 
         # ##>: Root value is the average of Q-values weighted by visits.
         total_visits = sum(visit_counts.values())
@@ -250,8 +311,6 @@ class StochasticMuZeroAgent:
             root_value = sum(child.value_sum for child in root.children.values()) / total_visits
         else:
             root_value = root.value
-
-        selected = select_action_from_root(root, temperature=self.temperature)
 
         return SearchStats(root_value=root_value, visit_counts=visit_counts, policy=policy, selected_action=selected)
 
@@ -279,3 +338,35 @@ class StochasticMuZeroAgent:
         else:
             self.temperature = 0.0
             self.add_noise = False
+
+        # ##>: Update parallel MCTS if using parallel mode.
+        if self._parallel_mcts is not None:
+            self._parallel_mcts.add_exploration_noise = self.add_noise
+
+    def set_search_mode(self, mode: Literal['sequential', 'parallel'], batch_size: int | None = None) -> None:
+        """
+        Switch between sequential and parallel search modes.
+
+        Parameters
+        ----------
+        mode : Literal['sequential', 'parallel']
+            The search mode to use.
+        batch_size : int | None
+            Batch size for parallel mode. If None, uses current value.
+        """
+        self.search_mode = mode
+        if batch_size is not None:
+            self.batch_size = batch_size
+
+        if mode == 'parallel':
+            self._parallel_mcts = ParallelMCTS(
+                network=self.network,
+                num_simulations=self.num_simulations,
+                batch_size=self.batch_size,
+                exploration_weight=self.exploration_weight,
+                add_exploration_noise=self.add_noise,
+                dirichlet_alpha=self.dirichlet_alpha,
+                noise_fraction=self.noise_fraction,
+            )
+        else:
+            self._parallel_mcts = None

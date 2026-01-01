@@ -13,7 +13,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from keras import KerasTensor, Model, models, ops, utils
-from numpy import ndarray
+from numpy import ndarray, stack
+
+from .models import (
+    HIDDEN_UNITS,
+    build_afterstate_dynamics_model,
+    build_afterstate_prediction_model,
+    build_encoder_model,
+    build_prediction_model,
+    build_representation_model,
+    build_stochastic_dynamics_model,
+)
 
 NUM_ACTIONS = 4  # 2048 game: left, up, right, down
 DEFAULT_CODEBOOK_SIZE = 32  # Default number of chance codes
@@ -195,6 +205,31 @@ class NetworkOutput:
     value: float
     policy: ndarray | None = None
     reward: float = 0.0
+    chance_probs: ndarray | None = None
+
+
+@dataclass
+class BatchedNetworkOutput:
+    """
+    Container for batched network prediction outputs.
+
+    Used for parallel MCTS where multiple states are processed at once.
+
+    Attributes
+    ----------
+    values : ndarray
+        Batch of value predictions, shape (batch_size,).
+    policies : ndarray | None
+        Batch of policy probabilities, shape (batch_size, num_actions).
+    rewards : ndarray | None
+        Batch of reward predictions, shape (batch_size,).
+    chance_probs : ndarray | None
+        Batch of chance distributions, shape (batch_size, codebook_size).
+    """
+
+    values: ndarray
+    policies: ndarray | None = None
+    rewards: ndarray | None = None
     chance_probs: ndarray | None = None
 
 
@@ -425,6 +460,142 @@ class StochasticNetwork:
         """
         return self._encoder(ndarray_to_tensor(observation))[0].numpy()
 
+    def batch_representation(self, observations: list[ndarray]) -> ndarray:
+        """
+        Encode multiple observations into hidden states in one call.
+
+        Parameters
+        ----------
+        observations : list[ndarray]
+            List of raw observations to encode.
+
+        Returns
+        -------
+        ndarray
+            Batch of hidden states, shape (batch_size, hidden_dim).
+        """
+        batch = ops.convert_to_tensor(stack(observations), dtype='float16')
+        return self._representation(batch).numpy()
+
+    def batch_prediction(self, hidden_states: list[ndarray]) -> BatchedNetworkOutput:
+        """
+        Predict policy and value for multiple states at once.
+
+        Parameters
+        ----------
+        hidden_states : list[ndarray]
+            List of hidden states to evaluate.
+
+        Returns
+        -------
+        BatchedNetworkOutput
+            Batched policies and values.
+        """
+        batch = ops.convert_to_tensor(stack(hidden_states), dtype='float16')
+        policies, values = self._prediction(batch)
+        return BatchedNetworkOutput(values=values.numpy().flatten(), policies=policies.numpy())
+
+    def batch_afterstate_dynamics(self, hidden_states: list[ndarray], actions: list[int]) -> ndarray:
+        """
+        Compute afterstates for multiple (state, action) pairs in one call.
+
+        Parameters
+        ----------
+        hidden_states : list[ndarray]
+            List of hidden states.
+        actions : list[int]
+            List of actions (one per state).
+
+        Returns
+        -------
+        ndarray
+            Batch of afterstates, shape (batch_size, hidden_dim).
+        """
+        states_batch = ops.convert_to_tensor(stack(hidden_states), dtype='float16')
+        actions_onehot = utils.to_categorical(actions, num_classes=NUM_ACTIONS)
+        actions_batch = ops.convert_to_tensor(actions_onehot, dtype='float16')
+        afterstates = self._afterstate_dynamics([states_batch, actions_batch])
+        return afterstates.numpy()
+
+    def batch_expand_all_actions(self, hidden_states: list[ndarray]) -> ndarray:
+        """
+        Compute afterstates for ALL actions for multiple states in one call.
+
+        This is the key optimization: instead of 4 calls per state,
+        we do 1 batched call for all (state, action) combinations.
+
+        Parameters
+        ----------
+        hidden_states : list[ndarray]
+            List of hidden states to expand.
+
+        Returns
+        -------
+        ndarray
+            Afterstates for each (state, action) pair.
+            Shape: (batch_size, num_actions, hidden_dim).
+        """
+        batch_size = len(hidden_states)
+
+        # ##>: Tile each state NUM_ACTIONS times and pair with each action.
+        states_tiled = []
+        actions_list = []
+        for state in hidden_states:
+            for action in range(NUM_ACTIONS):
+                states_tiled.append(state)
+                actions_list.append(action)
+
+        # ##>: Single batched call for all state-action pairs.
+        states_batch = ops.convert_to_tensor(stack(states_tiled), dtype='float16')
+        actions_onehot = utils.to_categorical(actions_list, num_classes=NUM_ACTIONS)
+        actions_batch = ops.convert_to_tensor(actions_onehot, dtype='float16')
+
+        afterstates_flat = self._afterstate_dynamics([states_batch, actions_batch])
+
+        # ##>: Reshape to (batch_size, num_actions, hidden_dim).
+        afterstates_np = afterstates_flat.numpy()
+        hidden_dim = afterstates_np.shape[-1]
+        return afterstates_np.reshape(batch_size, NUM_ACTIONS, hidden_dim)
+
+    def batch_afterstate_prediction(self, afterstates: list[ndarray]) -> BatchedNetworkOutput:
+        """
+        Predict Q-values and chance distributions for multiple afterstates.
+
+        Parameters
+        ----------
+        afterstates : list[ndarray]
+            List of afterstates to evaluate.
+
+        Returns
+        -------
+        BatchedNetworkOutput
+            Batched Q-values and chance distributions.
+        """
+        batch = ops.convert_to_tensor(stack(afterstates), dtype='float16')
+        q_values, chance_probs = self._afterstate_prediction(batch)
+        return BatchedNetworkOutput(values=q_values.numpy().flatten(), chance_probs=chance_probs.numpy())
+
+    def batch_dynamics(self, afterstates: list[ndarray], chance_codes: list[ndarray]) -> tuple[ndarray, ndarray]:
+        """
+        Compute next states and rewards for multiple (afterstate, chance) pairs.
+
+        Parameters
+        ----------
+        afterstates : list[ndarray]
+            List of afterstates.
+        chance_codes : list[ndarray]
+            List of one-hot chance codes.
+
+        Returns
+        -------
+        tuple[ndarray, ndarray]
+            Batch of next states shape (batch_size, hidden_dim) and rewards shape (batch_size,).
+        """
+        afterstates_batch = ops.convert_to_tensor(stack(afterstates), dtype='float16')
+        chance_batch = ops.convert_to_tensor(stack(chance_codes), dtype='float16')
+        next_states, rewards = self._dynamics([afterstates_batch, chance_batch])
+        return next_states.numpy(), rewards.numpy().flatten()
+
 
 def create_stochastic_network(
     observation_shape: tuple[int, ...],
@@ -457,17 +628,6 @@ def create_stochastic_network(
     >>> state = network.representation(observation)
     >>> output = network.prediction(state)
     """
-    # ##&: Import here to avoid circular imports.
-    from .models import (
-        HIDDEN_UNITS,
-        build_afterstate_dynamics_model,
-        build_afterstate_prediction_model,
-        build_encoder_model,
-        build_prediction_model,
-        build_representation_model,
-        build_stochastic_dynamics_model,
-    )
-
     # ##>: Use paper default if not specified.
     if hidden_size is None:
         hidden_size = HIDDEN_UNITS

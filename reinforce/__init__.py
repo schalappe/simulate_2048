@@ -6,15 +6,18 @@ This module provides a complete implementation of Stochastic MuZero:
 - Neural network models (Stochastic MuZero architecture)
 - Training infrastructure (self-play, replay buffer, learner)
 - Evaluation utilities
+- Hardware acceleration (TPU/GPU detection and distribution)
 
 Submodules
 ----------
 mcts : Monte Carlo Tree Search implementation
     - MonteCarloAgent: MCTS-based agent for action selection (no network)
     - StochasticMuZeroAgent: Full agent with neural network integration
+    - ParallelMCTS: Batched MCTS for GPU/TPU efficiency
 neural : Neural network models
     - Network: Original 3-model wrapper for backward compatibility
     - StochasticNetwork: Full 6-model wrapper for Stochastic MuZero
+    - AcceleratorStrategy: Hardware detection and distribution
 training : Training infrastructure
     - StochasticMuZeroConfig: Training configuration
     - StochasticMuZeroTrainer: Main training orchestrator
@@ -23,15 +26,3 @@ evaluate : Evaluation script for testing agents
 
 Reference: "Planning in Stochastic Environments with a Learned Model" (ICLR 2022)
 """
-
-from .mcts import MonteCarloAgent, StochasticMuZeroAgent
-from .neural import Network, StochasticNetwork
-
-__all__ = [
-    # Agents
-    'MonteCarloAgent',
-    'StochasticMuZeroAgent',
-    # Networks
-    'Network',
-    'StochasticNetwork',
-]
