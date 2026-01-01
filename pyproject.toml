@@ -1,38 +1,38 @@
-[tool.poetry]
+[project]
+name = "simulate-2048"
+version = "0.1.0"
 description = "Explore reinforcement learning with 2048 Game"
-authors = ["Kone Abdallah Hakim <konehakim@gmail.com>"]
-license = "MIT"
+authors = [{ name = "Kone Abdallah Hakim", email = "konehakim@gmail.com" }]
+license = { text = "MIT" }
 readme = "README.md"
-package-mode = false
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy>=1.0",
+    "tqdm>=4.66.5",
+    "jupyterlab>=4.2.4",
+    "notebook>=7.2.1",
+    "networkx>=3.3",
+    "mpld3>=0.5.10",
+    "matplotlib>=3.8",
+    "keras>=3.5.0",
+    "tensorflow>=2.17.0,<2.19",
+    "pydot>=3.0.1",
+    "gymnasium>=0.29.1",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-numpy = "^1.0"
-tqdm = "^4.66.5"
-jupyterlab = "^4.2.4"
-notebook = "^7.2.1"
-networkx = "^3.3"
-mpld3 = "^0.5.10"
-matplotlib = "3.6.0"
-keras = "^3.5.0"
-tensorflow = "^2.17.0"
-pydot = "^3.0.1"
-gymnasium = "^0.29.1"
-
-[tool.poetry.group.dev.dependencies]
-isort = "^5.13.2"
-black = "^24.8.0"
-pylint = "^3.2.6"
-mypy = "^1.11.1"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
+[dependency-groups]
+dev = [
+    "isort>=5.13.2",
+    "black>=24.8.0",
+    "pylint>=3.2.6",
+    "mypy>=1.11.1",
+    "pytest>=8.0",
+    "tensorflow-metal>=1.2.0; sys_platform == 'darwin'",
+]
 
 [tool.black]
 line-length = 119
-target-version = ["py311", "py312"]
+target-version = ["py312"]
 include = '\.pyi?$'
 extend-exclude = '''
 /(

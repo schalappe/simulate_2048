@@ -1,7 +1,7 @@
 from unittest import TestCase, main
 from numpy import array
 
-from twentyfortyeight.utils import illegal_actions, legal_actions
+from twentyfortyeight.core import illegal_actions, legal_actions
 
 
 class TestGameMove(TestCase):

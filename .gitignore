@@ -145,5 +145,7 @@ cython_debug/
 .vscode/
 
 # Model path
-*.lock
 zoo/
+
+# Specific files
+CLAUDE.md
