@@ -402,14 +402,3 @@ class StochasticMuZeroLearner:
             encoder_path=str(checkpoint_dir / 'encoder'),
             codebook_size=state['codebook_size'],
         )
-
-    def get_loss_history(self) -> list[dict[str, float]]:
-        """
-        Get loss history for logging.
-
-        Returns
-        -------
-        list[dict[str, float]]
-            List of loss dictionaries.
-        """
-        return self._loss_history

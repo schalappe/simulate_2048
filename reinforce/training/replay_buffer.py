@@ -75,25 +75,6 @@ class Trajectory:
         """Add a transition to the trajectory."""
         self.transitions.append(transition)
 
-    def get_slice(self, start: int, length: int) -> list[TransitionData]:
-        """
-        Get a slice of transitions starting at index.
-
-        Parameters
-        ----------
-        start : int
-            Starting index.
-        length : int
-            Number of transitions to get.
-
-        Returns
-        -------
-        list[TransitionData]
-            The requested transitions.
-        """
-        end = min(start + length, len(self.transitions))
-        return self.transitions[start:end]
-
 
 class ReplayBuffer:
     """
@@ -138,16 +119,8 @@ class ReplayBuffer:
         self._trajectories: deque[Trajectory] = deque(maxlen=max_size)
         self._priorities: deque[float] = deque(maxlen=max_size)
 
-        # ##>: Small constant for numerical stability.
-        self._epsilon = 1e-6
-
     def __len__(self) -> int:
         return len(self._trajectories)
-
-    @property
-    def is_ready(self) -> bool:
-        """Check if buffer has enough data for training."""
-        return len(self._trajectories) > 0
 
     def add(self, trajectory: Trajectory, priority: float | None = None) -> None:
         """
@@ -253,48 +226,3 @@ class ReplayBuffer:
             weights[i] = weight
 
         return samples, weights
-
-    def update_priorities(self, indices: list[int], td_errors: ndarray) -> None:
-        """
-        Update priorities based on TD errors.
-
-        Parameters
-        ----------
-        indices : list[int]
-            Trajectory indices to update.
-        td_errors : ndarray
-            TD errors for each trajectory.
-        """
-        for idx, td_error in zip(indices, td_errors, strict=False):
-            if 0 <= idx < len(self._priorities):
-                # ##>: Priority = |TD error| + ε
-                new_priority = abs(td_error) + self._epsilon
-                # ##>: deque doesn't support item assignment, need to reconstruct.
-                # ##@: This is inefficient; consider using list or numpy array.
-                priorities_list = list(self._priorities)
-                priorities_list[idx] = new_priority
-                self._priorities = deque(priorities_list, maxlen=self.max_size)
-                self._trajectories[idx].priority = new_priority
-
-    def get_statistics(self) -> dict[str, float]:
-        """
-        Get buffer statistics for logging.
-
-        Returns
-        -------
-        dict[str, float]
-            Statistics dictionary.
-        """
-        if len(self._trajectories) == 0:
-            return {'size': 0, 'avg_reward': 0.0, 'avg_max_tile': 0.0}
-
-        rewards = [t.total_reward for t in self._trajectories]
-        tiles = [t.max_tile for t in self._trajectories]
-
-        return {
-            'size': len(self._trajectories),
-            'avg_reward': sum(rewards) / len(rewards),
-            'avg_max_tile': sum(tiles) / len(tiles),
-            'max_reward': max(rewards),
-            'max_tile': max(tiles),
-        }

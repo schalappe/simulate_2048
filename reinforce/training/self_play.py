@@ -70,17 +70,6 @@ class SelfPlayActor:
 
         self._training_step = 0
 
-    def update_network(self, network: StochasticNetwork) -> None:
-        """
-        Update the network used for self-play.
-
-        Parameters
-        ----------
-        network : StochasticNetwork
-            New network weights.
-        """
-        self.network = network
-
     def set_training_step(self, step: int) -> None:
         """
         Update the training step (for temperature scheduling).

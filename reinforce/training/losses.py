@@ -9,7 +9,7 @@ Implements the losses from Equations 1, 6, and 7 of the paper:
 
 from __future__ import annotations
 
-from numpy import arange, clip, log, ndarray, sign, sqrt, zeros
+from numpy import clip, log, ndarray, sign, sqrt, zeros
 from numpy import sum as np_sum
 
 
@@ -62,36 +62,6 @@ def scalar_to_support(
     return distribution
 
 
-def support_to_scalar(
-    distribution: ndarray,
-    support_min: float,
-    support_max: float,
-    support_size: int,
-) -> float:
-    """
-    Convert a categorical distribution back to a scalar.
-
-    Parameters
-    ----------
-    distribution : ndarray
-        Categorical distribution over the support.
-    support_min : float
-        Minimum value of the support.
-    support_max : float
-        Maximum value of the support.
-    support_size : int
-        Number of bins in the support.
-
-    Returns
-    -------
-    float
-        The scalar value.
-    """
-    support = arange(support_size)
-    support_values = support_min + support * (support_max - support_min) / (support_size - 1)
-    return float(np_sum(distribution * support_values))
-
-
 def value_transform(x: float, epsilon: float = 0.001) -> float:
     """
     Apply the invertible transform h(x) to scale values.
@@ -112,31 +82,6 @@ def value_transform(x: float, epsilon: float = 0.001) -> float:
         Transformed value.
     """
     return sign(x) * (sqrt(abs(x) + 1) - 1 + epsilon * x)
-
-
-def inverse_value_transform(x: float, epsilon: float = 0.001) -> float:
-    """
-    Apply inverse transform h^{-1}(x).
-
-    Parameters
-    ----------
-    x : float
-        Transformed value.
-    epsilon : float
-        Small constant (paper: 0.001).
-
-    Returns
-    -------
-    float
-        Original value.
-    """
-    # ##>: h^{-1}(x) = sign(x) * ((sqrt(1 + 4ε(|x| + 1 + ε)) - 1) / (2ε))^2 - 1
-    if abs(x) < 1e-8:
-        return 0.0
-    sign_x = sign(x)
-    abs_x = abs(x)
-    inner = sqrt(1 + 4 * epsilon * (abs_x + 1 + epsilon)) - 1
-    return sign_x * (((inner / (2 * epsilon)) ** 2) - 1)
 
 
 def compute_policy_loss(predicted_policy: ndarray, target_policy: ndarray) -> float:
@@ -329,30 +274,6 @@ def compute_q_value_loss(
         support_size=support_size,
         epsilon=epsilon,
     )
-
-
-def compute_commitment_loss(
-    encoder_output: ndarray,
-    chance_code: ndarray,
-) -> float:
-    """
-    Compute VQ-VAE commitment loss.
-
-    ||c - c^e||^2 where c is the quantized code and c^e is encoder output.
-
-    Parameters
-    ----------
-    encoder_output : ndarray
-        Raw encoder output (logits before argmax).
-    chance_code : ndarray
-        Quantized one-hot chance code.
-
-    Returns
-    -------
-    float
-        Commitment loss.
-    """
-    return float(np_sum((chance_code - encoder_output) ** 2))
 
 
 def compute_total_loss(

@@ -112,36 +112,6 @@ def evaluate(
     return results
 
 
-def evaluate_checkpoint(
-    checkpoint_path: str,
-    num_games: int = 100,
-    num_simulations: int = 100,
-) -> dict[str, Any]:
-    """
-    Evaluate a trained Stochastic MuZero checkpoint.
-
-    Parameters
-    ----------
-    checkpoint_path : str
-        Path to checkpoint directory.
-    num_games : int
-        Number of games to play.
-    num_simulations : int
-        MCTS simulations per move.
-
-    Returns
-    -------
-    dict[str, any]
-        Evaluation results.
-    """
-    return evaluate(
-        method='stochastic_muzero',
-        length=num_games,
-        checkpoint_path=checkpoint_path,
-        num_simulations=num_simulations,
-    )
-
-
 if __name__ == '__main__':
     from argparse import ArgumentParser
 

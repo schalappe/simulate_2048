@@ -6,8 +6,6 @@ Implements n-step TD(λ) returns for value targets.
 
 from __future__ import annotations
 
-from numpy import ndarray, zeros
-
 from .replay_buffer import TransitionData
 
 
@@ -131,94 +129,3 @@ def compute_td_lambda_targets(
         targets.append(target)
 
     return targets
-
-
-def compute_policy_target(search_policy: ndarray, action_size: int) -> ndarray:
-    """
-    Convert search policy dict to full action-size array.
-
-    Parameters
-    ----------
-    search_policy : ndarray
-        Policy from MCTS (may be sparse).
-    action_size : int
-        Total number of actions.
-
-    Returns
-    -------
-    ndarray
-        Full policy array of size action_size.
-    """
-    # ##>: search_policy should already be the right shape.
-    if len(search_policy) == action_size:
-        return search_policy
-
-    # ##>: If sparse, expand to full size.
-    full_policy = zeros(action_size)
-    for i, p in enumerate(search_policy):
-        if i < action_size:
-            full_policy[i] = p
-    return full_policy
-
-
-def prepare_training_targets(
-    transitions: list[TransitionData],
-    start_idx: int,
-    unroll_steps: int,
-    n_steps: int,
-    td_lambda: float,
-    discount: float,
-    action_size: int,
-) -> dict[str, list]:
-    """
-    Prepare all training targets for a trajectory segment.
-
-    Parameters
-    ----------
-    transitions : list[TransitionData]
-        Full trajectory.
-    start_idx : int
-        Starting position.
-    unroll_steps : int
-        Number of steps to unroll.
-    n_steps : int
-        TD steps.
-    td_lambda : float
-        TD(λ) parameter.
-    discount : float
-        Discount factor.
-    action_size : int
-        Number of actions.
-
-    Returns
-    -------
-    dict[str, list]
-        Dictionary with observations, actions, policy targets, value targets, reward targets.
-    """
-    # ##>: Extract the relevant segment.
-    end_idx = min(start_idx + unroll_steps + n_steps, len(transitions))
-    segment = transitions[start_idx:end_idx]
-
-    # ##>: Compute value targets for the segment.
-    value_targets = compute_td_lambda_targets(segment, n_steps, td_lambda, discount)
-
-    # ##>: Prepare data for unroll_steps.
-    observations = []
-    actions = []
-    policy_targets = []
-    rewards = []
-
-    for k in range(min(unroll_steps + 1, len(segment))):
-        t = segment[k]
-        observations.append(t.observation)
-        actions.append(t.action)
-        policy_targets.append(compute_policy_target(t.search_policy, action_size))
-        rewards.append(t.reward)
-
-    return {
-        'observations': observations,
-        'actions': actions,
-        'policy_targets': policy_targets,
-        'value_targets': value_targets[: len(observations)],
-        'reward_targets': rewards,
-    }

@@ -30,6 +30,7 @@ dev = [
     "pyrefly>=0.16.0",
     "pytest>=8.0",
     "tensorflow-metal>=1.2.0; sys_platform == 'darwin'",
+    "vulture>=2.14",
 ]
 
 [tool.ruff]
