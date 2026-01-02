@@ -401,8 +401,11 @@ def sample_action(key: PRNGKey, temperature: float, policy: Array, legal_mask: A
     # ##>: Mask illegal actions.
     masked_policy = jnp.where(legal_mask, policy, 0.0)
 
-    # ##>: Renormalize.
-    masked_policy = masked_policy / jnp.sum(masked_policy)
+    # ##>: Renormalize, falling back to uniform over legal actions if sum is near zero.
+    policy_sum = jnp.sum(masked_policy)
+    num_legal = jnp.sum(legal_mask.astype(jnp.float32))
+    uniform_policy = legal_mask.astype(jnp.float32) / jnp.maximum(num_legal, 1.0)
+    masked_policy = jnp.where(policy_sum < 1e-8, uniform_policy, masked_policy / policy_sum)
 
     # ##>: Apply temperature.
     def apply_temperature(p: Array) -> Array:
