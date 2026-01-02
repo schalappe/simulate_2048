@@ -304,7 +304,7 @@ def run_mcts(
     return policy_output
 
 
-@partial(jax.jit, static_argnums=(4, 5, 6, 7, 8, 9, 10, 11, 12))
+@partial(jax.jit, static_argnums=(2, 4, 5, 6, 7, 8, 9, 10, 11, 12))
 def run_mcts_jit(
     observation: Array,
     params: NetworkParams,

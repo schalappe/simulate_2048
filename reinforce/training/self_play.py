@@ -12,8 +12,22 @@ import numpy as np
 from tqdm import tqdm
 
 from reinforce.game.core import encode_observation, is_done, legal_actions_mask, max_tile, next_state
-from reinforce.game.env import GameState, reset
-from reinforce.mcts.policy import get_policy_target, get_search_value, select_action
+from reinforce.game.env import (
+    GameState,
+    batched_get_legal_actions,
+    batched_get_observation,
+    batched_reset,
+    batched_step,
+    reset,
+)
+from reinforce.mcts.policy import (
+    batched_get_policy_target,
+    batched_get_search_value,
+    batched_select_action,
+    get_policy_target,
+    get_search_value,
+    select_action,
+)
 from reinforce.mcts.stochastic_mctx import NetworkApplyFns, NetworkParams, run_mcts_jit
 from reinforce.training.config import TrainConfig
 from reinforce.training.replay_buffer import Trajectory
@@ -192,6 +206,191 @@ def warmup_mcts(
 
     # ##>: Block until compilation finishes.
     jax.block_until_ready(_)
+
+
+def warmup_batched_mcts(
+    params: NetworkParams,
+    apply_fns: NetworkApplyFns,
+    key: PRNGKey,
+    config: TrainConfig,
+) -> None:
+    """
+    Trigger JIT compilation of batched MCTS before parallel game loop.
+
+    Runs a batched MCTS call to compile the JIT function with the
+    batch dimension, avoiding recompilation during parallel self-play.
+
+    Parameters
+    ----------
+    params : NetworkParams
+        Network parameters.
+    apply_fns : NetworkApplyFns
+        Network apply functions.
+    key : PRNGKey
+        JAX random key (consumed).
+    config : TrainConfig
+        Training configuration.
+    """
+    # ##>: Create dummy batched observations.
+    batch_size = config.num_parallel_games
+    dummy_obs = jax.numpy.zeros((batch_size, *config.observation_shape))
+
+    # ##>: Single batched MCTS call to trigger JIT compilation.
+    _ = run_mcts_jit(
+        observation=dummy_obs,
+        params=params,
+        apply_fns=apply_fns,
+        key=key,
+        num_simulations=config.num_simulations,
+        num_actions=config.action_size,
+        codebook_size=config.codebook_size,
+        discount=config.discount,
+        dirichlet_alpha=config.dirichlet_alpha,
+        dirichlet_fraction=config.dirichlet_fraction,
+        pb_c_init=config.pb_c_init,
+        pb_c_base=config.pb_c_base,
+    )
+
+    # ##>: Block until compilation finishes.
+    jax.block_until_ready(_)
+
+
+def play_parallel_games(
+    params: NetworkParams,
+    apply_fns: NetworkApplyFns,
+    key: PRNGKey,
+    config: TrainConfig,
+    num_parallel: int | None = None,
+    training_step: int = 0,
+) -> list[Trajectory]:
+    """
+    Play multiple games in parallel using JAX vectorization.
+
+    Uses batched environment operations and batched MCTS for maximum
+    GPU/CPU utilization. All games run synchronously until completion.
+
+    Parameters
+    ----------
+    params : NetworkParams
+        Network parameters.
+    apply_fns : NetworkApplyFns
+        Network apply functions.
+    key : PRNGKey
+        JAX random key.
+    config : TrainConfig
+        Training configuration.
+    num_parallel : int | None
+        Number of games to run in parallel. If None, uses config.num_parallel_games.
+    training_step : int
+        Current training step (for temperature scheduling).
+
+    Returns
+    -------
+    list[Trajectory]
+        List of completed game trajectories.
+    """
+    if num_parallel is None:
+        num_parallel = config.num_parallel_games
+
+    temperature = config.get_temperature(training_step)
+
+    # ##>: Initialize N games in parallel.
+    keys = jax.random.split(key, num_parallel + 1)
+    key, game_keys = keys[0], keys[1:]
+    states = batched_reset(game_keys)
+
+    # ##>: Storage for each game's trajectory data.
+    # ##>: Lists of arrays, one per game.
+    all_observations: list[list] = [[] for _ in range(num_parallel)]
+    all_actions: list[list] = [[] for _ in range(num_parallel)]
+    all_rewards: list[list] = [[] for _ in range(num_parallel)]
+    all_policies: list[list] = [[] for _ in range(num_parallel)]
+    all_values: list[list] = [[] for _ in range(num_parallel)]
+
+    # ##>: Track which games are still active.
+    active_mask = np.ones(num_parallel, dtype=bool)
+
+    step_count = 0
+    while np.any(active_mask) and step_count < config.max_trajectory_length:
+        # ##>: Get batched observations and legal masks.
+        observations = batched_get_observation(states)
+        legal_masks = batched_get_legal_actions(states)
+
+        # ##>: Batched MCTS - mctx handles batches natively when obs.ndim > 1.
+        key, mcts_key = jax.random.split(key)
+        policy_outputs = run_mcts_jit(
+            observation=observations,
+            params=params,
+            apply_fns=apply_fns,
+            key=mcts_key,
+            num_simulations=config.num_simulations,
+            num_actions=config.action_size,
+            codebook_size=config.codebook_size,
+            discount=config.discount,
+            dirichlet_alpha=config.dirichlet_alpha,
+            dirichlet_fraction=config.dirichlet_fraction,
+            pb_c_init=config.pb_c_init,
+            pb_c_base=config.pb_c_base,
+        )
+
+        # ##>: Get policy targets and values for all games.
+        policies = batched_get_policy_target(policy_outputs, legal_masks, temperature=1.0)
+        search_values = batched_get_search_value(policy_outputs)
+
+        # ##>: Batched action selection.
+        key, action_key = jax.random.split(key)
+        action_keys = jax.random.split(action_key, num_parallel)
+        actions = batched_select_action(policy_outputs, action_keys, legal_masks, temperature)
+
+        # ##>: Convert to numpy for storage and masking.
+        observations_np = np.array(observations)
+        actions_np = np.array(actions)
+        policies_np = np.array(policies)
+        values_np = np.array(search_values)
+
+        # ##>: Batched environment step.
+        key, step_key = jax.random.split(key)
+        step_keys = jax.random.split(step_key, num_parallel)
+        states, rewards, dones, _ = batched_step(states, actions, step_keys)
+        rewards_np = np.array(rewards)
+        dones_np = np.array(dones)
+
+        # ##>: Store step data only for active games.
+        for i in range(num_parallel):
+            if active_mask[i]:
+                all_observations[i].append(observations_np[i])
+                all_actions[i].append(int(actions_np[i]))
+                all_rewards[i].append(float(rewards_np[i]))
+                all_policies[i].append(policies_np[i])
+                all_values[i].append(float(values_np[i]))
+
+        # ##>: Update active mask for games that just finished.
+        active_mask = active_mask & ~dones_np
+
+        step_count += 1
+
+    # ##>: Convert collected data to Trajectory objects.
+    trajectories = []
+    final_boards = np.array(states.board)
+    final_dones = np.array(states.done)
+
+    for i in range(num_parallel):
+        if len(all_observations[i]) == 0:
+            continue
+
+        trajectory = Trajectory(
+            observations=np.stack(all_observations[i], axis=0),
+            actions=np.array(all_actions[i], dtype=np.int32),
+            rewards=np.array(all_rewards[i], dtype=np.float32),
+            policies=np.stack(all_policies[i], axis=0),
+            values=np.array(all_values[i], dtype=np.float32),
+            done=bool(final_dones[i]),
+            total_reward=float(sum(all_rewards[i])),
+            max_tile=int(max_tile(final_boards[i])),
+        )
+        trajectories.append(trajectory)
+
+    return trajectories
 
 
 def generate_games(

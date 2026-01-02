@@ -24,7 +24,12 @@ from reinforce.training.learner import (
     train_step,
 )
 from reinforce.training.replay_buffer import ReplayBuffer
-from reinforce.training.self_play import evaluate_games, generate_games
+from reinforce.training.self_play import (
+    evaluate_games,
+    generate_games,
+    play_parallel_games,
+    warmup_batched_mcts,
+)
 
 # ##>: Type aliases.
 PRNGKey = jax.Array
@@ -113,7 +118,7 @@ class Trainer:
 
     def fill_buffer(self, num_games: int | None = None, show_progress: bool = True) -> None:
         """
-        Fill the replay buffer with initial games.
+        Fill the replay buffer with initial games using parallel execution.
 
         Parameters
         ----------
@@ -128,22 +133,44 @@ class Trainer:
         if num_games is None:
             num_games = self.config.min_buffer_size
 
-        # ##>: Generate games.
-        key, subkey = jax.random.split(self._state.key)
+        # ##>: Warmup batched MCTS JIT compilation.
+        key, warmup_key = jax.random.split(self._state.key)
         self._state = self._state._replace(key=key)
-
-        trajectories = generate_games(
+        warmup_batched_mcts(
             params=self._state.network.params,
             apply_fns=self._state.network.apply_fns,
-            key=subkey,
+            key=warmup_key,
             config=self.config,
-            num_games=num_games,
-            training_step=self._state.step,
-            show_progress=show_progress,
         )
 
-        # ##>: Add to buffer.
-        for traj in trajectories:
+        # ##>: Generate games in parallel batches.
+        num_batches = (num_games + self.config.num_parallel_games - 1) // self.config.num_parallel_games
+        all_trajectories = []
+
+        if show_progress:
+            batch_iter = tqdm(range(num_batches), desc='Filling buffer', unit='batch', leave=False)
+        else:
+            batch_iter = range(num_batches)
+
+        for _ in batch_iter:
+            key, subkey = jax.random.split(self._state.key)
+            self._state = self._state._replace(key=key)
+
+            trajectories = play_parallel_games(
+                params=self._state.network.params,
+                apply_fns=self._state.network.apply_fns,
+                key=subkey,
+                config=self.config,
+                num_parallel=self.config.num_parallel_games,
+                training_step=self._state.step,
+            )
+            all_trajectories.extend(trajectories)
+
+            if show_progress:
+                batch_iter.set_postfix(games=len(all_trajectories))
+
+        # ##>: Add to buffer (up to num_games).
+        for traj in all_trajectories[:num_games]:
             self._buffer.add(traj)
 
         stats = self._buffer.get_statistics()
@@ -192,9 +219,9 @@ class Trainer:
         while self._state.step < end_step:
             step = self._state.step
 
-            # ##>: Generate new games periodically.
-            if step > 0 and step % 100 == 0:
-                self._generate_games(1)
+            # ##>: Generate new games periodically using parallel execution.
+            if step > 0 and step % self.config.generation_interval == 0:
+                self._generate_games_parallel()
 
             # ##>: Sample batch and train.
             batch, weights = self._buffer.sample_batch(self.config.batch_size)
@@ -255,8 +282,25 @@ class Trainer:
             'final_step': self._state.step,
         }
 
+    def _generate_games_parallel(self) -> None:
+        """Generate games in parallel and add to buffer."""
+        key, subkey = jax.random.split(self._state.key)
+        self._state = self._state._replace(key=key)
+
+        trajectories = play_parallel_games(
+            params=self._state.network.params,
+            apply_fns=self._state.network.apply_fns,
+            key=subkey,
+            config=self.config,
+            num_parallel=self.config.num_parallel_games,
+            training_step=self._state.step,
+        )
+
+        for traj in trajectories:
+            self._buffer.add(traj)
+
     def _generate_games(self, num_games: int) -> None:
-        """Generate and add games to buffer."""
+        """Generate games sequentially and add to buffer (legacy method)."""
         key, subkey = jax.random.split(self._state.key)
         self._state = self._state._replace(key=key)
 

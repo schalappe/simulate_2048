@@ -245,7 +245,8 @@ class CheckpointManager:
         max_to_keep : int
             Maximum checkpoints to keep.
         """
-        self.checkpoint_dir = Path(checkpoint_dir)
+        # ##>: Orbax requires absolute paths for async TensorStore operations.
+        self.checkpoint_dir = Path(checkpoint_dir).resolve()
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.max_to_keep = max_to_keep
 

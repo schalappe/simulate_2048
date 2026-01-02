@@ -75,6 +75,10 @@ class TrainConfig:
     eval_interval: int = 1000  # Evaluate every N steps
     eval_games: int = 10  # Number of games for evaluation
 
+    # ##>: Parallel self-play parameters.
+    num_parallel_games: int = 8  # Number of games to run in parallel
+    generation_interval: int = 100  # Generate games every N training steps
+
     # ##>: Value scaling (paper: invertible transform for large rewards).
     # ##>: h(x) = sign(x) * (sqrt(|x| + 1) - 1 + ε*x), ε = 0.001
     value_epsilon: float = 0.001
@@ -144,6 +148,8 @@ def small_config() -> TrainConfig:
         checkpoint_interval=100,
         log_interval=10,
         eval_interval=100,
+        num_parallel_games=4,
+        generation_interval=50,
     )
 
 
@@ -168,4 +174,6 @@ def tiny_config() -> TrainConfig:
         log_interval=1,
         eval_interval=50,
         eval_games=2,
+        num_parallel_games=2,
+        generation_interval=20,
     )

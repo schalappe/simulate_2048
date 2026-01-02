@@ -159,6 +159,78 @@ def get_q_values(policy_output: mctx.PolicyOutput) -> Array:
     return policy_output.search_tree.summary().qvalues[..., 0, :]
 
 
+def batched_select_action(
+    policy_outputs: mctx.PolicyOutput,
+    keys: Array,
+    legal_masks: Array,
+    temperature: float = 1.0,
+) -> Array:
+    """
+    Select actions for a batch of MCTS policy outputs.
+
+    Parameters
+    ----------
+    policy_outputs : mctx.PolicyOutput
+        Batched output from mctx search, with batch dimension in each field.
+    keys : Array
+        Batch of random keys, shape (batch_size, 2).
+    legal_masks : Array
+        Batch of legal action masks, shape (batch_size, num_actions).
+    temperature : float
+        Temperature for action selection (shared across batch).
+
+    Returns
+    -------
+    Array
+        Selected action indices, shape (batch_size,).
+    """
+    # ##>: Use vmap to apply select_action across the batch.
+    # ##>: Temperature is static, so we use a lambda to capture it.
+    return jax.vmap(lambda po, k, m: select_action(po, k, m, temperature))(policy_outputs, keys, legal_masks)
+
+
+def batched_get_policy_target(
+    policy_outputs: mctx.PolicyOutput,
+    legal_masks: Array,
+    temperature: float = 1.0,
+) -> Array:
+    """
+    Convert batched MCTS visit counts to policy targets.
+
+    Parameters
+    ----------
+    policy_outputs : mctx.PolicyOutput
+        Batched output from mctx search.
+    legal_masks : Array
+        Batch of legal action masks, shape (batch_size, num_actions).
+    temperature : float
+        Temperature for softening the policy.
+
+    Returns
+    -------
+    Array
+        Normalized policy distributions, shape (batch_size, num_actions).
+    """
+    return jax.vmap(lambda po, m: get_policy_target(po, m, temperature))(policy_outputs, legal_masks)
+
+
+def batched_get_search_value(policy_outputs: mctx.PolicyOutput) -> Array:
+    """
+    Extract search values from batched MCTS outputs.
+
+    Parameters
+    ----------
+    policy_outputs : mctx.PolicyOutput
+        Batched output from mctx search.
+
+    Returns
+    -------
+    Array
+        Search value estimates, shape (batch_size,).
+    """
+    return jax.vmap(get_search_value)(policy_outputs)
+
+
 def temperature_schedule(step: int, schedule: list[tuple[int, float]]) -> float:
     """
     Get the temperature for a given training step.
