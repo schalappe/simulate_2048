@@ -16,7 +16,7 @@ class TestGameMove(TestCase):
 
     def test_legal_actions(self):
         """
-        Test if illegal actions are correctly identified.
+        Test if legal actions are correctly identified.
         """
         board = array([[2, 0, 0, 0], [2, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
         legal = legal_actions(board)
