@@ -11,6 +11,7 @@ Design considerations:
 4. Async batch prefetching for pipeline efficiency
 """
 
+import logging
 import threading
 from dataclasses import dataclass, field
 from queue import Empty, Queue
@@ -26,6 +27,9 @@ from reinforce.training.losses import TrainingTargets
 
 # ##>: Type aliases.
 Array = jax.Array
+
+# ##>: Module logger.
+_logger = logging.getLogger(__name__)
 
 
 class Trajectory(NamedTuple):
@@ -499,7 +503,12 @@ class AsyncBatchLoader:
                 self._queue.put((batch, weights), timeout=1.0)
 
             except Exception:
-                # ##>: Silently continue on errors to keep thread alive.
+                # ##>: Log error with context to aid debugging, then continue to keep thread alive.
+                _logger.exception(
+                    'Prefetch sampling failed (batch_size=%d, vectorized=%s)',
+                    self._batch_size,
+                    self._use_vectorized,
+                )
                 continue
 
     def get_batch(self, timeout: float = 5.0) -> tuple[TrainingTargets, Array]:
