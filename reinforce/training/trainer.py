@@ -22,8 +22,9 @@ from reinforce.training.learner import (
     TrainState,
     create_train_state,
     train_step,
+    train_step_optimized,
 )
-from reinforce.training.replay_buffer import ReplayBuffer
+from reinforce.training.replay_buffer import AsyncBatchLoader, ReplayBuffer
 from reinforce.training.self_play import (
     evaluate_games,
     generate_games,
@@ -67,15 +68,22 @@ class Trainer:
         Directory for saving checkpoints.
     log_dir : str | Path | None
         Directory for logs. If None, logging is disabled.
+    use_optimized : bool
+        Whether to use optimized training functions.
+    use_async_loader : bool
+        Whether to use async batch prefetching.
     """
 
     config: TrainConfig
     checkpoint_dir: str | Path = 'checkpoints'
     log_dir: str | Path | None = None
+    use_optimized: bool = True
+    use_async_loader: bool = True
     _state: TrainState | None = field(default=None, repr=False)
     _buffer: ReplayBuffer | None = field(default=None, repr=False)
     _checkpoint_manager: CheckpointManager | None = field(default=None, repr=False)
     _metrics_history: list = field(default_factory=list, repr=False)
+    _async_loader: AsyncBatchLoader | None = field(default=None, repr=False)
 
     def __post_init__(self):
         """Initialize trainer components."""
@@ -222,66 +230,90 @@ class Trainer:
             print('Buffer not ready, generating initial games...')
             self.fill_buffer()
 
-        # ##>: Training loop.
-        pbar = tqdm(total=num_steps, desc='Training', unit='step', initial=0) if show_progress else None
+        # ##>: Select training function based on optimization setting.
+        train_fn = train_step_optimized if self.use_optimized else train_step
 
-        start_time = time.time()
-        last_log_time = start_time
+        # ##>: Start async loader if enabled.
+        if self.use_async_loader:
+            self._async_loader = AsyncBatchLoader(
+                buffer=self._buffer,
+                batch_size=self.config.batch_size,
+                queue_size=2,
+                use_vectorized=True,
+            )
+            self._async_loader.start()
 
-        while self._state.step < end_step:
-            step = self._state.step
+        try:
+            # ##>: Training loop.
+            pbar = tqdm(total=num_steps, desc='Training', unit='step', initial=0) if show_progress else None
 
-            # ##>: Generate new games periodically using parallel execution.
-            if step > 0 and step % self.config.generation_interval == 0:
-                self._generate_games_parallel()
+            start_time = time.time()
+            last_log_time = start_time
 
-            # ##>: Sample batch and train.
-            batch, weights = self._buffer.sample_batch(self.config.batch_size)
-            self._state, loss_output = train_step(self._state, batch, self.config)
+            while self._state.step < end_step:
+                step = self._state.step
 
-            # ##>: Logging.
-            if step > 0 and step % self.config.log_interval == 0:
-                current_time = time.time()
-                steps_per_sec = self.config.log_interval / (current_time - last_log_time)
-                last_log_time = current_time
+                # ##>: Generate new games periodically using parallel execution.
+                if step > 0 and step % self.config.generation_interval == 0:
+                    self._generate_games_parallel()
 
-                metrics = TrainingMetrics(
-                    step=step,
-                    total_loss=float(loss_output.total_loss),
-                    policy_loss=float(loss_output.policy_loss),
-                    value_loss=float(loss_output.value_loss),
-                    reward_loss=float(loss_output.reward_loss),
-                    chance_loss=float(loss_output.chance_loss),
-                    steps_per_second=steps_per_sec,
-                )
-                self._metrics_history.append(metrics)
+                # ##>: Sample batch and train.
+                if self.use_async_loader and self._async_loader is not None:
+                    batch, weights = self._async_loader.get_batch()
+                else:
+                    batch, weights = self._buffer.sample_batch_vectorized(self.config.batch_size)
+
+                self._state, loss_output = train_fn(self._state, batch, self.config)
+
+                # ##>: Logging.
+                if step > 0 and step % self.config.log_interval == 0:
+                    current_time = time.time()
+                    steps_per_sec = self.config.log_interval / (current_time - last_log_time)
+                    last_log_time = current_time
+
+                    metrics = TrainingMetrics(
+                        step=step,
+                        total_loss=float(loss_output.total_loss),
+                        policy_loss=float(loss_output.policy_loss),
+                        value_loss=float(loss_output.value_loss),
+                        reward_loss=float(loss_output.reward_loss),
+                        chance_loss=float(loss_output.chance_loss),
+                        steps_per_second=steps_per_sec,
+                    )
+                    self._metrics_history.append(metrics)
+
+                    if pbar is not None:
+                        pbar.set_postfix(
+                            loss=f'{metrics.total_loss:.4f}',
+                            p=f'{metrics.policy_loss:.4f}',
+                            v=f'{metrics.value_loss:.4f}',
+                            sps=f'{steps_per_sec:.1f}',
+                        )
+
+                # ##>: Checkpointing.
+                if step > 0 and step % self.config.checkpoint_interval == 0 and self._checkpoint_manager is not None:
+                    self._checkpoint_manager.save(self._state, step)
+
+                # ##>: Evaluation.
+                if step > 0 and step % self.config.eval_interval == 0:
+                    eval_results = self.evaluate()
+                    if pbar is not None:
+                        pbar.write(
+                            f'Step {step}: mean_reward={eval_results["mean_reward"]:.1f}, '
+                            f'max_tile={eval_results["max_tile"]}'
+                        )
 
                 if pbar is not None:
-                    pbar.set_postfix(
-                        loss=f'{metrics.total_loss:.4f}',
-                        p=f'{metrics.policy_loss:.4f}',
-                        v=f'{metrics.value_loss:.4f}',
-                        sps=f'{steps_per_sec:.1f}',
-                    )
-
-            # ##>: Checkpointing.
-            if step > 0 and step % self.config.checkpoint_interval == 0 and self._checkpoint_manager is not None:
-                self._checkpoint_manager.save(self._state, step)
-
-            # ##>: Evaluation.
-            if step > 0 and step % self.config.eval_interval == 0:
-                eval_results = self.evaluate()
-                if pbar is not None:
-                    pbar.write(
-                        f'Step {step}: mean_reward={eval_results["mean_reward"]:.1f}, '
-                        f'max_tile={eval_results["max_tile"]}'
-                    )
+                    pbar.update(1)
 
             if pbar is not None:
-                pbar.update(1)
+                pbar.close()
 
-        if pbar is not None:
-            pbar.close()
+        finally:
+            # ##>: Stop async loader.
+            if self._async_loader is not None:
+                self._async_loader.stop()
+                self._async_loader = None
 
         # ##>: Final checkpoint.
         if self._checkpoint_manager is not None and self._state is not None:

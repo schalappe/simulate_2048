@@ -8,9 +8,12 @@ Design considerations:
 1. Efficient storage and sampling with NumPy (buffer lives on CPU)
 2. Prioritized sampling based on TD-error or trajectory value
 3. Support for n-step returns and TD(λ) target computation
+4. Async batch prefetching for pipeline efficiency
 """
 
+import threading
 from dataclasses import dataclass, field
+from queue import Empty, Queue
 from typing import NamedTuple
 
 import jax
@@ -149,7 +152,7 @@ class ReplayBuffer:
 
     def sample_batch(self, batch_size: int, seed: int | None = None) -> tuple[TrainingTargets, Array]:
         """
-        Sample a batch of training examples.
+        Sample a batch of training examples (legacy version).
 
         Each example is a contiguous segment from a trajectory,
         with length K+1 for K unroll steps.
@@ -248,6 +251,109 @@ class ReplayBuffer:
 
         return batch, jnp.array(weights)
 
+    def sample_batch_vectorized(self, batch_size: int, seed: int | None = None) -> tuple[TrainingTargets, Array]:
+        """
+        Vectorized batch sampling for improved performance.
+
+        Uses pre-allocated arrays and minimizes Python loop overhead by
+        batching operations where possible.
+
+        Parameters
+        ----------
+        batch_size : int
+            Number of examples to sample.
+        seed : int | None
+            Random seed for reproducibility.
+
+        Returns
+        -------
+        tuple[TrainingTargets, np.ndarray]
+            - Batch of training targets
+            - Importance sampling weights
+        """
+        if seed is not None:
+            self._rng = default_rng(seed)
+
+        num_trajs = len(self._trajectories)
+        unroll_length = self.config.num_unroll_steps + 1
+        action_length = self.config.num_unroll_steps
+        obs_dim = self.config.observation_shape[0]
+        action_size = self.config.action_size
+
+        # ##>: Compute probabilities once.
+        priorities = np.array(self._priorities[:num_trajs], dtype=np.float32)
+        probs = priorities**self.config.priority_alpha
+        probs = probs / probs.sum()
+
+        # ##>: Sample trajectory indices.
+        traj_indices = self._rng.choice(num_trajs, size=batch_size, p=probs, replace=True)
+
+        # ##>: Pre-allocate output arrays.
+        observations = np.zeros((batch_size, unroll_length, obs_dim), dtype=np.float32)
+        actions = np.zeros((batch_size, action_length), dtype=np.int32)
+        policies = np.zeros((batch_size, unroll_length, action_size), dtype=np.float32)
+        values = np.zeros((batch_size, unroll_length), dtype=np.float32)
+        rewards = np.zeros((batch_size, action_length), dtype=np.float32)
+
+        # ##>: Compute importance sampling weights vectorized.
+        sampled_probs = probs[traj_indices]
+        weights = (num_trajs * sampled_probs) ** (-self.config.priority_beta)
+
+        # ##>: Get trajectory lengths for vectorized start position sampling.
+        traj_lengths = np.array([len(self._trajectories[idx]) for idx in traj_indices])
+
+        # ##>: Compute max_start for each trajectory.
+        max_starts = np.maximum(0, traj_lengths - unroll_length)
+
+        # ##>: Sample start positions vectorized.
+        start_positions = np.where(
+            max_starts == 0,
+            0,
+            self._rng.integers(0, np.maximum(1, max_starts + 1)),
+        )
+
+        # ##>: Extract segments (still need loop but with pre-allocated arrays).
+        for i, (traj_idx, start) in enumerate(zip(traj_indices, start_positions, strict=True)):
+            traj = self._trajectories[traj_idx]
+            traj_len = len(traj)
+
+            # ##>: Calculate actual available length.
+            obs_avail = min(unroll_length, traj_len - start)
+            act_avail = min(action_length, max(0, traj_len - start - 1))
+
+            # ##>: Copy available data (no padding needed - arrays are zero-initialized).
+            observations[i, :obs_avail] = traj.observations[start : start + obs_avail]
+            policies[i, :obs_avail] = traj.policies[start : start + obs_avail]
+            values[i, :obs_avail] = traj.values[start : start + obs_avail]
+
+            if act_avail > 0:
+                actions[i, :act_avail] = traj.actions[start : start + act_avail]
+                rewards[i, :act_avail] = traj.rewards[start : start + act_avail]
+
+            # ##>: Edge padding for incomplete segments.
+            if obs_avail < unroll_length and obs_avail > 0:
+                observations[i, obs_avail:] = observations[i, obs_avail - 1]
+                policies[i, obs_avail:] = policies[i, obs_avail - 1]
+                values[i, obs_avail:] = values[i, obs_avail - 1]
+
+            if act_avail < action_length and act_avail > 0:
+                actions[i, act_avail:] = actions[i, act_avail - 1]
+                # ##>: Rewards stay zero-padded (constant mode).
+
+        # ##>: Normalize weights.
+        weights = weights / weights.max()
+
+        # ##>: Convert to JAX arrays in one batch operation.
+        batch = TrainingTargets(
+            observations=jnp.asarray(observations),
+            actions=jnp.asarray(actions),
+            target_policies=jnp.asarray(policies),
+            target_values=jnp.asarray(values),
+            target_rewards=jnp.asarray(rewards),
+        )
+
+        return batch, jnp.asarray(weights)
+
     def update_priorities(self, indices: np.ndarray, priorities: np.ndarray) -> None:
         """
         Update priorities for sampled trajectories.
@@ -302,3 +408,154 @@ class ReplayBuffer:
         self._trajectories.clear()
         self._priorities.clear()
         self._position = 0
+
+
+class AsyncBatchLoader:
+    """
+    Async batch loader for pipeline efficiency.
+
+    Prefetches batches in a background thread while the main thread
+    trains on the current batch. This hides batch sampling latency.
+
+    Attributes
+    ----------
+    buffer : ReplayBuffer
+        The replay buffer to sample from.
+    batch_size : int
+        Size of batches to prefetch.
+    queue_size : int
+        Number of batches to prefetch ahead.
+    use_vectorized : bool
+        Whether to use vectorized sampling.
+    """
+
+    def __init__(
+        self,
+        buffer: ReplayBuffer,
+        batch_size: int,
+        queue_size: int = 2,
+        use_vectorized: bool = True,
+    ):
+        """
+        Initialize async batch loader.
+
+        Parameters
+        ----------
+        buffer : ReplayBuffer
+            The replay buffer to sample from.
+        batch_size : int
+            Size of batches to prefetch.
+        queue_size : int
+            Number of batches to prefetch ahead.
+        use_vectorized : bool
+            Whether to use vectorized sampling method.
+        """
+        self._buffer = buffer
+        self._batch_size = batch_size
+        self._queue: Queue = Queue(maxsize=queue_size)
+        self._use_vectorized = use_vectorized
+        self._running = False
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Start the background prefetch thread."""
+        if self._running:
+            return
+
+        self._running = True
+        self._thread = threading.Thread(target=self._prefetch_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop the background prefetch thread."""
+        self._running = False
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+            self._thread = None
+
+        # ##>: Clear the queue.
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+            except Empty:
+                break
+
+    def _prefetch_loop(self) -> None:
+        """Background loop that prefetches batches."""
+        while self._running:
+            try:
+                # ##>: Only prefetch if buffer is ready.
+                if not self._buffer.is_ready():
+                    threading.Event().wait(0.1)
+                    continue
+
+                # ##>: Sample batch using selected method.
+                if self._use_vectorized:
+                    batch, weights = self._buffer.sample_batch_vectorized(self._batch_size)
+                else:
+                    batch, weights = self._buffer.sample_batch(self._batch_size)
+
+                # ##>: Put in queue (blocks if full).
+                self._queue.put((batch, weights), timeout=1.0)
+
+            except Exception:
+                # ##>: Silently continue on errors to keep thread alive.
+                continue
+
+    def get_batch(self, timeout: float = 5.0) -> tuple[TrainingTargets, Array]:
+        """
+        Get the next prefetched batch.
+
+        Parameters
+        ----------
+        timeout : float
+            Maximum time to wait for a batch.
+
+        Returns
+        -------
+        tuple[TrainingTargets, Array]
+            - Batch of training targets
+            - Importance sampling weights
+
+        Raises
+        ------
+        TimeoutError
+            If no batch is available within timeout.
+        """
+        try:
+            return self._queue.get(timeout=timeout)
+        except Empty as e:
+            raise TimeoutError('No batch available within timeout') from e
+
+    def get_batch_nowait(self) -> tuple[TrainingTargets, Array] | None:
+        """
+        Get the next prefetched batch without waiting.
+
+        Returns
+        -------
+        tuple[TrainingTargets, Array] | None
+            Batch and weights, or None if queue is empty.
+        """
+        try:
+            return self._queue.get_nowait()
+        except Empty:
+            return None
+
+    @property
+    def queue_size(self) -> int:
+        """Return current number of prefetched batches in queue."""
+        return self._queue.qsize()
+
+    @property
+    def is_running(self) -> bool:
+        """Return whether the prefetch thread is running."""
+        return self._running
+
+    def __enter__(self) -> 'AsyncBatchLoader':
+        """Context manager entry."""
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit."""
+        self.stop()

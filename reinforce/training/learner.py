@@ -40,12 +40,15 @@ class TrainState(NamedTuple):
         Current training step.
     key : PRNGKey
         Current random key.
+    optimizer : optax.GradientTransformation
+        The optimizer (stored to avoid recreation each step).
     """
 
     network: StochasticMuZeroNetwork
     opt_state: Any
     step: int
     key: PRNGKey
+    optimizer: optax.GradientTransformation = None  # type: ignore[assignment]
 
 
 def create_optimizer(config: TrainConfig) -> optax.GradientTransformation:
@@ -114,7 +117,7 @@ def create_train_state(config: TrainConfig, key: PRNGKey) -> TrainState:
         codebook_size=config.codebook_size,
     )
 
-    # ##>: Create optimizer.
+    # ##>: Create optimizer and store it in state to avoid recreation each step.
     optimizer = create_optimizer(config)
     opt_state = optimizer.init(network.params)
 
@@ -123,6 +126,7 @@ def create_train_state(config: TrainConfig, key: PRNGKey) -> TrainState:
         opt_state=opt_state,
         step=0,
         key=key,
+        optimizer=optimizer,
     )
 
 
@@ -132,7 +136,7 @@ def train_step(
     config: TrainConfig,
 ) -> tuple[TrainState, LossOutput]:
     """
-    Perform a single training step.
+    Perform a single training step (legacy version, recreates optimizer).
 
     Parameters
     ----------
@@ -148,6 +152,11 @@ def train_step(
     tuple[TrainState, LossOutput]
         - Updated training state
         - Loss metrics
+
+    Notes
+    -----
+    This is the legacy version that recreates the optimizer each step.
+    Use train_step_optimized for better performance.
     """
     optimizer = create_optimizer(config)
 
@@ -176,6 +185,7 @@ def train_step(
         opt_state=new_opt_state,
         step=state.step + 1,
         key=state.key,
+        optimizer=state.optimizer,
     )
 
     return new_state, loss_output
@@ -188,12 +198,97 @@ def train_step_jit(
     config: TrainConfig,
 ) -> tuple[TrainState, LossOutput]:
     """
-    JIT-compiled training step.
+    JIT-compiled training step (legacy version).
 
     Same as train_step but with JIT compilation for maximum performance.
     Note: config must be static (hashable) for this to work.
     """
     return train_step(state, batch, config)
+
+
+def _train_step_core(
+    params: NetworkParams,
+    apply_fns: Any,
+    opt_state: Any,
+    batch: TrainingTargets,
+    config: TrainConfig,
+    optimizer: optax.GradientTransformation,
+) -> tuple[NetworkParams, Any, LossOutput]:
+    """
+    Core training computation (JIT-friendly).
+
+    Separated from state management for cleaner JIT compilation.
+    """
+
+    def loss_fn(p: NetworkParams) -> tuple[Array, LossOutput]:
+        return compute_loss(params=p, apply_fns=apply_fns, batch=batch, config=config)
+
+    # ##>: Compute gradients.
+    (loss, loss_output), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
+
+    # ##>: Apply gradients using stored optimizer.
+    updates, new_opt_state = optimizer.update(grads, opt_state, params)
+    new_params = optax.apply_updates(params, updates)
+
+    return cast(NetworkParams, new_params), new_opt_state, loss_output
+
+
+# ##>: JIT-compile the core training computation.
+# ##>: static_argnums=(1, 4, 5) for apply_fns, config and optimizer which are static/unchanging.
+_train_step_core_jit = jax.jit(_train_step_core, static_argnums=(1, 4, 5))
+
+
+def train_step_optimized(
+    state: TrainState,
+    batch: TrainingTargets,
+    config: TrainConfig,
+) -> tuple[TrainState, LossOutput]:
+    """
+    Optimized training step with JIT compilation and optimizer reuse.
+
+    This version:
+    1. Uses JIT-compiled core computation
+    2. Reuses the optimizer stored in TrainState
+    3. Minimizes Python overhead
+
+    Parameters
+    ----------
+    state : TrainState
+        Current training state (must have optimizer set).
+    batch : TrainingTargets
+        Batch of training data.
+    config : TrainConfig
+        Training configuration.
+
+    Returns
+    -------
+    tuple[TrainState, LossOutput]
+        - Updated training state
+        - Loss metrics
+    """
+    # ##>: Run JIT-compiled core computation.
+    new_params, new_opt_state, loss_output = _train_step_core_jit(
+        state.network.params,
+        state.network.apply_fns,
+        state.opt_state,
+        batch,
+        config,
+        state.optimizer,
+    )
+
+    # ##>: Update network with new params.
+    new_network = update_params(state.network, new_params)
+
+    # ##>: Create new state (lightweight Python operation).
+    new_state = TrainState(
+        network=new_network,
+        opt_state=new_opt_state,
+        step=state.step + 1,
+        key=state.key,
+        optimizer=state.optimizer,
+    )
+
+    return new_state, loss_output
 
 
 def compute_gradient_stats(grads: Any) -> dict:
@@ -344,11 +439,15 @@ class CheckpointManager:
         )
         network = update_params(network, checkpoint['params'])
 
+        # ##>: Recreate optimizer for restored state.
+        optimizer = create_optimizer(config)
+
         return TrainState(
             network=network,
             opt_state=checkpoint['opt_state'],
             step=checkpoint['step'],
             key=checkpoint['key'],
+            optimizer=optimizer,
         )
 
     @property
