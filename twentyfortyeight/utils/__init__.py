@@ -1,6 +1,6 @@
 """
-This module provides utilities for encoding, normalizing, and managing game boards.
+Utilities for encoding and normalizing game board states.
 
-It includes functions for flattening and encoding board states, normalizing rewards,
-and a `WindowBoard` class for managing game boards with sliding windows.
+Provides functions for binary encoding of board observations and logarithmic
+reward normalization for stable reinforcement learning.
 """
