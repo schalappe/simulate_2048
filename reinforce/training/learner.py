@@ -448,14 +448,31 @@ class CheckpointManager:
             num_actions=config.action_size,
             codebook_size=config.codebook_size,
         )
-        network = update_params(network, checkpoint['params'])
 
-        # ##>: Recreate optimizer for restored state.
+        # ##>: Convert checkpoint params dict to NetworkParams NamedTuple.
+        # ##>: Orbax deserializes NamedTuples as dicts, so we need to reconstruct.
+        restored_params = checkpoint['params']
+        if isinstance(restored_params, dict):
+            restored_params = NetworkParams(
+                representation=restored_params['representation'],
+                prediction=restored_params['prediction'],
+                afterstate_dynamics=restored_params['afterstate_dynamics'],
+                afterstate_prediction=restored_params['afterstate_prediction'],
+                dynamics=restored_params['dynamics'],
+                encoder=restored_params['encoder'],
+            )
+
+        network = update_params(network, restored_params)
+
+        # ##>: Recreate optimizer and reinitialize state.
+        # ##>: Orbax deserializes optax states as dicts, breaking the NamedTuple structure.
+        # ##>: Reinitializing from restored params is safe - momentum rebuilds quickly.
         optimizer = create_optimizer(config)
+        opt_state = optimizer.init(network.params)
 
         return TrainState(
             network=network,
-            opt_state=checkpoint['opt_state'],
+            opt_state=opt_state,
             step=checkpoint['step'],
             key=checkpoint['key'],
             optimizer=optimizer,
