@@ -271,16 +271,20 @@ def fill_cells(state: ndarray, number_tile: int, seed: int | None = None) -> nda
     # ##>: Use module-level generator for performance unless seed is specified.
     rng = default_rng(seed) if seed is not None else _GENERATOR
 
-    # ##: Only if there are still available places.
-    if not state.all():
-        values = rng.choice(_TILE_VALUES, size=number_tile, p=_TILE_PROBS)
+    # ##: Find available cells and clamp number_tile to available count.
+    available_cells = argwhere(state == 0)
+    num_available = len(available_cells)
+    if num_available == 0:
+        return state
 
-        # ##: Randomly choose cell positions in board.
-        available_cells = argwhere(state == 0)
-        chosen_indices = rng.choice(len(available_cells), size=number_tile, replace=False)
+    number_tile = min(number_tile, num_available)
 
-        # ##: Fill empty cells.
-        state[tuple(available_cells[chosen_indices].T)] = values
+    # ##: Sample tile values and cell positions.
+    values = rng.choice(_TILE_VALUES, size=number_tile, p=_TILE_PROBS)
+    chosen_indices = rng.choice(num_available, size=number_tile, replace=False)
+
+    # ##: Fill empty cells.
+    state[tuple(available_cells[chosen_indices].T)] = values
     return state
 
 
