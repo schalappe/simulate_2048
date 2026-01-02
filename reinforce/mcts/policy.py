@@ -6,6 +6,7 @@ with temperature-based sampling.
 """
 
 from functools import partial
+from typing import cast
 
 import jax
 import jax.numpy as jnp
@@ -120,7 +121,8 @@ def get_search_value(policy_output: mctx.PolicyOutput) -> Array:
     Array
         Search value estimate (scalar float).
     """
-    return policy_output.search_tree.node_values[..., 0]
+    # ##>: Cast needed for pyrefly type inference with mctx types.
+    return cast(Array, policy_output.search_tree.node_values[..., 0])  # pyrefly: ignore
 
 
 @jax.jit
@@ -138,7 +140,8 @@ def get_visit_counts(policy_output: mctx.PolicyOutput) -> Array:
     Array
         Visit counts for each action, shape (num_actions,).
     """
-    return policy_output.search_tree.summary().visit_counts[..., 0, :]
+    # ##>: Cast needed for pyrefly type inference with mctx types.
+    return cast(Array, policy_output.search_tree.summary().visit_counts[..., 0, :])  # pyrefly: ignore
 
 
 @jax.jit
@@ -156,7 +159,8 @@ def get_q_values(policy_output: mctx.PolicyOutput) -> Array:
     Array
         Q-values for each action, shape (num_actions,).
     """
-    return policy_output.search_tree.summary().qvalues[..., 0, :]
+    # ##>: Cast needed for pyrefly type inference with mctx types.
+    return cast(Array, policy_output.search_tree.summary().qvalues[..., 0, :])  # pyrefly: ignore
 
 
 def batched_select_action(

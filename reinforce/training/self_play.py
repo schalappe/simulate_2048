@@ -93,7 +93,7 @@ def play_game(
     step_count = 0
     total_reward = 0.0
 
-    while not bool(state.done) and step_count < config.max_trajectory_length:
+    while not bool(state.done) and step_count < config.max_trajectory_length:  # pyrefly: ignore[bad-assignment]
         # ##>: Get observation.
         obs = encode_observation(state.board)
         observations.append(np.array(obs))
@@ -128,13 +128,13 @@ def play_game(
         # ##>: Store step data.
         actions.append(int(action))
         policies.append(np.array(policy))
-        values.append(float(search_value))
+        values.append(float(search_value))  # pyrefly: ignore[bad-argument-type]
 
         # ##>: Take step in environment.
         new_board, reward = next_state(state.board, int(action), step_key)
         done = is_done(new_board)
 
-        rewards.append(float(reward))
+        rewards.append(float(reward))  # pyrefly: ignore[bad-argument-type]
         total_reward += float(reward)
 
         # ##>: Update state.
@@ -439,20 +439,20 @@ def generate_games(
 
     if show_progress:
         game_iter = tqdm(range(num_games), desc='Self-play', unit='game', leave=False)
-    else:
-        game_iter = range(num_games)
-
-    for _ in game_iter:
-        key, subkey = jax.random.split(key)
-        traj = play_game(params, apply_fns, subkey, config, training_step)
-        trajectories.append(traj)
-
-        if show_progress:
+        for _ in game_iter:
+            key, subkey = jax.random.split(key)
+            traj = play_game(params, apply_fns, subkey, config, training_step)
+            trajectories.append(traj)
             game_iter.set_postfix(
                 reward=f'{traj.total_reward:.0f}',
                 tile=traj.max_tile,
                 moves=len(traj),
             )
+    else:
+        for _ in range(num_games):
+            key, subkey = jax.random.split(key)
+            traj = play_game(params, apply_fns, subkey, config, training_step)
+            trajectories.append(traj)
 
     return trajectories
 

@@ -104,7 +104,10 @@ class Trainer:
         key = jax.random.PRNGKey(seed)
 
         # ##>: Try to restore from checkpoint.
-        self._state = self._checkpoint_manager.restore_train_state(self.config)
+        if self._checkpoint_manager is not None:
+            self._state = self._checkpoint_manager.restore_train_state(self.config)
+        else:
+            self._state = None
 
         if self._state is None:
             # ##>: Create fresh training state.
@@ -149,25 +152,34 @@ class Trainer:
 
         if show_progress:
             batch_iter = tqdm(range(num_batches), desc='Filling buffer', unit='batch', leave=False)
-        else:
-            batch_iter = range(num_batches)
+            for _ in batch_iter:
+                key, subkey = jax.random.split(self._state.key)
+                self._state = self._state._replace(key=key)
 
-        for _ in batch_iter:
-            key, subkey = jax.random.split(self._state.key)
-            self._state = self._state._replace(key=key)
-
-            trajectories = play_parallel_games(
-                params=self._state.network.params,
-                apply_fns=self._state.network.apply_fns,
-                key=subkey,
-                config=self.config,
-                num_parallel=self.config.num_parallel_games,
-                training_step=self._state.step,
-            )
-            all_trajectories.extend(trajectories)
-
-            if show_progress:
+                trajectories = play_parallel_games(
+                    params=self._state.network.params,
+                    apply_fns=self._state.network.apply_fns,
+                    key=subkey,
+                    config=self.config,
+                    num_parallel=self.config.num_parallel_games,
+                    training_step=self._state.step,
+                )
+                all_trajectories.extend(trajectories)
                 batch_iter.set_postfix(games=len(all_trajectories))
+        else:
+            for _ in range(num_batches):
+                key, subkey = jax.random.split(self._state.key)
+                self._state = self._state._replace(key=key)
+
+                trajectories = play_parallel_games(
+                    params=self._state.network.params,
+                    apply_fns=self._state.network.apply_fns,
+                    key=subkey,
+                    config=self.config,
+                    num_parallel=self.config.num_parallel_games,
+                    training_step=self._state.step,
+                )
+                all_trajectories.extend(trajectories)
 
         # ##>: Add to buffer (up to num_games).
         for traj in all_trajectories[:num_games]:
@@ -253,7 +265,7 @@ class Trainer:
                     )
 
             # ##>: Checkpointing.
-            if step > 0 and step % self.config.checkpoint_interval == 0:
+            if step > 0 and step % self.config.checkpoint_interval == 0 and self._checkpoint_manager is not None:
                 self._checkpoint_manager.save(self._state, step)
 
             # ##>: Evaluation.
@@ -272,7 +284,8 @@ class Trainer:
             pbar.close()
 
         # ##>: Final checkpoint.
-        self._checkpoint_manager.save(self._state, self._state.step)
+        if self._checkpoint_manager is not None and self._state is not None:
+            self._checkpoint_manager.save(self._state, self._state.step)
 
         total_time = time.time() - start_time
         return {
@@ -284,6 +297,9 @@ class Trainer:
 
     def _generate_games_parallel(self) -> None:
         """Generate games in parallel and add to buffer."""
+        if self._state is None or self._buffer is None:
+            raise RuntimeError('Trainer not initialized. Call initialize() first.')
+
         key, subkey = jax.random.split(self._state.key)
         self._state = self._state._replace(key=key)
 
@@ -301,6 +317,9 @@ class Trainer:
 
     def _generate_games(self, num_games: int) -> None:
         """Generate games sequentially and add to buffer (legacy method)."""
+        if self._state is None or self._buffer is None:
+            raise RuntimeError('Trainer not initialized. Call initialize() first.')
+
         key, subkey = jax.random.split(self._state.key)
         self._state = self._state._replace(key=key)
 

@@ -5,7 +5,7 @@ This module provides a high-level interface for working with all six Stochastic 
 handling initialization, parameter management, and inference.
 """
 
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -264,7 +264,8 @@ def encoder_forward(network: StochasticMuZeroNetwork, observation: Array) -> Arr
         hidden_size=network.config['hidden_size'],
         num_blocks=network.config['num_blocks'],
     )
-    return encoder.apply(network.config['encoder_params'], observation)
+    # ##>: Cast needed for Flax apply return type.
+    return cast(Array, encoder.apply(network.config['encoder_params'], observation))
 
 
 def get_all_params(network: StochasticMuZeroNetwork) -> dict:

@@ -1,3 +1,6 @@
+# pyrefly: ignore-errors
+# ##>: pyrefly doesn't understand Flax Linen module API correctly.
+# ##>: The nn.Dense(features) syntax is correct but pyrefly misinterprets it.
 """
 Flax neural network models for Stochastic MuZero.
 

@@ -9,7 +9,7 @@ This module provides the core training infrastructure:
 
 from functools import partial
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -167,7 +167,8 @@ def train_step(
     new_params = optax.apply_updates(state.network.params, updates)
 
     # ##>: Update network.
-    new_network = update_params(state.network, new_params)
+    # ##>: Cast needed because optax.apply_updates returns ArrayTree.
+    new_network = update_params(state.network, cast(NetworkParams, new_params))
 
     # ##>: Update state.
     new_state = TrainState(
@@ -305,7 +306,8 @@ class CheckpointManager:
         if step is None:
             return None
 
-        return self.manager.restore(step)
+        # ##>: Cast needed for orbax restore return type.
+        return cast(dict | None, self.manager.restore(step))
 
     def restore_train_state(
         self,

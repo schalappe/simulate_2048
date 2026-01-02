@@ -13,13 +13,12 @@ from collections import Counter
 from typing import Any
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 from tqdm import trange
 
 from reinforce.game.core import encode_observation, is_done, legal_actions_mask, max_tile, next_state
 from reinforce.game.env import reset
-from reinforce.mcts.policy import get_policy_target, select_action
+from reinforce.mcts.policy import select_action
 from reinforce.mcts.stochastic_mctx import run_mcts_jit
 from reinforce.neural.network import create_network
 from reinforce.training.config import TrainConfig, small_config
@@ -159,7 +158,9 @@ if __name__ == '__main__':
     parser.add_argument('--games', type=int, default=10, help='Number of games')
     parser.add_argument('--checkpoint', type=str, default=None, help='Checkpoint path')
     parser.add_argument('--simulations', type=int, default=50, help='MCTS simulations per move')
-    parser.add_argument('--temperature', type=float, default=0.001, help='Action selection temperature (0.001 = greedy)')
+    parser.add_argument(
+        '--temperature', type=float, default=0.001, help='Action selection temperature (0.001 = greedy)'
+    )
     args = parser.parse_args()
 
     result = evaluate(

@@ -283,12 +283,13 @@ def run_mcts(
         root = jax.tree.map(lambda x: x[None], root)
 
     # ##>: Run stochastic MuZero policy.
+    # pyrefly: ignore[bad-argument-type]
     policy_output = mctx.stochastic_muzero_policy(
-        params=None,  # Unused, params are in recurrent_fn
+        params=(),  # Empty tuple instead of None for type compatibility.
         rng_key=key,
         root=root,
-        decision_recurrent_fn=recurrent_fn.decision_recurrent_fn,
-        chance_recurrent_fn=recurrent_fn.chance_recurrent_fn,
+        decision_recurrent_fn=recurrent_fn.decision_recurrent_fn,  # pyrefly: ignore
+        chance_recurrent_fn=recurrent_fn.chance_recurrent_fn,  # pyrefly: ignore
         num_simulations=num_simulations,
         max_depth=max_depth,
         dirichlet_fraction=dirichlet_fraction,

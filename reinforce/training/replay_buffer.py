@@ -147,7 +147,7 @@ class ReplayBuffer:
         # ##>: Add small epsilon to ensure non-zero priority.
         return max(1.0, variance + 0.1)
 
-    def sample_batch(self, batch_size: int, seed: int | None = None) -> tuple[TrainingTargets, np.ndarray]:
+    def sample_batch(self, batch_size: int, seed: int | None = None) -> tuple[TrainingTargets, Array]:
         """
         Sample a batch of training examples.
 
