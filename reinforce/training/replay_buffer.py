@@ -14,7 +14,7 @@ Design considerations:
 import logging
 import threading
 from dataclasses import dataclass, field
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from typing import NamedTuple
 
 import jax
@@ -502,8 +502,12 @@ class AsyncBatchLoader:
                 # ##>: Put in queue (blocks if full).
                 self._queue.put((batch, weights), timeout=1.0)
 
+            except Full:
+                # ##>: Queue is full - consumer is slower than producer. This is normal, just retry.
+                continue
+
             except Exception:
-                # ##>: Log error with context to aid debugging, then continue to keep thread alive.
+                # ##>: Log actual sampling errors, then continue to keep thread alive.
                 _logger.exception(
                     'Prefetch sampling failed (batch_size=%d, vectorized=%s)',
                     self._batch_size,
