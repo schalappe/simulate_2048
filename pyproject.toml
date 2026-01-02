@@ -11,7 +11,7 @@ license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "numpy>=1.0",
+    "numpy>=2.0,<3.0",
     "tqdm>=4.66.5",
     # JAX ecosystem for GPU-accelerated MCTS and training
     "jax>=0.4.30",
