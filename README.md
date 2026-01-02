@@ -1,24 +1,97 @@
-# 2048 game for Reinforcement Learning
+# 2048 AI Agent
 
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-
-## 2048 Game
-The game of 2048 is a single player, perfect information, stochastic puzzle game. The board is represented by a 4x4
-grid of numbered tiles, and at each step the player has four possible actions, which correspond to the four arrow keys
-(up, down, right, left). When the player chooses an action, all the tiles on the board slide in the corresponding
-direction until they reach the end of the board or another tile of a different value. Tiles of the same value are
-combined to form a new tile with a value equal to their sum, and the resulting value is added to the running score of
-the game. After each move, a new tile with a value of 2 or 4 appears randomly in an empty space on the board. The game
-ends when the player has no more moves that can change the state of the board.
-
-## Aim
-The goal was to train an agent to play the game 2048. This project was heavily inspired by
-[AlphaZero](https://arxiv.org/pdf/1712.01815v1.pdf) and [Stochastic Muzero](https://openreview.net/pdf?id=X6D9bAHhBQ1).
-When this project was created, two goals were set:
-
-* To have a 2048 cell.
-* Have a cell with a value greater than 2048
-
-We achieved the first goal after 300 self-plays, but not the second, even after 1500 self-plays of the agent.
+MuZero-inspired reinforcement learning agent that learns to play 2048 through self-play. Uses Monte Carlo Tree Search with neural networks for planning in stochastic environments.
 
 ![2048 Game](docs/imgs/game_short.gif)
+
+## Features
+
+- **JAX-based training**: Fast, GPU-accelerated self-play and learning
+- **Stochastic MCTS**: Handles random tile spawns with chance nodes and progressive widening
+- **Three-network architecture**: Representation, Dynamics, and Prediction networks (MuZero-style)
+- **Vectorized game engine**: High-performance 2048 implementation with batch operations
+
+## Quick Start
+
+```bash
+# Install dependencies (Python 3.12 required)
+uv sync
+
+# Play manually
+uv run python manuals_control.py
+
+# Train agent
+uv run python -m reinforce.train
+
+# Evaluate trained agent
+uv run python -m reinforce.evaluate --checkpoint checkpoints/latest.ckpt
+```
+
+## Installation
+
+**Prerequisites**: Python 3.12, [uv](https://docs.astral.sh/uv/) package manager
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd simulate_2048
+
+# Install dependencies
+uv sync
+
+# Install with development tools
+uv sync --group dev
+```
+
+**GPU Support (Optional)**: For faster training, install JAX with CUDA support following [JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html).
+
+## Project Structure
+
+```text
+twentyfortyeight/   # Game engine (NumPy-based)
+reinforce/          # RL components (JAX-based)
+  ├── game/         # JAX game logic
+  ├── mcts/         # Stochastic MCTS implementation
+  ├── neural/       # Three-network model
+  └── training/     # Self-play, replay buffer, losses
+tests/              # Unit tests
+notebooks/          # Visualization and analysis
+docs/               # Architecture documentation
+```
+
+See [docs/project.md](docs/project.md) for detailed architecture documentation.
+
+## Development
+
+```bash
+# Run tests
+uv run pytest tests/
+
+# Lint and format
+uv run ruff check .
+uv run ruff format .
+
+# Type check
+uv run pyrefly check .
+```
+
+## Architecture
+
+The agent uses three neural networks:
+- **Representation**: Encodes 4×4 board to latent state
+- **Dynamics**: Predicts next state and reward from action
+- **Prediction**: Outputs policy and value estimates
+
+MCTS explores the game tree using these networks, handling stochastic tile spawns through chance nodes. Training uses self-play data with policy and value targets from MCTS.
+
+See [docs/project.md](docs/project.md) for implementation details.
+
+## References
+
+- [Stochastic MuZero](https://openreview.net/pdf?id=X6D9bAHhBQ1) - Planning in stochastic environments
+- [AlphaZero](https://arxiv.org/pdf/1712.01815v1.pdf) - MCTS with neural networks
+- [MuZero](https://arxiv.org/abs/1911.08265) - Model-based RL without environment model
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
