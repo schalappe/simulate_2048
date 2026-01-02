@@ -115,6 +115,7 @@ def create_network(
         afterstate_dynamics=afterstate_dynamics_params,
         afterstate_prediction=afterstate_prediction_params,
         dynamics=dynamics_params,
+        encoder=encoder_params,
     )
 
     # ##>: Create apply functions.
@@ -133,7 +134,6 @@ def create_network(
         'num_blocks': num_blocks,
         'num_actions': num_actions,
         'codebook_size': codebook_size,
-        'encoder_params': encoder_params,
     }
 
     return StochasticMuZeroNetwork(params=params, apply_fns=apply_fns, config=config)
@@ -265,7 +265,7 @@ def encoder_forward(network: StochasticMuZeroNetwork, observation: Array) -> Arr
         num_blocks=network.config['num_blocks'],
     )
     # ##>: Cast needed for Flax apply return type.
-    return cast(Array, encoder.apply(network.config['encoder_params'], observation))
+    return cast(Array, encoder.apply(network.params.encoder, observation))
 
 
 def get_all_params(network: StochasticMuZeroNetwork) -> dict:
@@ -288,7 +288,7 @@ def get_all_params(network: StochasticMuZeroNetwork) -> dict:
         'afterstate_dynamics': network.params.afterstate_dynamics,
         'afterstate_prediction': network.params.afterstate_prediction,
         'dynamics': network.params.dynamics,
-        'encoder': network.config['encoder_params'],
+        'encoder': network.params.encoder,
     }
 
 

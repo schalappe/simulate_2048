@@ -49,6 +49,7 @@ class NetworkParams(NamedTuple):
     afterstate_dynamics: Any
     afterstate_prediction: Any
     dynamics: Any
+    encoder: Any
 
 
 class StochasticRecurrentFn:
