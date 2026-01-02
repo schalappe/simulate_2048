@@ -46,13 +46,13 @@ def get_policy_target(policy_output: mctx.PolicyOutput, legal_mask: Array, tempe
     # ##>: Mask illegal actions.
     masked_weights = jnp.where(legal_mask, weights, 0.0)
 
-    # ##>: Apply temperature.
+    # ##>: Apply temperature using log-based softmax (matches core.py:sample_action).
     def with_temperature(w: Array) -> Array:
-        # ##>: Use max to prevent division by zero during JAX tracing.
-        # ##&: JAX's lax.cond traces both branches, so this must be safe even when temperature=0.
+        # ##&: JAX's lax.cond traces both branches, so guard against division by zero.
         safe_temp = jnp.maximum(temperature, 0.01)
-        powered = jnp.power(w + 1e-8, 1.0 / safe_temp)
-        return powered / jnp.sum(powered)
+        log_w = jnp.log(w + 1e-8)
+        scaled = log_w / safe_temp
+        return jax.nn.softmax(scaled)
 
     def without_temperature(w: Array) -> Array:
         # ##>: Greedy: return one-hot at max.
