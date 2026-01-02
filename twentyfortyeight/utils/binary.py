@@ -38,8 +38,8 @@ def encode(state: ndarray, encodage_size: int) -> ndarray:
     >>> import numpy as np
     >>> state = np.array([1, 2, 4, 8])
     >>> encode(state, encodage_size=4)
-    array([[0, 1, 0, 0],
-           [1, 0, 0, 0],
+    array([[1, 0, 0, 0],
+           [0, 1, 0, 0],
            [0, 0, 1, 0],
            [0, 0, 0, 1]])
     """
