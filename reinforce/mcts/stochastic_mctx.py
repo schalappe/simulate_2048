@@ -37,6 +37,7 @@ class NetworkApplyFns(NamedTuple):
     afterstate_dynamics: Any  # (params, state, action_onehot) -> afterstate
     afterstate_prediction: Any  # (params, afterstate) -> (q_value, chance_logits)
     dynamics: Any  # (params, afterstate, chance_onehot) -> (next_state, reward)
+    encoder: Any  # (params, observation) -> chance_code
 
 
 class NetworkParams(NamedTuple):

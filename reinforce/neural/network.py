@@ -5,7 +5,7 @@ This module provides a high-level interface for working with all six Stochastic 
 handling initialization, parameter management, and inference.
 """
 
-from typing import NamedTuple, cast
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -125,6 +125,7 @@ def create_network(
         afterstate_dynamics=lambda p, s, a: afterstate_dynamics.apply(p, s, a),
         afterstate_prediction=lambda p, x: afterstate_prediction.apply(p, x),
         dynamics=lambda p, s, c: dynamics.apply(p, s, c),
+        encoder=lambda p, x: encoder.apply(p, x),
     )
 
     # ##>: Configuration dict.
@@ -243,6 +244,7 @@ def dynamics_forward(network: StochasticMuZeroNetwork, afterstate: Array, chance
     return network.apply_fns.dynamics(network.params.dynamics, afterstate, chance_code)
 
 
+@jax.jit
 def encoder_forward(network: StochasticMuZeroNetwork, observation: Array) -> Array:
     """
     Encode observation to chance code.
@@ -259,13 +261,7 @@ def encoder_forward(network: StochasticMuZeroNetwork, observation: Array) -> Arr
     Array
         One-hot chance code.
     """
-    encoder = Encoder(
-        codebook_size=network.config['codebook_size'],
-        hidden_size=network.config['hidden_size'],
-        num_blocks=network.config['num_blocks'],
-    )
-    # ##>: Cast needed for Flax apply return type.
-    return cast(Array, encoder.apply(network.params.encoder, observation))
+    return network.apply_fns.encoder(network.params.encoder, observation)
 
 
 def get_all_params(network: StochasticMuZeroNetwork) -> dict:
