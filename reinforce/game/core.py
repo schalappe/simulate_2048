@@ -294,7 +294,7 @@ def legal_actions_mask(state: Array) -> Array:
     """
 
     # ##>: Check each direction by applying the action and comparing.
-    def check_action(action: int) -> Array:
+    def check_action(action: Array) -> Array:
         after, _ = latent_state(state, action)
         return jnp.any(after != state)
 
