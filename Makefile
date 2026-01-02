@@ -1,4 +1,4 @@
-.PHONY: install dev lint format check test clean play train train-tiny train-small train-full eval
+.PHONY: install dev lint format check test clean play train train-tiny train-small train-full eval typecheck test-cov eval-checkpoint
 
 # Install dependencies
 install:
