@@ -146,6 +146,7 @@ cython_debug/
 
 # Model path
 zoo/
+checkpoints/
 
 # Specific files
 CLAUDE.md

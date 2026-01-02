@@ -17,9 +17,10 @@ import jax.numpy as jnp
 import numpy as np
 from tqdm import trange
 
-from reinforce.game.core import create_initial_board, is_done, next_state
-from reinforce.mcts.policy import select_action
-from reinforce.mcts.stochastic_mctx import run_mcts
+from reinforce.game.core import encode_observation, is_done, legal_actions_mask, max_tile, next_state
+from reinforce.game.env import reset
+from reinforce.mcts.policy import get_policy_target, select_action
+from reinforce.mcts.stochastic_mctx import run_mcts_jit
 from reinforce.neural.network import create_network
 from reinforce.training.config import TrainConfig, small_config
 
@@ -28,7 +29,7 @@ def evaluate(
     checkpoint_path: str | None = None,
     num_games: int = 10,
     num_simulations: int = 50,
-    temperature: float = 0.0,
+    temperature: float = 0.001,  # ##>: Use small value instead of 0.0 to avoid JAX tracing division-by-zero.
     config: TrainConfig | None = None,
     verbose: bool = True,
 ) -> dict[str, Any]:
@@ -44,7 +45,7 @@ def evaluate(
     num_simulations : int
         Number of MCTS simulations per move.
     temperature : float
-        Temperature for action selection (0 = greedy).
+        Temperature for action selection (< 0.01 = greedy).
     config : TrainConfig | None
         Training config. If None, uses small_config.
     verbose : bool
@@ -58,9 +59,18 @@ def evaluate(
     if config is None:
         config = small_config()
 
-    # ##>: Create network.
+    # ##>: Create network with correct API.
     key = jax.random.PRNGKey(42)
-    network, params = create_network(config, key)
+    network = create_network(
+        key=key,
+        observation_shape=config.observation_shape,
+        hidden_size=config.hidden_size,
+        num_blocks=config.num_residual_blocks,
+        num_actions=config.action_size,
+        codebook_size=config.codebook_size,
+    )
+    params = network.params
+    apply_fns = network.apply_fns
 
     # ##>: Load checkpoint if provided.
     if checkpoint_path is not None:
@@ -77,40 +87,53 @@ def evaluate(
 
     for game_num in iterator:
         key, game_key = jax.random.split(key)
-        state = create_initial_board(game_key)
+        state = reset(game_key)
         cumulative_reward = 0.0
         steps = 0
 
         # ##>: Play a game.
-        while not is_done(state):
-            key, action_key, step_key = jax.random.split(key, 3)
+        while not bool(state.done):
+            key, mcts_key, action_key, step_key = jax.random.split(key, 4)
+
+            # ##>: Get observation and legal actions.
+            obs = encode_observation(state.board)
+            legal_mask = legal_actions_mask(state.board)
 
             # ##>: Run MCTS to get policy.
-            mcts_output = run_mcts(
+            mcts_output = run_mcts_jit(
+                observation=obs,
                 params=params,
-                network=network,
-                state=state,
-                rng_key=action_key,
+                apply_fns=apply_fns,
+                key=mcts_key,
                 num_simulations=num_simulations,
-                config=config,
+                num_actions=config.action_size,
+                codebook_size=config.codebook_size,
+                discount=config.discount,
+                dirichlet_alpha=config.dirichlet_alpha,
+                dirichlet_fraction=config.dirichlet_fraction,
+                pb_c_init=config.pb_c_init,
+                pb_c_base=config.pb_c_base,
             )
 
-            # ##>: Select action.
-            action = select_action(mcts_output.action_weights, action_key, temperature=temperature)
+            # ##>: Select action using policy output.
+            action = select_action(mcts_output, action_key, legal_mask, temperature)
             action = int(action)
 
             # ##>: Step environment.
-            new_state, reward = next_state(state, action, step_key)
-            state = new_state
+            new_board, reward = next_state(state.board, action, step_key)
+            done = is_done(new_board)
             cumulative_reward += float(reward)
             steps += 1
 
-            if progress_bar is not None:
-                max_tile = int(jnp.max(state))
-                progress_bar.set_description(f'Game {game_num + 1}/{num_games}')
-                progress_bar.set_postfix(reward=int(cumulative_reward), max_tile=max_tile)
+            # ##>: Update state.
+            state = state._replace(board=new_board, done=done)
 
-        max_tiles.append(int(jnp.max(state)))
+            if progress_bar is not None:
+                current_max = int(max_tile(state.board))
+                progress_bar.set_description(f'Game {game_num + 1}/{num_games}')
+                progress_bar.set_postfix(reward=int(cumulative_reward), max_tile=current_max)
+
+        max_tiles.append(int(max_tile(state.board)))
         total_rewards.append(cumulative_reward)
         episode_lengths.append(steps)
 
@@ -136,7 +159,7 @@ if __name__ == '__main__':
     parser.add_argument('--games', type=int, default=10, help='Number of games')
     parser.add_argument('--checkpoint', type=str, default=None, help='Checkpoint path')
     parser.add_argument('--simulations', type=int, default=50, help='MCTS simulations per move')
-    parser.add_argument('--temperature', type=float, default=0.0, help='Action selection temperature')
+    parser.add_argument('--temperature', type=float, default=0.001, help='Action selection temperature (0.001 = greedy)')
     args = parser.parse_args()
 
     result = evaluate(
