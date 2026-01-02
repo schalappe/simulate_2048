@@ -304,7 +304,7 @@ def run_mcts(
     return policy_output
 
 
-@partial(jax.jit, static_argnums=(4, 5, 6, 7, 8))
+@partial(jax.jit, static_argnums=(4, 5, 6, 7, 8, 9, 10, 11, 12))
 def run_mcts_jit(
     observation: Array,
     params: NetworkParams,
@@ -315,6 +315,10 @@ def run_mcts_jit(
     codebook_size: int = 32,
     discount: float = 0.999,
     max_depth: int | None = None,
+    dirichlet_alpha: float = 0.25,
+    dirichlet_fraction: float = 0.1,
+    pb_c_init: float = 1.25,
+    pb_c_base: float = 19652.0,
 ) -> mctx.PolicyOutput:
     """
     JIT-compiled version of run_mcts.
@@ -332,6 +336,10 @@ def run_mcts_jit(
         codebook_size=codebook_size,
         discount=discount,
         max_depth=max_depth,
+        dirichlet_alpha=dirichlet_alpha,
+        dirichlet_fraction=dirichlet_fraction,
+        pb_c_init=pb_c_init,
+        pb_c_base=pb_c_base,
     )
 
 

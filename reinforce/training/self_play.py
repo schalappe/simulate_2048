@@ -14,7 +14,7 @@ from tqdm import tqdm
 from reinforce.game.core import encode_observation, is_done, legal_actions_mask, max_tile, next_state
 from reinforce.game.env import GameState, reset
 from reinforce.mcts.policy import get_policy_target, get_search_value, select_action
-from reinforce.mcts.stochastic_mctx import NetworkApplyFns, NetworkParams, run_mcts
+from reinforce.mcts.stochastic_mctx import NetworkApplyFns, NetworkParams, run_mcts_jit
 from reinforce.training.config import TrainConfig
 from reinforce.training.replay_buffer import Trajectory
 
@@ -90,7 +90,8 @@ def play_game(
         # ##>: Run MCTS.
         key, mcts_key, action_key, step_key = jax.random.split(key, 4)
 
-        policy_output = run_mcts(
+        # ##>: JIT-compiled MCTS for faster execution.
+        policy_output = run_mcts_jit(
             observation=obs,
             params=params,
             apply_fns=apply_fns,
@@ -147,6 +148,52 @@ def play_game(
     return trajectory
 
 
+def warmup_mcts(
+    params: NetworkParams,
+    apply_fns: NetworkApplyFns,
+    key: PRNGKey,
+    config: TrainConfig,
+) -> None:
+    """
+    Trigger JIT compilation of MCTS before game loop.
+
+    Runs a single MCTS call to compile the JIT function, avoiding
+    compilation overhead during actual self-play.
+
+    Parameters
+    ----------
+    params : NetworkParams
+        Network parameters.
+    apply_fns : NetworkApplyFns
+        Network apply functions.
+    key : PRNGKey
+        JAX random key (consumed).
+    config : TrainConfig
+        Training configuration.
+    """
+    # ##>: Create dummy observation.
+    dummy_obs = jax.numpy.zeros(config.observation_shape)
+
+    # ##>: Single MCTS call to trigger JIT compilation.
+    _ = run_mcts_jit(
+        observation=dummy_obs,
+        params=params,
+        apply_fns=apply_fns,
+        key=key,
+        num_simulations=config.num_simulations,
+        num_actions=config.action_size,
+        codebook_size=config.codebook_size,
+        discount=config.discount,
+        dirichlet_alpha=config.dirichlet_alpha,
+        dirichlet_fraction=config.dirichlet_fraction,
+        pb_c_init=config.pb_c_init,
+        pb_c_base=config.pb_c_base,
+    )
+
+    # ##>: Block until compilation finishes.
+    jax.block_until_ready(_)
+
+
 def generate_games(
     params: NetworkParams,
     apply_fns: NetworkApplyFns,
@@ -155,6 +202,7 @@ def generate_games(
     num_games: int,
     training_step: int = 0,
     show_progress: bool = False,
+    warmup: bool = True,
 ) -> list[Trajectory]:
     """
     Generate multiple games for training.
@@ -175,12 +223,19 @@ def generate_games(
         Current training step.
     show_progress : bool
         Whether to show progress bar.
+    warmup : bool
+        If True, trigger JIT warmup before first game.
 
     Returns
     -------
     list[Trajectory]
         List of generated trajectories.
     """
+    # ##>: Warmup JIT on first call to avoid compilation during gameplay.
+    if warmup:
+        key, warmup_key = jax.random.split(key)
+        warmup_mcts(params, apply_fns, warmup_key, config)
+
     trajectories = []
 
     if show_progress:
