@@ -1,7 +1,7 @@
 """
-Neural network model builders for Stochastic MuZero architecture.
+Flax neural network models for Stochastic MuZero.
 
-This module provides functions to build the five core models:
+This module provides Flax Linen implementations of the six Stochastic MuZero models:
 - Representation (h): Converts observations to hidden states
 - Prediction (f): Outputs policy and value from hidden state
 - Afterstate Dynamics (φ): Predicts afterstate given state and action
@@ -17,427 +17,424 @@ Architecture follows the paper exactly:
 Reference: "Planning in Stochastic Environments with a Learned Model" (ICLR 2022)
 """
 
-from keras import Model, layers, ops, saving
-from numpy import prod
+import flax.linen as nn
+import jax
+import jax.numpy as jnp
+
+# ##>: Type alias.
+Array = jax.Array
 
 # ##>: Paper-specified architecture constants.
 NUM_RESIDUAL_BLOCKS = 10
 HIDDEN_UNITS = 256
 
 
-def identity_block_dense(input_tensor: layers.Layer, units: int = HIDDEN_UNITS) -> layers.Layer:
+class IdentityBlockDense(nn.Module):
     """
-    Creates a ResNet v2 style pre-activation identity block with dense layers.
+    ResNet v2 style pre-activation identity block with dense layers.
 
     Architecture: LayerNorm -> ReLU -> Dense -> LayerNorm -> ReLU -> Dense -> Add
 
-    Parameters
+    This block preserves the input dimension and adds a residual connection, enabling deeper
+    networks without vanishing gradients.
+
+    Attributes
     ----------
-    input_tensor : layers.Layer
-        Input layer to the identity block.
-    units : int
-        Number of units for the dense layers.
-
-    Returns
-    -------
-    layers.Layer
-        Output tensor after applying the identity block.
+    features : int
+        Number of features/units in the dense layers.
     """
-    # ##>: Pre-activation: normalize and activate before transformation.
-    x = layers.LayerNormalization()(input_tensor)
-    x = layers.ReLU()(x)
-    x = layers.Dense(units)(x)
 
-    x = layers.LayerNormalization()(x)
-    x = layers.ReLU()(x)
-    x = layers.Dense(units)(x)
+    features: int = HIDDEN_UNITS
 
-    # ##>: Residual connection.
-    x = layers.Add()([x, input_tensor])
+    @nn.compact
+    def __call__(self, x: Array) -> Array:
+        """
+        Apply the identity block.
 
-    return x
+        Parameters
+        ----------
+        x : Array
+            Input tensor of shape (..., features).
+
+        Returns
+        -------
+        Array
+            Output tensor of same shape as input.
+        """
+        residual = x
+
+        # ##>: Pre-activation: normalize and activate before transformation.
+        x = nn.LayerNorm()(x)
+        x = nn.relu(x)
+        x = nn.Dense(self.features)(x)
+
+        x = nn.LayerNorm()(x)
+        x = nn.relu(x)
+        x = nn.Dense(self.features)(x)
+
+        # ##>: Residual connection.
+        return x + residual
 
 
-def build_representation_model(
-    input_shape: tuple[int, ...],
-    hidden_size: int = HIDDEN_UNITS,
-    num_blocks: int = NUM_RESIDUAL_BLOCKS,
-) -> Model:
+class ResidualStack(nn.Module):
     """
-    Build the representation (encoder) model (h).
+    Stack of residual identity blocks.
 
-    This model converts raw observations into hidden state representations.
-
-    Parameters
+    Attributes
     ----------
-    input_shape : tuple[int, ...]
-        Shape of the input observation.
+    num_blocks : int
+        Number of identity blocks to stack.
+    features : int
+        Number of features in each block.
+    """
+
+    num_blocks: int = NUM_RESIDUAL_BLOCKS
+    features: int = HIDDEN_UNITS
+
+    @nn.compact
+    def __call__(self, x: Array) -> Array:
+        """Apply the residual stack."""
+        for _ in range(self.num_blocks):
+            x = IdentityBlockDense(self.features)(x)
+        return x
+
+
+class Representation(nn.Module):
+    """
+    Representation model (h): observation -> hidden state.
+
+    Converts raw observations into latent hidden state representations
+    that capture the relevant features for decision making.
+
+    Attributes
+    ----------
     hidden_size : int
         Size of the hidden state output.
     num_blocks : int
         Number of residual blocks.
-
-    Returns
-    -------
-    Model
-        Keras model for representation.
     """
-    inputs = layers.Input(shape=input_shape)
 
-    # ##>: Initial projection to hidden size.
-    x = layers.Dense(hidden_size)(inputs)
+    hidden_size: int = HIDDEN_UNITS
+    num_blocks: int = NUM_RESIDUAL_BLOCKS
 
-    # ##>: Stack of residual blocks.
-    for _ in range(num_blocks):
-        x = identity_block_dense(x, hidden_size)
+    @nn.compact
+    def __call__(self, observation: Array) -> Array:
+        """
+        Encode observation to hidden state.
 
-    # ##>: Final layer norm and output projection.
-    x = layers.LayerNormalization()(x)
-    x = layers.ReLU()(x)
-    outputs = layers.Dense(hidden_size, name='hidden_state')(x)
+        Parameters
+        ----------
+        observation : Array
+            Flattened observation, shape (..., observation_dim).
 
-    return Model(inputs=inputs, outputs=outputs, name='representation_model')
+        Returns
+        -------
+        Array
+            Hidden state, shape (..., hidden_size).
+        """
+        # ##>: Initial projection to hidden size.
+        x = nn.Dense(self.hidden_size)(observation)
+
+        # ##>: Stack of residual blocks.
+        x = ResidualStack(self.num_blocks, self.hidden_size)(x)
+
+        # ##>: Final normalization and output projection.
+        x = nn.LayerNorm()(x)
+        x = nn.relu(x)
+        x = nn.Dense(self.hidden_size, name='hidden_state')(x)
+
+        return x
 
 
-def build_dynamics_model(
-    state_shape: tuple[int, ...],
-    action_size: int,
-    hidden_size: int = HIDDEN_UNITS,
-    num_blocks: int = NUM_RESIDUAL_BLOCKS,
-) -> Model:
+class Prediction(nn.Module):
     """
-    Build the dynamics model (original MuZero style).
+    Prediction model (f): hidden state -> (policy, value).
 
-    This model predicts the next hidden state and reward given current state and action.
+    Outputs the action probability distribution and state value estimate.
 
-    Parameters
+    Attributes
     ----------
-    state_shape : tuple[int, ...]
-        Shape of the hidden state.
     action_size : int
         Number of possible actions.
     hidden_size : int
         Size of the hidden layers.
     num_blocks : int
         Number of residual blocks.
-
-    Returns
-    -------
-    Model
-        Keras model for dynamics with outputs [next_state, reward].
     """
-    # ##>: Input layers.
-    input_state = layers.Input(shape=state_shape, name='state_input')
-    input_action = layers.Input(shape=(action_size,), name='action_input')
 
-    # ##>: Project and combine inputs.
-    dense_state = layers.Dense(hidden_size)(input_state)
-    dense_action = layers.Dense(hidden_size)(input_action)
-    x = layers.Add()([dense_state, dense_action])
+    action_size: int = 4
+    hidden_size: int = HIDDEN_UNITS
+    num_blocks: int = NUM_RESIDUAL_BLOCKS
 
-    # ##>: Stack of residual blocks.
-    for _ in range(num_blocks):
-        x = identity_block_dense(x, hidden_size)
+    @nn.compact
+    def __call__(self, state: Array) -> tuple[Array, Array]:
+        """
+        Predict policy and value from hidden state.
 
-    # ##>: Final normalization.
-    x = layers.LayerNormalization()(x)
-    x = layers.ReLU()(x)
+        Parameters
+        ----------
+        state : Array
+            Hidden state, shape (..., hidden_size).
 
-    # ##>: Next state head.
-    next_state = layers.Dense(int(prod(state_shape)), name='next_state')(x)
-    next_state = layers.Reshape(state_shape)(next_state)
+        Returns
+        -------
+        tuple[Array, Array]
+            - policy_logits: Logits for each action, shape (..., action_size)
+            - value: Value estimate, shape (..., 1)
+        """
+        # ##>: Initial projection.
+        x = nn.Dense(self.hidden_size)(state)
 
-    # ##>: Reward head.
-    reward = layers.Dense(1, name='reward')(x)
+        # ##>: Stack of residual blocks.
+        x = ResidualStack(self.num_blocks, self.hidden_size)(x)
 
-    return Model([input_state, input_action], [next_state, reward], name='dynamics_model')
+        # ##>: Final normalization.
+        x = nn.LayerNorm()(x)
+        x = nn.relu(x)
+
+        # ##>: Policy head (logits, not probabilities).
+        policy_logits = nn.Dense(self.action_size, name='policy_logits')(x)
+
+        # ##>: Value head.
+        value = nn.Dense(1, name='value')(x)
+        value = jnp.squeeze(value, axis=-1)
+
+        return policy_logits, value
 
 
-def build_prediction_model(
-    state_shape: tuple[int, ...],
-    action_size: int,
-    hidden_size: int = HIDDEN_UNITS,
-    num_blocks: int = NUM_RESIDUAL_BLOCKS,
-) -> Model:
+class AfterstateDynamics(nn.Module):
     """
-    Build the prediction model (f).
+    Afterstate Dynamics model (φ): (state, action) -> afterstate.
 
-    This model outputs policy probabilities and value estimate from a hidden state.
+    Predicts the afterstate resulting from taking an action.
+    The afterstate represents the state after the action but before
+    the stochastic environment response (tile spawn in 2048).
 
-    Parameters
+    Attributes
     ----------
-    state_shape : tuple[int, ...]
-        Shape of the hidden state.
+    hidden_size : int
+        Size of the hidden layers and afterstate output.
     action_size : int
         Number of possible actions.
-    hidden_size : int
-        Size of the hidden layers.
     num_blocks : int
         Number of residual blocks.
-
-    Returns
-    -------
-    Model
-        Keras model for prediction with outputs [policy, value].
     """
-    inputs = layers.Input(shape=state_shape, name='state_input')
 
-    # ##>: Initial projection.
-    x = layers.Dense(hidden_size)(inputs)
+    hidden_size: int = HIDDEN_UNITS
+    action_size: int = 4
+    num_blocks: int = NUM_RESIDUAL_BLOCKS
 
-    # ##>: Stack of residual blocks.
-    for _ in range(num_blocks):
-        x = identity_block_dense(x, hidden_size)
+    @nn.compact
+    def __call__(self, state: Array, action: Array) -> Array:
+        """
+        Predict afterstate from state and action.
 
-    # ##>: Final normalization.
-    x = layers.LayerNormalization()(x)
-    x = layers.ReLU()(x)
+        Parameters
+        ----------
+        state : Array
+            Hidden state, shape (..., hidden_size).
+        action : Array
+            One-hot encoded action, shape (..., action_size).
 
-    # ##>: Policy head.
-    policy = layers.Dense(action_size, activation='softmax', name='policy')(x)
+        Returns
+        -------
+        Array
+            Afterstate, shape (..., hidden_size).
+        """
+        # ##>: Project and combine inputs.
+        state_proj = nn.Dense(self.hidden_size)(state)
+        action_proj = nn.Dense(self.hidden_size)(action)
+        x = state_proj + action_proj
 
-    # ##>: Value head.
-    value = layers.Dense(1, name='value')(x)
+        # ##>: Stack of residual blocks.
+        x = ResidualStack(self.num_blocks, self.hidden_size)(x)
 
-    return Model(inputs, [policy, value], name='prediction_model')
+        # ##>: Final normalization and output.
+        x = nn.LayerNorm()(x)
+        x = nn.relu(x)
+        afterstate = nn.Dense(self.hidden_size, name='afterstate')(x)
+
+        return afterstate
 
 
-def build_afterstate_dynamics_model(
-    state_shape: tuple[int, ...],
-    action_size: int,
-    hidden_size: int = HIDDEN_UNITS,
-    num_blocks: int = NUM_RESIDUAL_BLOCKS,
-) -> Model:
+class AfterstatePrediction(nn.Module):
     """
-    Build the afterstate dynamics model (φ).
+    Afterstate Prediction model (ψ): afterstate -> (Q-value, chance_probs).
 
-    This model predicts the afterstate given current state and action.
-    The afterstate represents the state after action but before chance event.
+    Outputs the Q-value of the afterstate and the probability distribution
+    over possible chance outcomes (tile spawns).
 
-    Parameters
+    Attributes
     ----------
-    state_shape : tuple[int, ...]
-        Shape of the hidden state.
-    action_size : int
-        Number of possible actions.
-    hidden_size : int
-        Size of the hidden layers.
-    num_blocks : int
-        Number of residual blocks.
-
-    Returns
-    -------
-    Model
-        Keras model for afterstate dynamics with output afterstate.
-    """
-    # ##>: Input layers.
-    input_state = layers.Input(shape=state_shape, name='state_input')
-    input_action = layers.Input(shape=(action_size,), name='action_input')
-
-    # ##>: Project and combine inputs.
-    dense_state = layers.Dense(hidden_size)(input_state)
-    dense_action = layers.Dense(hidden_size)(input_action)
-    x = layers.Add()([dense_state, dense_action])
-
-    # ##>: Stack of residual blocks.
-    for _ in range(num_blocks):
-        x = identity_block_dense(x, hidden_size)
-
-    # ##>: Final normalization and output.
-    x = layers.LayerNormalization()(x)
-    x = layers.ReLU()(x)
-    afterstate = layers.Dense(int(prod(state_shape)), name='afterstate')(x)
-    afterstate = layers.Reshape(state_shape)(afterstate)
-
-    return Model([input_state, input_action], afterstate, name='afterstate_dynamics_model')
-
-
-def build_afterstate_prediction_model(
-    state_shape: tuple[int, ...],
-    codebook_size: int,
-    hidden_size: int = HIDDEN_UNITS,
-    num_blocks: int = NUM_RESIDUAL_BLOCKS,
-) -> Model:
-    """
-    Build the afterstate prediction model (ψ).
-
-    This model outputs Q-value and chance distribution from an afterstate.
-    The chance distribution (σ) predicts probabilities over possible chance codes.
-
-    Parameters
-    ----------
-    state_shape : tuple[int, ...]
-        Shape of the afterstate.
-    codebook_size : int
-        Number of possible chance outcomes (codebook size for VQ-VAE).
-    hidden_size : int
-        Size of the hidden layers.
-    num_blocks : int
-        Number of residual blocks.
-
-    Returns
-    -------
-    Model
-        Keras model for afterstate prediction with outputs [q_value, chance_probs].
-    """
-    inputs = layers.Input(shape=state_shape, name='afterstate_input')
-
-    # ##>: Initial projection.
-    x = layers.Dense(hidden_size)(inputs)
-
-    # ##>: Stack of residual blocks.
-    for _ in range(num_blocks):
-        x = identity_block_dense(x, hidden_size)
-
-    # ##>: Final normalization.
-    x = layers.LayerNormalization()(x)
-    x = layers.ReLU()(x)
-
-    # ##>: Q-value head.
-    q_value = layers.Dense(1, name='q_value')(x)
-
-    # ##>: Chance distribution head (σ).
-    chance_probs = layers.Dense(codebook_size, activation='softmax', name='chance_probs')(x)
-
-    return Model(inputs, [q_value, chance_probs], name='afterstate_prediction_model')
-
-
-def build_stochastic_dynamics_model(
-    state_shape: tuple[int, ...],
-    codebook_size: int,
-    hidden_size: int = HIDDEN_UNITS,
-    num_blocks: int = NUM_RESIDUAL_BLOCKS,
-) -> Model:
-    """
-    Build the stochastic dynamics model (g).
-
-    This model predicts the next state and reward given afterstate and chance code.
-    This handles the stochastic transition from afterstate to next state.
-
-    Parameters
-    ----------
-    state_shape : tuple[int, ...]
-        Shape of the afterstate/state.
     codebook_size : int
         Number of possible chance outcomes.
     hidden_size : int
         Size of the hidden layers.
     num_blocks : int
         Number of residual blocks.
-
-    Returns
-    -------
-    Model
-        Keras model for stochastic dynamics with outputs [next_state, reward].
-    """
-    # ##>: Input layers.
-    input_afterstate = layers.Input(shape=state_shape, name='afterstate_input')
-    input_chance = layers.Input(shape=(codebook_size,), name='chance_input')
-
-    # ##>: Project and combine inputs.
-    dense_afterstate = layers.Dense(hidden_size)(input_afterstate)
-    dense_chance = layers.Dense(hidden_size)(input_chance)
-    x = layers.Add()([dense_afterstate, dense_chance])
-
-    # ##>: Stack of residual blocks.
-    for _ in range(num_blocks):
-        x = identity_block_dense(x, hidden_size)
-
-    # ##>: Final normalization.
-    x = layers.LayerNormalization()(x)
-    x = layers.ReLU()(x)
-
-    # ##>: Next state head.
-    next_state = layers.Dense(int(prod(state_shape)), name='next_state')(x)
-    next_state = layers.Reshape(state_shape)(next_state)
-
-    # ##>: Reward head.
-    reward = layers.Dense(1, name='reward')(x)
-
-    return Model([input_afterstate, input_chance], [next_state, reward], name='stochastic_dynamics_model')
-
-
-@saving.register_keras_serializable(package='reinforce')
-class StraightThroughArgmax(layers.Layer):
-    """
-    Straight-through estimator for argmax operation.
-
-    Forward pass: returns one-hot of argmax (discrete selection).
-    Backward pass: passes gradients through as if identity function.
-    This enables learning discrete representations with gradient descent.
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    codebook_size: int = 32
+    hidden_size: int = HIDDEN_UNITS
+    num_blocks: int = NUM_RESIDUAL_BLOCKS
 
-    def call(self, inputs):  # type: ignore[override]
+    @nn.compact
+    def __call__(self, afterstate: Array) -> tuple[Array, Array]:
         """
-        Apply straight-through argmax.
+        Predict Q-value and chance distribution from afterstate.
 
         Parameters
         ----------
-        inputs : Tensor
-            Logits tensor of shape (batch_size, codebook_size).
+        afterstate : Array
+            Afterstate, shape (..., hidden_size).
 
         Returns
         -------
-        Tensor
-            One-hot tensor of shape (batch_size, codebook_size).
+        tuple[Array, Array]
+            - q_value: Q-value estimate, shape (...,)
+            - chance_logits: Logits for chance outcomes, shape (..., codebook_size)
         """
-        # ##>: Forward pass: argmax to one-hot.
-        indices = ops.argmax(inputs, axis=-1)
-        one_hot = ops.one_hot(indices, ops.shape(inputs)[-1])
+        # ##>: Initial projection.
+        x = nn.Dense(self.hidden_size)(afterstate)
 
-        # ##>: Straight-through: use one_hot in forward, but gradients flow through inputs.
-        # ##&: This is the Gumbel-softmax trick with temperature=0.
-        return inputs + ops.stop_gradient(one_hot - inputs)
+        # ##>: Stack of residual blocks.
+        x = ResidualStack(self.num_blocks, self.hidden_size)(x)
+
+        # ##>: Final normalization.
+        x = nn.LayerNorm()(x)
+        x = nn.relu(x)
+
+        # ##>: Q-value head.
+        q_value = nn.Dense(1, name='q_value')(x)
+        q_value = jnp.squeeze(q_value, axis=-1)
+
+        # ##>: Chance distribution head (logits).
+        chance_logits = nn.Dense(self.codebook_size, name='chance_logits')(x)
+
+        return q_value, chance_logits
 
 
-def build_encoder_model(
-    input_shape: tuple[int, ...],
-    codebook_size: int,
-    hidden_size: int = HIDDEN_UNITS,
-    num_blocks: int = NUM_RESIDUAL_BLOCKS,
-) -> Model:
+class Dynamics(nn.Module):
     """
-    Build the encoder model (e).
+    Stochastic Dynamics model (g): (afterstate, chance_code) -> (next_state, reward).
 
-    This model encodes an observation into a discrete chance code.
-    Uses straight-through gradient estimation for discrete selection.
+    Predicts the next hidden state and reward given an afterstate and
+    the sampled chance outcome.
 
-    Parameters
+    Attributes
     ----------
-    input_shape : tuple[int, ...]
-        Shape of the input observation.
+    hidden_size : int
+        Size of the hidden layers and state output.
     codebook_size : int
-        Number of possible chance codes (codebook size).
+        Number of possible chance outcomes.
+    num_blocks : int
+        Number of residual blocks.
+    """
+
+    hidden_size: int = HIDDEN_UNITS
+    codebook_size: int = 32
+    num_blocks: int = NUM_RESIDUAL_BLOCKS
+
+    @nn.compact
+    def __call__(self, afterstate: Array, chance_code: Array) -> tuple[Array, Array]:
+        """
+        Predict next state and reward from afterstate and chance code.
+
+        Parameters
+        ----------
+        afterstate : Array
+            Afterstate, shape (..., hidden_size).
+        chance_code : Array
+            One-hot encoded chance outcome, shape (..., codebook_size).
+
+        Returns
+        -------
+        tuple[Array, Array]
+            - next_state: Next hidden state, shape (..., hidden_size)
+            - reward: Predicted reward, shape (...,)
+        """
+        # ##>: Project and combine inputs.
+        afterstate_proj = nn.Dense(self.hidden_size)(afterstate)
+        chance_proj = nn.Dense(self.hidden_size)(chance_code)
+        x = afterstate_proj + chance_proj
+
+        # ##>: Stack of residual blocks.
+        x = ResidualStack(self.num_blocks, self.hidden_size)(x)
+
+        # ##>: Final normalization.
+        x = nn.LayerNorm()(x)
+        x = nn.relu(x)
+
+        # ##>: Next state head.
+        next_state = nn.Dense(self.hidden_size, name='next_state')(x)
+
+        # ##>: Reward head.
+        reward = nn.Dense(1, name='reward')(x)
+        reward = jnp.squeeze(reward, axis=-1)
+
+        return next_state, reward
+
+
+class Encoder(nn.Module):
+    """
+    Encoder model (e): observation -> chance_code.
+
+    Encodes an observation into a discrete chance code using
+    straight-through gradient estimation for differentiable
+    discrete selection.
+
+    Attributes
+    ----------
+    codebook_size : int
+        Number of possible chance codes.
     hidden_size : int
         Size of the hidden layers.
     num_blocks : int
         Number of residual blocks.
-
-    Returns
-    -------
-    Model
-        Keras model for encoding with output chance_code (one-hot).
     """
-    inputs = layers.Input(shape=input_shape, name='observation_input')
 
-    # ##>: Initial projection.
-    x = layers.Dense(hidden_size)(inputs)
+    codebook_size: int = 32
+    hidden_size: int = HIDDEN_UNITS
+    num_blocks: int = NUM_RESIDUAL_BLOCKS
 
-    # ##>: Stack of residual blocks.
-    for _ in range(num_blocks):
-        x = identity_block_dense(x, hidden_size)
+    @nn.compact
+    def __call__(self, observation: Array, deterministic: bool = True) -> Array:
+        """
+        Encode observation to chance code.
 
-    # ##>: Final normalization.
-    x = layers.LayerNormalization()(x)
-    x = layers.ReLU()(x)
+        Parameters
+        ----------
+        observation : Array
+            Flattened observation, shape (..., observation_dim).
+        deterministic : bool
+            If True, use argmax (discrete). If False, use Gumbel-Softmax.
 
-    # ##>: Output logits for chance code selection.
-    logits = layers.Dense(codebook_size, name='chance_logits')(x)
+        Returns
+        -------
+        Array
+            One-hot chance code, shape (..., codebook_size).
+        """
+        # ##>: Initial projection.
+        x = nn.Dense(self.hidden_size)(observation)
 
-    # ##>: Apply straight-through argmax to get discrete one-hot code.
-    chance_code = StraightThroughArgmax(name='chance_code')(logits)
+        # ##>: Stack of residual blocks.
+        x = ResidualStack(self.num_blocks, self.hidden_size)(x)
 
-    return Model(inputs, chance_code, name='encoder_model')
+        # ##>: Final normalization.
+        x = nn.LayerNorm()(x)
+        x = nn.relu(x)
+
+        # ##>: Output logits for chance code selection.
+        logits = nn.Dense(self.codebook_size, name='chance_logits')(x)
+
+        # ##>: Straight-through argmax: forward uses argmax, backward uses identity.
+        # ##>: This enables gradient flow through discrete selection.
+        if deterministic:
+            one_hot = jax.nn.one_hot(jnp.argmax(logits, axis=-1), self.codebook_size)
+            # ##>: Straight-through estimator: gradients flow through logits.
+            chance_code = logits - jax.lax.stop_gradient(logits) + jax.lax.stop_gradient(one_hot)
+        else:
+            # ##>: Soft version for exploration during training.
+            chance_code = jax.nn.softmax(logits)
+
+        return chance_code

@@ -1,323 +1,157 @@
 """
-Self-play data generation for Stochastic MuZero.
+Self-play trajectory generation for Stochastic MuZero.
 
-Generates training trajectories by playing games with MCTS.
-Supports three MCTS execution modes for different performance profiles.
+This module provides functions to play games using MCTS and collect trajectories for training.
+Supports both single-game and batched parallel game generation.
 """
 
-from __future__ import annotations
+from typing import NamedTuple
 
-from typing import TYPE_CHECKING
-
-from numpy import max as np_max
-from numpy import ndarray, zeros
+import jax
+import numpy as np
 from tqdm import tqdm
 
-from reinforce.mcts.batched_search import get_policy_from_visits as batched_get_policy
-from reinforce.mcts.batched_search import run_batched_mcts, run_threaded_mcts
-from reinforce.mcts.batched_search import select_action_from_root as batched_select_action
-from reinforce.mcts.network_search import get_policy_from_visits as seq_get_policy
-from reinforce.mcts.network_search import run_network_mcts
-from reinforce.mcts.network_search import select_action_from_root as seq_select_action
-from reinforce.neural.network import StochasticNetwork
-from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
+from reinforce.game.core import encode_observation, is_done, legal_actions_mask, max_tile, next_state
+from reinforce.game.env import GameState, reset
+from reinforce.mcts.policy import get_policy_target, get_search_value, select_action
+from reinforce.mcts.stochastic_mctx import NetworkApplyFns, NetworkParams, run_mcts
+from reinforce.training.config import TrainConfig
+from reinforce.training.replay_buffer import Trajectory
 
-from .config import MCTSMode, StochasticMuZeroConfig
-from .replay_buffer import Trajectory, TransitionData
-
-if TYPE_CHECKING:
-    from reinforce.mcts.batched_search import DecisionNode as BatchedDecisionNode
-    from reinforce.mcts.network_search import DecisionNode as SeqDecisionNode
+# ##>: Type aliases.
+Array = jax.Array
+PRNGKey = jax.Array
 
 
-class SelfPlayActor:
+class StepData(NamedTuple):
+    """Data collected at each game step."""
+
+    observation: Array
+    action: int
+    reward: float
+    policy: Array
+    value: float
+    done: bool
+
+
+def play_game(
+    params: NetworkParams,
+    apply_fns: NetworkApplyFns,
+    key: PRNGKey,
+    config: TrainConfig,
+    training_step: int = 0,
+) -> Trajectory:
     """
-    Self-play actor that generates training data.
+    Play a complete game using MCTS and return the trajectory.
 
-    Plays games using MCTS with the current network and records
-    trajectories for training.
-
-    Attributes
+    Parameters
     ----------
-    config : StochasticMuZeroConfig
+    params : NetworkParams
+        Network parameters.
+    apply_fns : NetworkApplyFns
+        Network apply functions.
+    key : PRNGKey
+        JAX random key.
+    config : TrainConfig
         Training configuration.
-    network : StochasticNetwork
-        Neural network for MCTS guidance.
-    env : TwentyFortyEight
-        Game environment.
+    training_step : int
+        Current training step (for temperature scheduling).
+
+    Returns
+    -------
+    Trajectory
+        Complete game trajectory with MCTS statistics.
     """
+    # ##>: Get temperature for current training step.
+    temperature = config.get_temperature(training_step)
 
-    def __init__(
-        self,
-        config: StochasticMuZeroConfig,
-        network: StochasticNetwork,
-    ):
-        """
-        Initialize the self-play actor.
+    # ##>: Initialize game.
+    key, subkey = jax.random.split(key)
+    state = reset(subkey)
 
-        Parameters
-        ----------
-        config : StochasticMuZeroConfig
-            Training configuration.
-        network : StochasticNetwork
-            Neural network for predictions.
-        """
-        self.config = config
-        self.network = network
+    # ##>: Storage for trajectory data.
+    observations = []
+    actions = []
+    rewards = []
+    policies = []
+    values = []
 
-        # ##>: Create environment (encoded for network input, normalized rewards).
-        self.env = TwentyFortyEight(encoded=True, normalize=True)
+    step_count = 0
+    total_reward = 0.0
 
-        self._training_step = 0
+    while not bool(state.done) and step_count < config.max_trajectory_length:
+        # ##>: Get observation.
+        obs = encode_observation(state.board)
+        observations.append(np.array(obs))
 
-    def set_training_step(self, step: int) -> None:
-        """
-        Update the training step (for temperature scheduling).
+        # ##>: Get legal actions.
+        legal_mask = legal_actions_mask(state.board)
 
-        Parameters
-        ----------
-        step : int
-            Current training step.
-        """
-        self._training_step = step
+        # ##>: Run MCTS.
+        key, mcts_key, action_key, step_key = jax.random.split(key, 4)
 
-    def _get_temperature(self) -> float:
-        """Get action selection temperature for current training step."""
-        return self.config.get_temperature(self._training_step)
+        policy_output = run_mcts(
+            observation=obs,
+            params=params,
+            apply_fns=apply_fns,
+            key=mcts_key,
+            num_simulations=config.num_simulations,
+            num_actions=config.action_size,
+            codebook_size=config.codebook_size,
+            discount=config.discount,
+            dirichlet_alpha=config.dirichlet_alpha,
+            dirichlet_fraction=config.dirichlet_fraction,
+            pb_c_init=config.pb_c_init,
+            pb_c_base=config.pb_c_base,
+        )
 
-    def _run_mcts(self, raw_state: ndarray, temperature: float) -> tuple[ndarray, float, int]:
-        """
-        Run MCTS with the configured mode.
+        # ##>: Get policy target and select action.
+        policy = get_policy_target(policy_output, legal_mask, temperature=1.0)
+        search_value = get_search_value(policy_output)
+        action = select_action(policy_output, action_key, legal_mask, temperature)
 
-        Parameters
-        ----------
-        raw_state : ndarray
-            The raw game state (4x4 array).
-        temperature : float
-            Temperature for action selection.
+        # ##>: Store step data.
+        actions.append(int(action))
+        policies.append(np.array(policy))
+        values.append(float(search_value))
 
-        Returns
-        -------
-        tuple[ndarray, float, int]
-            (search_policy, search_value, selected_action)
-        """
-        mode = self.config.mcts_mode
+        # ##>: Take step in environment.
+        new_board, reward = next_state(state.board, int(action), step_key)
+        done = is_done(new_board)
 
-        if mode == MCTSMode.SEQUENTIAL:
-            root = run_network_mcts(
-                game_state=raw_state,
-                network=self.network,
-                num_simulations=self.config.num_simulations,
-                exploration_weight=self.config.exploration_weight,
-                add_exploration_noise=True,
-                dirichlet_alpha=self.config.root_dirichlet_alpha,
-                noise_fraction=self.config.root_dirichlet_fraction,
-            )
-            policy = seq_get_policy(root, temperature=1.0)
-            search_value = self._compute_search_value_seq(root)
-            action = seq_select_action(root, temperature=temperature)
+        rewards.append(float(reward))
+        total_reward += float(reward)
 
-        elif mode == MCTSMode.BATCHED:
-            root = run_batched_mcts(
-                game_state=raw_state,
-                network=self.network,
-                num_simulations=self.config.num_simulations,
-                batch_size=self.config.mcts_batch_size,
-                exploration_weight=self.config.exploration_weight,
-                add_exploration_noise=True,
-                dirichlet_alpha=self.config.root_dirichlet_alpha,
-                noise_fraction=self.config.root_dirichlet_fraction,
-            )
-            policy = batched_get_policy(root, temperature=1.0)
-            search_value = self._compute_search_value_batched(root)
-            action = batched_select_action(root, temperature=temperature)
+        # ##>: Update state.
+        state = GameState(
+            board=new_board,
+            step_count=state.step_count + 1,
+            done=done,
+            total_reward=state.total_reward + reward,
+        )
 
-        else:  # THREADED
-            root = run_threaded_mcts(
-                game_state=raw_state,
-                network=self.network,
-                num_simulations=self.config.num_simulations,
-                num_workers=self.config.mcts_num_workers,
-                batch_size=self.config.mcts_batch_size,
-                exploration_weight=self.config.exploration_weight,
-                add_exploration_noise=True,
-                dirichlet_alpha=self.config.root_dirichlet_alpha,
-                noise_fraction=self.config.root_dirichlet_fraction,
-            )
-            policy = batched_get_policy(root, temperature=1.0)
-            search_value = self._compute_search_value_batched(root)
-            action = batched_select_action(root, temperature=temperature)
+        step_count += 1
 
-        search_policy = self._policy_dict_to_array(policy, self.config.action_size)
-        return search_policy, search_value, action
+    # ##>: Create trajectory.
+    trajectory = Trajectory(
+        observations=np.stack(observations, axis=0),
+        actions=np.array(actions, dtype=np.int32),
+        rewards=np.array(rewards, dtype=np.float32),
+        policies=np.stack(policies, axis=0),
+        values=np.array(values, dtype=np.float32),
+        done=bool(state.done),
+        total_reward=total_reward,
+        max_tile=int(max_tile(state.board)),
+    )
 
-    def play_game(self, seed: int | None = None) -> Trajectory:
-        """
-        Play a complete game and return the trajectory.
-
-        Parameters
-        ----------
-        seed : int | None
-            Random seed for reproducibility.
-
-        Returns
-        -------
-        Trajectory
-            Complete game trajectory with MCTS statistics.
-        """
-        trajectory = Trajectory()
-
-        # ##>: Reset environment.
-        obs = self.env.reset(seed=seed)
-        done = False
-        total_reward = 0.0
-        step = 0
-
-        while not done and step < self.config.max_trajectory_length:
-            # ##>: Get raw state for MCTS (need 4x4 array).
-            raw_state = self.env._current_state
-
-            # ##>: Run MCTS with configured mode.
-            temperature = self._get_temperature()
-            search_policy, search_value, action = self._run_mcts(raw_state, temperature)
-
-            # ##>: Take action in environment.
-            next_obs, reward, done = self.env.step(action)
-
-            # ##>: Record transition.
-            transition = TransitionData(
-                observation=obs,
-                action=action,
-                reward=reward,
-                discount=0.0 if done else self.config.discount,
-                search_policy=search_policy,
-                search_value=search_value,
-            )
-            trajectory.add(transition)
-
-            total_reward += reward
-            obs = next_obs
-            step += 1
-
-        # ##>: Update trajectory metadata.
-        trajectory.total_reward = total_reward
-        trajectory.max_tile = int(np_max(self.env._current_state))
-
-        # ##>: Compute initial priority (based on search value variance).
-        trajectory.priority = self._compute_trajectory_priority(trajectory)
-
-        return trajectory
-
-    def _policy_dict_to_array(self, policy: dict[int, float], action_size: int) -> ndarray:
-        """
-        Convert policy dictionary to array.
-
-        Parameters
-        ----------
-        policy : dict[int, float]
-            Policy as dict of action -> probability.
-        action_size : int
-            Total number of actions.
-
-        Returns
-        -------
-        ndarray
-            Policy array.
-        """
-        policy_array = zeros(action_size)
-        for action, prob in policy.items():
-            if 0 <= action < action_size:
-                policy_array[action] = prob
-
-        # ##>: Normalize if needed.
-        total = policy_array.sum()
-        if total > 0:
-            policy_array /= total
-
-        return policy_array
-
-    def _compute_search_value_seq(self, root: SeqDecisionNode) -> float:
-        """
-        Compute the search value from the root node (sequential MCTS).
-
-        Uses the weighted average of child Q-values by visit count.
-
-        Parameters
-        ----------
-        root : SeqDecisionNode
-            Root node after sequential MCTS.
-
-        Returns
-        -------
-        float
-            Search value estimate.
-        """
-        if not root.children:
-            return root.value
-
-        total_visits = sum(child.visit_count for child in root.children.values())
-        if total_visits == 0:
-            return root.value
-
-        weighted_value = sum(child.value_sum for child in root.children.values()) / total_visits
-        return weighted_value
-
-    def _compute_search_value_batched(self, root: BatchedDecisionNode) -> float:
-        """
-        Compute the search value from the root node (batched MCTS).
-
-        Uses the weighted average of child Q-values by visit count.
-
-        Parameters
-        ----------
-        root : BatchedDecisionNode
-            Root node after batched MCTS.
-
-        Returns
-        -------
-        float
-            Search value estimate.
-        """
-        if not root.children:
-            return root.value
-
-        total_visits = sum(child.visit_count for child in root.children.values())
-        if total_visits == 0:
-            return root.value
-
-        weighted_value = sum(child.value_sum for child in root.children.values()) / total_visits
-        return weighted_value
-
-    def _compute_trajectory_priority(self, trajectory: Trajectory) -> float:
-        """
-        Compute initial priority for a trajectory.
-
-        Uses variance in search values as a proxy for learning potential.
-
-        Parameters
-        ----------
-        trajectory : Trajectory
-            The trajectory.
-
-        Returns
-        -------
-        float
-            Priority value.
-        """
-        if len(trajectory) == 0:
-            return 1.0
-
-        values = [t.search_value for t in trajectory.transitions]
-        mean_value = sum(values) / len(values)
-        variance = sum((v - mean_value) ** 2 for v in values) / len(values)
-
-        # ##>: Higher variance = more interesting trajectory.
-        return max(1.0, variance)
+    return trajectory
 
 
 def generate_games(
-    config: StochasticMuZeroConfig,
-    network: StochasticNetwork,
+    params: NetworkParams,
+    apply_fns: NetworkApplyFns,
+    key: PRNGKey,
+    config: TrainConfig,
     num_games: int,
     training_step: int = 0,
     show_progress: bool = False,
@@ -327,39 +161,165 @@ def generate_games(
 
     Parameters
     ----------
-    config : StochasticMuZeroConfig
+    params : NetworkParams
+        Network parameters.
+    apply_fns : NetworkApplyFns
+        Network apply functions.
+    key : PRNGKey
+        JAX random key.
+    config : TrainConfig
         Training configuration.
-    network : StochasticNetwork
-        Neural network.
     num_games : int
         Number of games to generate.
     training_step : int
         Current training step.
     show_progress : bool
-        Whether to show a progress bar.
+        Whether to show progress bar.
 
     Returns
     -------
     list[Trajectory]
         List of generated trajectories.
     """
-    actor = SelfPlayActor(config, network)
-    actor.set_training_step(training_step)
-
     trajectories = []
-    progress_bar = tqdm(range(num_games), desc='Self-play', unit='game', leave=False) if show_progress else None
-    game_iter = progress_bar if progress_bar is not None else range(num_games)
+
+    if show_progress:
+        game_iter = tqdm(range(num_games), desc='Self-play', unit='game', leave=False)
+    else:
+        game_iter = range(num_games)
 
     for _ in game_iter:
-        traj = actor.play_game()
+        key, subkey = jax.random.split(key)
+        traj = play_game(params, apply_fns, subkey, config, training_step)
         trajectories.append(traj)
 
-        # ##>: Update progress bar with game stats.
-        if progress_bar is not None:
-            progress_bar.set_postfix(
+        if show_progress:
+            game_iter.set_postfix(
                 reward=f'{traj.total_reward:.0f}',
                 tile=traj.max_tile,
                 moves=len(traj),
             )
 
     return trajectories
+
+
+def evaluate_games(
+    params: NetworkParams,
+    apply_fns: NetworkApplyFns,
+    key: PRNGKey,
+    config: TrainConfig,
+    num_games: int,
+) -> dict:
+    """
+    Evaluate agent performance over multiple games.
+
+    Uses greedy action selection (temperature=0) for evaluation.
+
+    Parameters
+    ----------
+    params : NetworkParams
+        Network parameters.
+    apply_fns : NetworkApplyFns
+        Network apply functions.
+    key : PRNGKey
+        JAX random key.
+    config : TrainConfig
+        Training configuration.
+    num_games : int
+        Number of games to play.
+
+    Returns
+    -------
+    dict
+        Evaluation statistics.
+    """
+    # ##>: Create eval config with greedy temperature.
+    eval_training_step = config.training_steps + 1  # Forces temperature = 0
+
+    trajectories = generate_games(
+        params=params,
+        apply_fns=apply_fns,
+        key=key,
+        config=config,
+        num_games=num_games,
+        training_step=eval_training_step,
+        show_progress=False,
+    )
+
+    rewards = [t.total_reward for t in trajectories]
+    max_tiles = [t.max_tile for t in trajectories]
+    lengths = [len(t) for t in trajectories]
+
+    # ##>: Count tile achievements.
+    tile_counts = {}
+    for tile in [2048, 4096, 8192, 16384, 32768]:
+        tile_counts[f'reached_{tile}'] = sum(1 for t in max_tiles if t >= tile)
+
+    return {
+        'mean_reward': float(np.mean(rewards)),
+        'std_reward': float(np.std(rewards)),
+        'max_reward': float(np.max(rewards)),
+        'min_reward': float(np.min(rewards)),
+        'mean_max_tile': float(np.mean(max_tiles)),
+        'max_tile': int(np.max(max_tiles)),
+        'mean_length': float(np.mean(lengths)),
+        **tile_counts,
+    }
+
+
+def compute_n_step_returns(
+    rewards: np.ndarray,
+    values: np.ndarray,
+    discount: float,
+    n_steps: int,
+    td_lambda: float = 0.5,
+) -> np.ndarray:
+    """
+    Compute n-step TD(λ) returns.
+
+    Parameters
+    ----------
+    rewards : np.ndarray
+        Rewards at each step, shape (T,).
+    values : np.ndarray
+        Value estimates at each step, shape (T,).
+    discount : float
+        Discount factor γ.
+    n_steps : int
+        Number of steps for n-step returns.
+    td_lambda : float
+        TD(λ) parameter for exponential averaging.
+
+    Returns
+    -------
+    np.ndarray
+        n-step returns for each step, shape (T,).
+    """
+    T = len(rewards)
+    returns = np.zeros(T)
+
+    for t in range(T):
+        # ##>: Compute n-step returns with TD(λ) averaging.
+        n_step_return = 0.0
+        lambda_weight = 0.0
+
+        for n in range(1, min(n_steps + 1, T - t + 1)):
+            # ##>: n-step return: r_t + γr_{t+1} + ... + γ^{n-1}r_{t+n-1} + γ^n V_{t+n}
+            discounted_sum = sum((discount**i) * rewards[t + i] for i in range(n) if t + i < T)
+
+            # ##>: Add bootstrap value if not terminal.
+            if t + n < T:
+                discounted_sum += (discount**n) * values[t + n]
+
+            # ##>: TD(λ) weighting.
+            weight = ((1 - td_lambda) * (td_lambda ** (n - 1))) if n < n_steps else (td_lambda ** (n - 1))
+            n_step_return += weight * discounted_sum
+            lambda_weight += weight
+
+        # ##>: Normalize by weight sum.
+        if lambda_weight > 0:
+            returns[t] = n_step_return / lambda_weight
+        else:
+            returns[t] = values[t]
+
+    return returns

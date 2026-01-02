@@ -1,4 +1,4 @@
-.PHONY: install dev lint format check test clean play train train-small train-full eval eval-mcts eval-muzero
+.PHONY: install dev lint format check test clean play train train-tiny train-small train-full eval
 
 # Install dependencies
 install:
@@ -36,32 +36,34 @@ test-cov:
 play:
 	uv run python manuals_control.py
 
-# --- Training ---
+# --- Training (JAX) ---
 
-# Train with small config (for testing/debugging)
+# Train with tiny config (for debugging, ~1 minute)
+train-tiny:
+	uv run python -m reinforce.train --mode tiny --steps 100
+
+# Train with small config (for experimentation, ~10 minutes)
 train-small:
-	uv run python reinforce/train.py --mode small --steps 1000
+	uv run python -m reinforce.train --mode small --steps 10000
 
-# Train with full paper configuration
+# Train with full paper configuration (~hours/days)
 train-full:
-	uv run python reinforce/train.py --mode full --steps 100000
+	uv run python -m reinforce.train --mode full
 
-# Default training target (alias for train-small)
+# Default training target
 train: train-small
 
-# --- Evaluation ---
+# --- Evaluation (JAX) ---
 
-# Evaluate basic MCTS agent (no neural network)
-eval-mcts:
-	uv run python reinforce/evaluate.py --method mcts --length 10 --simulations 10
+# Evaluate Stochastic MuZero agent
+# Usage: make eval CHECKPOINT=checkpoints
+eval:
+	uv run python -m reinforce.evaluate --games 10 --simulations 50
 
-# Evaluate Stochastic MuZero with a checkpoint
-# Usage: make eval-muzero CHECKPOINT=checkpoints/step_10000
-eval-muzero:
-	uv run python reinforce/evaluate.py --method stochastic_muzero --length 10 --checkpoint $(CHECKPOINT)
-
-# Default evaluation target (basic MCTS)
-eval: eval-mcts
+# Evaluate with custom checkpoint
+# Usage: make eval-checkpoint CHECKPOINT=checkpoints/step_10000
+eval-checkpoint:
+	uv run python -m reinforce.evaluate --games 10 --checkpoint $(CHECKPOINT)
 
 # Clean up cache files
 clean:

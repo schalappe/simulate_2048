@@ -1,25 +1,19 @@
 """
-Reinforcement learning module for 2048.
+Reinforce: JAX-based Stochastic MuZero implementation for 2048.
 
-This module provides a complete implementation of Stochastic MuZero:
-- MCTS (Monte Carlo Tree Search) agent with PUCT selection
-- Neural network models (Stochastic MuZero architecture)
-- Training infrastructure (self-play, replay buffer, learner)
-- Evaluation utilities
+This package provides GPU-accelerated training and evaluation of
+Stochastic MuZero agents using JAX, Flax, and mctx.
 
 Submodules
 ----------
-mcts : Monte Carlo Tree Search implementation
-    - MonteCarloAgent: MCTS-based agent for action selection (no network)
-    - StochasticMuZeroAgent: Full agent with neural network integration
-neural : Neural network models
-    - Network: Original 3-model wrapper for backward compatibility
-    - StochasticNetwork: Full 6-model wrapper for Stochastic MuZero
+game : JAX-native 2048 game logic
+    Vectorizable game operations with JIT compilation.
+mcts : MCTS with DeepMind's mctx library
+    GPU-accelerated tree search for Stochastic MuZero.
+neural : Flax neural network models
+    Stochastic MuZero architecture with 6 networks.
 training : Training infrastructure
-    - StochasticMuZeroConfig: Training configuration
-    - StochasticMuZeroTrainer: Main training orchestrator
-    - ReplayBuffer: Experience storage with prioritization
-evaluate : Evaluation script for testing agents
+    Self-play, replay buffer, losses, and training loop.
 
 Reference: "Planning in Stochastic Environments with a Learned Model" (ICLR 2022)
 """

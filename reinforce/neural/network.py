@@ -1,617 +1,337 @@
 """
-Unified neural network wrapper for Stochastic MuZero models.
+Unified network wrapper for Stochastic MuZero models.
 
-This module provides network classes that unify the MuZero models:
-- Network: Original 3-model wrapper (representation, dynamics, prediction)
-- StochasticNetwork: Full 5-model wrapper for Stochastic MuZero
-
-Reference: "Planning in Stochastic Environments with a Learned Model" (ICLR 2022)
+This module provides a high-level interface for working with all six Stochastic MuZero networks,
+handling initialization, parameter management, and inference.
 """
 
-from __future__ import annotations
+from typing import NamedTuple
 
-from dataclasses import dataclass
+import jax
+import jax.numpy as jnp
 
-from keras import KerasTensor, Model, models, ops, utils
-from numpy import ndarray, stack
-
-from .models import (
+from reinforce.mcts.stochastic_mctx import NetworkApplyFns, NetworkParams
+from reinforce.neural.models import (
     HIDDEN_UNITS,
-    build_afterstate_dynamics_model,
-    build_afterstate_prediction_model,
-    build_encoder_model,
-    build_prediction_model,
-    build_representation_model,
-    build_stochastic_dynamics_model,
+    NUM_RESIDUAL_BLOCKS,
+    AfterstateDynamics,
+    AfterstatePrediction,
+    Dynamics,
+    Encoder,
+    Prediction,
+    Representation,
 )
 
-NUM_ACTIONS = 4  # 2048 game: left, up, right, down
-DEFAULT_CODEBOOK_SIZE = 32  # Default number of chance codes
+# ##>: Type aliases.
+Array = jax.Array
+PRNGKey = jax.Array
+
+# ##>: Default configuration.
+NUM_ACTIONS = 4
+DEFAULT_CODEBOOK_SIZE = 32
 
 
-def ndarray_to_tensor(inputs: ndarray, expand: bool = True) -> KerasTensor:
+class StochasticMuZeroNetwork(NamedTuple):
     """
-    Converts a NumPy array to a Keras tensor.
-
-    This function accepts a 2D NumPy array as input and converts it into a Keras Tensor.
-    The resulting Keras Tensor is automatically expanded to match the shape (batch_size, num_features).
-
-    Parameters
-    ----------
-    inputs : ndarray
-        A 2D NumPy array with shape (num_samples, num_features).
-    expand : bool
-        Whether or not expand the tensor.
-
-    Returns
-    -------
-    KerasTensor
-        A Keras tensor with shape (1, num_samples, num_features) or simply (num_samples, num_features)
-            if the input is a single sample.
-
-    Note
-    ----
-    The dtype of the output Keras Tensor is 'float16'.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> ndarray_to_tensor(np.array([[3.0], [4.0]]))
-    <KerasTensor: shape=(1, 2), dtype=float16, name='ndarray_to_tensor/ExpandDims', tensorflow_grad>
-    """
-    obs_tensor = ops.convert_to_tensor(inputs, dtype='float16')
-
-    if expand:
-        return ops.expand_dims(obs_tensor, 0)
-    return obs_tensor
-
-
-class Network:
-    """
-    Unified wrapper for MuZero-style neural network models.
-
-    This class provides a clean interface for the three models:
-    - Representation (encoder): observation -> hidden state
-    - Dynamics: (state, action) -> (next_state, reward)
-    - Prediction: state -> (policy, value)
+    Container for all Stochastic MuZero network components.
 
     Attributes
     ----------
-    _encoder : Model
-        The representation model.
-    _dynamic : Model
-        The dynamics model.
-    _predictor : Model
-        The prediction model.
+    params : NetworkParams
+        Parameters for all six models.
+    apply_fns : NetworkApplyFns
+        Functions to apply each model.
+    config : dict
+        Network configuration (hidden_size, codebook_size, etc.).
     """
 
-    def __init__(self, encoder: Model, dynamic: Model, predictor: Model):
-        """
-        Initialize the Network with pre-built models.
-
-        Parameters
-        ----------
-        encoder : Model
-            The representation model.
-        dynamic : Model
-            The dynamics model.
-        predictor : Model
-            The prediction model.
-        """
-        self._encoder = encoder
-        self._dynamic = dynamic
-        self._predictor = predictor
-
-    @classmethod
-    def from_path(cls, encoder_path: str, dynamic_path: str, predictor_path: str) -> Network:
-        """
-        Load a Network from saved model files.
-
-        Parameters
-        ----------
-        encoder_path : str
-            Path to the saved encoder model.
-        dynamic_path : str
-            Path to the saved dynamics model.
-        predictor_path : str
-            Path to the saved predictor model.
-
-        Returns
-        -------
-        Network
-            A Network instance with loaded models.
-        """
-        return cls(
-            encoder=models.load_model(encoder_path),
-            dynamic=models.load_model(dynamic_path),
-            predictor=models.load_model(predictor_path),
-        )
-
-    def representation(self, observation: ndarray) -> ndarray:
-        """
-        Encode an observation into a hidden state.
-
-        Parameters
-        ----------
-        observation : ndarray
-            The raw observation.
-
-        Returns
-        -------
-        ndarray
-            The hidden state representation.
-        """
-        return self._encoder(ndarray_to_tensor(observation))[0]
-
-    def dynamics(self, state: ndarray, action: int) -> tuple[ndarray, float]:
-        """
-        Predict the next state and reward given current state and action.
-
-        Parameters
-        ----------
-        state : ndarray
-            The current hidden state.
-        action : int
-            The action to take (0-3 for 2048).
-
-        Returns
-        -------
-        Tuple[ndarray, float]
-            The predicted next state and reward.
-        """
-        next_state, reward = self._dynamic(
-            [
-                ndarray_to_tensor(state),
-                ndarray_to_tensor(utils.to_categorical([action], num_classes=NUM_ACTIONS), expand=False),
-            ]
-        )
-        return next_state[0], reward[0][0]
-
-    def prediction(self, state: ndarray) -> tuple[ndarray, float]:
-        """
-        Predict policy and value from a hidden state.
-
-        Parameters
-        ----------
-        state : ndarray
-            The hidden state.
-
-        Returns
-        -------
-        Tuple[ndarray, float]
-            The policy probabilities and value estimate.
-        """
-        policy, value = self._predictor(ndarray_to_tensor(state))
-        return policy[0], value[0][0]
-
-
-@dataclass
-class NetworkOutput:
-    """
-    Container for network prediction outputs.
-
-    Attributes
-    ----------
-    value : float
-        The value or Q-value prediction.
-    policy : ndarray | None
-        The policy probabilities (for decision nodes).
-    reward : float
-        The predicted reward (0 for afterstates).
-    chance_probs : ndarray | None
-        The chance distribution σ (for afterstates).
-    """
-
-    value: float
-    policy: ndarray | None = None
-    reward: float = 0.0
-    chance_probs: ndarray | None = None
-
-
-class StochasticNetwork:
-    """
-    Unified wrapper for Stochastic MuZero neural network models.
-
-    This class provides a clean interface for the five models:
-    - Representation (h): observation -> hidden state
-    - Prediction (f): state -> (policy, value)
-    - Afterstate Dynamics (φ): (state, action) -> afterstate
-    - Afterstate Prediction (ψ): afterstate -> (Q-value, chance_probs)
-    - Dynamics (g): (afterstate, chance_code) -> (next_state, reward)
-    - Encoder (e): observation -> chance_code
-
-    Attributes
-    ----------
-    _representation : Model
-        The representation model (h).
-    _prediction : Model
-        The prediction model (f).
-    _afterstate_dynamics : Model
-        The afterstate dynamics model (φ).
-    _afterstate_prediction : Model
-        The afterstate prediction model (ψ).
-    _dynamics : Model
-        The stochastic dynamics model (g).
-    _encoder : Model
-        The encoder model (e).
-    _codebook_size : int
-        Number of possible chance codes.
-    """
-
-    def __init__(
-        self,
-        representation: Model,
-        prediction: Model,
-        afterstate_dynamics: Model,
-        afterstate_prediction: Model,
-        dynamics: Model,
-        encoder: Model,
-        codebook_size: int = DEFAULT_CODEBOOK_SIZE,
-    ):
-        """
-        Initialize the StochasticNetwork with pre-built models.
-
-        Parameters
-        ----------
-        representation : Model
-            The representation model (h).
-        prediction : Model
-            The prediction model (f).
-        afterstate_dynamics : Model
-            The afterstate dynamics model (φ).
-        afterstate_prediction : Model
-            The afterstate prediction model (ψ).
-        dynamics : Model
-            The stochastic dynamics model (g).
-        encoder : Model
-            The encoder model (e).
-        codebook_size : int
-            Number of possible chance codes.
-        """
-        self._representation = representation
-        self._prediction = prediction
-        self._afterstate_dynamics = afterstate_dynamics
-        self._afterstate_prediction = afterstate_prediction
-        self._dynamics = dynamics
-        self._encoder = encoder
-        self._codebook_size = codebook_size
-
-    @property
-    def codebook_size(self) -> int:
-        """Return the codebook size."""
-        return self._codebook_size
-
-    @classmethod
-    def from_path(
-        cls,
-        representation_path: str,
-        prediction_path: str,
-        afterstate_dynamics_path: str,
-        afterstate_prediction_path: str,
-        dynamics_path: str,
-        encoder_path: str,
-        codebook_size: int = DEFAULT_CODEBOOK_SIZE,
-    ) -> StochasticNetwork:
-        """
-        Load a StochasticNetwork from saved model files.
-
-        Parameters
-        ----------
-        representation_path : str
-            Path to the saved representation model.
-        prediction_path : str
-            Path to the saved prediction model.
-        afterstate_dynamics_path : str
-            Path to the saved afterstate dynamics model.
-        afterstate_prediction_path : str
-            Path to the saved afterstate prediction model.
-        dynamics_path : str
-            Path to the saved dynamics model.
-        encoder_path : str
-            Path to the saved encoder model.
-        codebook_size : int
-            Number of possible chance codes.
-
-        Returns
-        -------
-        StochasticNetwork
-            A StochasticNetwork instance with loaded models.
-        """
-        return cls(
-            representation=models.load_model(representation_path),
-            prediction=models.load_model(prediction_path),
-            afterstate_dynamics=models.load_model(afterstate_dynamics_path),
-            afterstate_prediction=models.load_model(afterstate_prediction_path),
-            dynamics=models.load_model(dynamics_path),
-            encoder=models.load_model(encoder_path),
-            codebook_size=codebook_size,
-        )
-
-    def representation(self, observation: ndarray) -> ndarray:
-        """
-        Encode an observation into a hidden state (h).
-
-        Parameters
-        ----------
-        observation : ndarray
-            The raw observation.
-
-        Returns
-        -------
-        ndarray
-            The hidden state representation s^0.
-        """
-        return self._representation(ndarray_to_tensor(observation))[0]
-
-    def prediction(self, state: ndarray) -> NetworkOutput:
-        """
-        Predict policy and value from a hidden state (f).
-
-        Parameters
-        ----------
-        state : ndarray
-            The hidden state s^k.
-
-        Returns
-        -------
-        NetworkOutput
-            Contains policy (p^k) and value (v^k).
-        """
-        policy, value = self._prediction(ndarray_to_tensor(state))
-        return NetworkOutput(value=float(value[0][0]), policy=policy[0].numpy())
-
-    def afterstate_dynamics(self, state: ndarray, action: int) -> ndarray:
-        """
-        Predict afterstate given state and action (φ).
-
-        Parameters
-        ----------
-        state : ndarray
-            The current hidden state s^k.
-        action : int
-            The action to take (0-3 for 2048).
-
-        Returns
-        -------
-        ndarray
-            The afterstate as^k.
-        """
-        action_onehot = utils.to_categorical([action], num_classes=NUM_ACTIONS)
-        afterstate = self._afterstate_dynamics(
-            [ndarray_to_tensor(state), ndarray_to_tensor(action_onehot, expand=False)]
-        )
-        return afterstate[0]
-
-    def afterstate_prediction(self, afterstate: ndarray) -> NetworkOutput:
-        """
-        Predict Q-value and chance distribution from afterstate (ψ).
-
-        Parameters
-        ----------
-        afterstate : ndarray
-            The afterstate as^k.
-
-        Returns
-        -------
-        NetworkOutput
-            Contains Q-value (Q^k) and chance_probs (σ^k).
-        """
-        q_value, chance_probs = self._afterstate_prediction(ndarray_to_tensor(afterstate))
-        return NetworkOutput(value=float(q_value[0][0]), chance_probs=chance_probs[0].numpy())
-
-    def dynamics(self, afterstate: ndarray, chance_code: ndarray) -> tuple[ndarray, float]:
-        """
-        Predict next state and reward given afterstate and chance code (g).
-
-        Parameters
-        ----------
-        afterstate : ndarray
-            The afterstate as^k.
-        chance_code : ndarray
-            The chance code c (one-hot encoded).
-
-        Returns
-        -------
-        tuple[ndarray, float]
-            The next state s^{k+1} and reward r^{k+1}.
-        """
-        # ##>: Both inputs need batch dimension for the model.
-        next_state, reward = self._dynamics([ndarray_to_tensor(afterstate), ndarray_to_tensor(chance_code)])
-        return next_state[0], float(reward[0][0])
-
-    def encoder(self, observation: ndarray) -> ndarray:
-        """
-        Encode an observation into a chance code (e).
-
-        Parameters
-        ----------
-        observation : ndarray
-            The raw observation o_{≤t}.
-
-        Returns
-        -------
-        ndarray
-            The chance code c (one-hot encoded).
-        """
-        return self._encoder(ndarray_to_tensor(observation))[0].numpy()
-
-    # -------------------------------------------------------------------------
-    # Batch inference methods for MCTS optimization
-    # -------------------------------------------------------------------------
-
-    def afterstate_dynamics_batch(self, state: ndarray, actions: list[int]) -> list[ndarray]:
-        """
-        Predict afterstates for multiple actions in a single batch.
-
-        This batches all afterstate dynamics calls for a single decision node,
-        reducing N sequential model calls to 1 batched call.
-
-        Parameters
-        ----------
-        state : ndarray
-            The current hidden state s^k (shared for all actions).
-        actions : list[int]
-            List of actions to evaluate.
-
-        Returns
-        -------
-        list[ndarray]
-            Afterstates as^k for each action.
-        """
-        if not actions:
-            return []
-
-        batch_size = len(actions)
-
-        # ##>: Repeat state for each action in the batch.
-        states_batch = ops.convert_to_tensor(stack([state] * batch_size, axis=0), dtype='float16')
-
-        # ##>: Create one-hot actions batch.
-        actions_batch = ops.convert_to_tensor(utils.to_categorical(actions, num_classes=NUM_ACTIONS), dtype='float16')
-
-        # ##>: Single batched model call.
-        afterstates = self._afterstate_dynamics([states_batch, actions_batch])
-
-        return [afterstates[i] for i in range(batch_size)]
-
-    def prediction_batch(self, states: list[ndarray]) -> list[NetworkOutput]:
-        """
-        Predict policy and value for multiple hidden states in a single batch.
-
-        Parameters
-        ----------
-        states : list[ndarray]
-            List of hidden states to evaluate.
-
-        Returns
-        -------
-        list[NetworkOutput]
-            NetworkOutput for each state containing policy and value.
-        """
-        if not states:
-            return []
-
-        batch_size = len(states)
-
-        # ##>: Stack states into batch tensor.
-        states_batch = ops.convert_to_tensor(stack(states, axis=0), dtype='float16')
-
-        # ##>: Single batched model call.
-        policies, values = self._prediction(states_batch)
-
-        return [NetworkOutput(value=float(values[i][0]), policy=policies[i].numpy()) for i in range(batch_size)]
-
-    def afterstate_prediction_batch(self, afterstates: list[ndarray]) -> list[NetworkOutput]:
-        """
-        Predict Q-value and chance distribution for multiple afterstates.
-
-        Parameters
-        ----------
-        afterstates : list[ndarray]
-            List of afterstates to evaluate.
-
-        Returns
-        -------
-        list[NetworkOutput]
-            NetworkOutput for each afterstate containing Q-value and chance_probs.
-        """
-        if not afterstates:
-            return []
-
-        batch_size = len(afterstates)
-
-        # ##>: Stack afterstates into batch tensor.
-        afterstates_batch = ops.convert_to_tensor(stack(afterstates, axis=0), dtype='float16')
-
-        # ##>: Single batched model call.
-        q_values, chance_probs = self._afterstate_prediction(afterstates_batch)
-
-        return [
-            NetworkOutput(value=float(q_values[i][0]), chance_probs=chance_probs[i].numpy()) for i in range(batch_size)
-        ]
-
-    def dynamics_batch(self, afterstates: list[ndarray], chance_codes: list[ndarray]) -> list[tuple[ndarray, float]]:
-        """
-        Predict next states and rewards for multiple afterstate-chance pairs.
-
-        Parameters
-        ----------
-        afterstates : list[ndarray]
-            List of afterstates.
-        chance_codes : list[ndarray]
-            List of chance codes (one-hot encoded).
-
-        Returns
-        -------
-        list[tuple[ndarray, float]]
-            List of (next_state, reward) tuples.
-        """
-        if not afterstates:
-            return []
-
-        batch_size = len(afterstates)
-
-        # ##>: Stack inputs into batch tensors.
-        afterstates_batch = ops.convert_to_tensor(stack(afterstates, axis=0), dtype='float16')
-        chance_codes_batch = ops.convert_to_tensor(stack(chance_codes, axis=0), dtype='float16')
-
-        # ##>: Single batched model call.
-        next_states, rewards = self._dynamics([afterstates_batch, chance_codes_batch])
-
-        return [(next_states[i], float(rewards[i][0])) for i in range(batch_size)]
-
-
-def create_stochastic_network(
-    observation_shape: tuple[int, ...],
-    hidden_size: int | None = None,
+    params: NetworkParams
+    apply_fns: NetworkApplyFns
+    config: dict
+
+
+def create_network(
+    key: PRNGKey,
+    observation_shape: tuple[int, ...] = (16,),
+    hidden_size: int = HIDDEN_UNITS,
+    num_blocks: int = NUM_RESIDUAL_BLOCKS,
+    num_actions: int = NUM_ACTIONS,
     codebook_size: int = DEFAULT_CODEBOOK_SIZE,
-) -> StochasticNetwork:
+) -> StochasticMuZeroNetwork:
     """
-    Factory function to create a complete StochasticNetwork for 2048.
-
-    This creates all 6 models required for Stochastic MuZero and wraps them
-    in a StochasticNetwork instance.
+    Create and initialize a complete Stochastic MuZero network.
 
     Parameters
     ----------
+    key : PRNGKey
+        JAX random key for parameter initialization.
     observation_shape : tuple[int, ...]
-        Shape of the input observation (e.g., (16,) for flattened 4x4 board).
-    hidden_size : int | None
-        Size of the hidden state representation. Defaults to paper value (256).
+        Shape of the input observation.
+    hidden_size : int
+        Size of hidden state representations.
+    num_blocks : int
+        Number of residual blocks in each network.
+    num_actions : int
+        Number of possible actions.
     codebook_size : int
         Number of possible chance codes.
 
     Returns
     -------
-    StochasticNetwork
-        A fully initialized StochasticNetwork ready for training.
-
-    Examples
-    --------
-    >>> network = create_stochastic_network(observation_shape=(16,))
-    >>> state = network.representation(observation)
-    >>> output = network.prediction(state)
+    StochasticMuZeroNetwork
+        Initialized network with parameters and apply functions.
     """
-    # ##>: Use paper default if not specified.
-    if hidden_size is None:
-        hidden_size = HIDDEN_UNITS
+    # ##>: Split key for each model.
+    keys = jax.random.split(key, 6)
 
-    state_shape = (hidden_size,)
+    # ##>: Create model instances.
+    representation = Representation(hidden_size=hidden_size, num_blocks=num_blocks)
+    prediction = Prediction(action_size=num_actions, hidden_size=hidden_size, num_blocks=num_blocks)
+    afterstate_dynamics = AfterstateDynamics(hidden_size=hidden_size, action_size=num_actions, num_blocks=num_blocks)
+    afterstate_prediction = AfterstatePrediction(
+        codebook_size=codebook_size, hidden_size=hidden_size, num_blocks=num_blocks
+    )
+    dynamics = Dynamics(hidden_size=hidden_size, codebook_size=codebook_size, num_blocks=num_blocks)
+    encoder = Encoder(codebook_size=codebook_size, hidden_size=hidden_size, num_blocks=num_blocks)
 
-    # ##>: Build all 6 models.
-    representation = build_representation_model(observation_shape, hidden_size)
-    prediction = build_prediction_model(state_shape, NUM_ACTIONS)
-    afterstate_dynamics = build_afterstate_dynamics_model(state_shape, NUM_ACTIONS)
-    afterstate_prediction = build_afterstate_prediction_model(state_shape, codebook_size)
-    dynamics = build_stochastic_dynamics_model(state_shape, codebook_size)
-    encoder = build_encoder_model(observation_shape, codebook_size)
+    # ##>: Create dummy inputs for initialization.
+    dummy_obs = jnp.zeros((1, *observation_shape))
+    dummy_state = jnp.zeros((1, hidden_size))
+    dummy_action = jnp.zeros((1, num_actions))
+    dummy_chance = jnp.zeros((1, codebook_size))
 
-    return StochasticNetwork(
-        representation=representation,
-        prediction=prediction,
-        afterstate_dynamics=afterstate_dynamics,
-        afterstate_prediction=afterstate_prediction,
-        dynamics=dynamics,
-        encoder=encoder,
-        codebook_size=codebook_size,
+    # ##>: Initialize parameters.
+    representation_params = representation.init(keys[0], dummy_obs)
+    prediction_params = prediction.init(keys[1], dummy_state)
+    afterstate_dynamics_params = afterstate_dynamics.init(keys[2], dummy_state, dummy_action)
+    afterstate_prediction_params = afterstate_prediction.init(keys[3], dummy_state)
+    dynamics_params = dynamics.init(keys[4], dummy_state, dummy_chance)
+    encoder_params = encoder.init(keys[5], dummy_obs)
+
+    # ##>: Package parameters.
+    params = NetworkParams(
+        representation=representation_params,
+        prediction=prediction_params,
+        afterstate_dynamics=afterstate_dynamics_params,
+        afterstate_prediction=afterstate_prediction_params,
+        dynamics=dynamics_params,
+    )
+
+    # ##>: Create apply functions.
+    apply_fns = NetworkApplyFns(
+        representation=lambda p, x: representation.apply(p, x),
+        prediction=lambda p, x: prediction.apply(p, x),
+        afterstate_dynamics=lambda p, s, a: afterstate_dynamics.apply(p, s, a),
+        afterstate_prediction=lambda p, x: afterstate_prediction.apply(p, x),
+        dynamics=lambda p, s, c: dynamics.apply(p, s, c),
+    )
+
+    # ##>: Configuration dict.
+    config = {
+        'observation_shape': observation_shape,
+        'hidden_size': hidden_size,
+        'num_blocks': num_blocks,
+        'num_actions': num_actions,
+        'codebook_size': codebook_size,
+        'encoder_params': encoder_params,
+    }
+
+    return StochasticMuZeroNetwork(params=params, apply_fns=apply_fns, config=config)
+
+
+@jax.jit
+def representation_forward(network: StochasticMuZeroNetwork, observation: Array) -> Array:
+    """
+    Encode observation to hidden state.
+
+    Parameters
+    ----------
+    network : StochasticMuZeroNetwork
+        The network wrapper.
+    observation : Array
+        Input observation.
+
+    Returns
+    -------
+    Array
+        Hidden state representation.
+    """
+    return network.apply_fns.representation(network.params.representation, observation)
+
+
+@jax.jit
+def prediction_forward(network: StochasticMuZeroNetwork, state: Array) -> tuple[Array, Array]:
+    """
+    Predict policy and value from hidden state.
+
+    Parameters
+    ----------
+    network : StochasticMuZeroNetwork
+        The network wrapper.
+    state : Array
+        Hidden state.
+
+    Returns
+    -------
+    tuple[Array, Array]
+        (policy_logits, value)
+    """
+    return network.apply_fns.prediction(network.params.prediction, state)
+
+
+@jax.jit
+def afterstate_dynamics_forward(network: StochasticMuZeroNetwork, state: Array, action: Array) -> Array:
+    """
+    Predict afterstate from state and action.
+
+    Parameters
+    ----------
+    network : StochasticMuZeroNetwork
+        The network wrapper.
+    state : Array
+        Hidden state.
+    action : Array
+        One-hot encoded action.
+
+    Returns
+    -------
+    Array
+        Afterstate.
+    """
+    return network.apply_fns.afterstate_dynamics(network.params.afterstate_dynamics, state, action)
+
+
+@jax.jit
+def afterstate_prediction_forward(network: StochasticMuZeroNetwork, afterstate: Array) -> tuple[Array, Array]:
+    """
+    Predict Q-value and chance distribution from afterstate.
+
+    Parameters
+    ----------
+    network : StochasticMuZeroNetwork
+        The network wrapper.
+    afterstate : Array
+        Afterstate.
+
+    Returns
+    -------
+    tuple[Array, Array]
+        (q_value, chance_logits)
+    """
+    return network.apply_fns.afterstate_prediction(network.params.afterstate_prediction, afterstate)
+
+
+@jax.jit
+def dynamics_forward(network: StochasticMuZeroNetwork, afterstate: Array, chance_code: Array) -> tuple[Array, Array]:
+    """
+    Predict next state and reward from afterstate and chance code.
+
+    Parameters
+    ----------
+    network : StochasticMuZeroNetwork
+        The network wrapper.
+    afterstate : Array
+        Afterstate.
+    chance_code : Array
+        One-hot encoded chance outcome.
+
+    Returns
+    -------
+    tuple[Array, Array]
+        (next_state, reward)
+    """
+    return network.apply_fns.dynamics(network.params.dynamics, afterstate, chance_code)
+
+
+def encoder_forward(network: StochasticMuZeroNetwork, observation: Array) -> Array:
+    """
+    Encode observation to chance code.
+
+    Parameters
+    ----------
+    network : StochasticMuZeroNetwork
+        The network wrapper.
+    observation : Array
+        Input observation.
+
+    Returns
+    -------
+    Array
+        One-hot chance code.
+    """
+    encoder = Encoder(
+        codebook_size=network.config['codebook_size'],
+        hidden_size=network.config['hidden_size'],
+        num_blocks=network.config['num_blocks'],
+    )
+    return encoder.apply(network.config['encoder_params'], observation)
+
+
+def get_all_params(network: StochasticMuZeroNetwork) -> dict:
+    """
+    Get all network parameters as a flat dictionary.
+
+    Parameters
+    ----------
+    network : StochasticMuZeroNetwork
+        The network wrapper.
+
+    Returns
+    -------
+    dict
+        Dictionary containing all model parameters.
+    """
+    return {
+        'representation': network.params.representation,
+        'prediction': network.params.prediction,
+        'afterstate_dynamics': network.params.afterstate_dynamics,
+        'afterstate_prediction': network.params.afterstate_prediction,
+        'dynamics': network.params.dynamics,
+        'encoder': network.config['encoder_params'],
+    }
+
+
+def count_parameters(network: StochasticMuZeroNetwork) -> int:
+    """
+    Count total number of trainable parameters.
+
+    Parameters
+    ----------
+    network : StochasticMuZeroNetwork
+        The network wrapper.
+
+    Returns
+    -------
+    int
+        Total parameter count.
+    """
+    all_params = get_all_params(network)
+
+    def count_leaves(pytree):
+        leaves = jax.tree.leaves(pytree)
+        return sum(leaf.size for leaf in leaves)
+
+    return sum(count_leaves(params) for params in all_params.values())
+
+
+def update_params(network: StochasticMuZeroNetwork, new_params: NetworkParams) -> StochasticMuZeroNetwork:
+    """
+    Create a new network with updated parameters.
+
+    Parameters
+    ----------
+    network : StochasticMuZeroNetwork
+        Original network.
+    new_params : NetworkParams
+        New parameters.
+
+    Returns
+    -------
+    StochasticMuZeroNetwork
+        Network with updated parameters.
+    """
+    return StochasticMuZeroNetwork(
+        params=new_params,
+        apply_fns=network.apply_fns,
+        config=network.config,
     )

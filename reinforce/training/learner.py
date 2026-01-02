@@ -1,404 +1,354 @@
 """
-Learner for Stochastic MuZero training.
+Training step and state management for Stochastic MuZero.
 
-Implements the training loop that:
-1. Samples batches from replay buffer
-2. Unrolls the model for K steps
-3. Computes losses and updates network weights
+This module provides the core training infrastructure:
+- TrainState: Container for all training state
+- Gradient computation and optimization step
+- Checkpointing via orbax
 """
 
-from __future__ import annotations
-
-import json
+from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
-from keras import optimizers
-from numpy import array, float32, mean, ndarray, zeros
+import jax
+import jax.numpy as jnp
+import optax
+import orbax.checkpoint as ocp
 
-from reinforce.neural.network import StochasticNetwork, create_stochastic_network
+from reinforce.mcts.stochastic_mctx import NetworkParams
+from reinforce.neural.network import StochasticMuZeroNetwork, create_network, update_params
+from reinforce.training.config import TrainConfig
+from reinforce.training.losses import LossOutput, TrainingTargets, compute_loss
 
-from .config import StochasticMuZeroConfig
-from .losses import (
-    compute_chance_loss,
-    compute_policy_loss,
-    compute_q_value_loss,
-    compute_reward_loss,
-    compute_total_loss,
-    compute_value_loss,
-)
-from .replay_buffer import ReplayBuffer, Trajectory
-from .targets import compute_td_lambda_targets
+# ##>: Type aliases.
+Array = jax.Array
+PRNGKey = jax.Array
 
 
-class StochasticMuZeroLearner:
+class TrainState(NamedTuple):
     """
-    Learner that updates network weights.
-
-    Implements the training procedure from the paper:
-    1. Sample batch from replay buffer
-    2. Unroll model for K steps
-    3. Compute MuZero loss + Chance loss
-    4. Update weights with Adam
+    Container for all training state.
 
     Attributes
     ----------
-    config : StochasticMuZeroConfig
-        Training configuration.
-    network : StochasticNetwork
-        Neural network to train.
-    optimizer : optimizers.Optimizer
-        Adam optimizer.
-    training_step : int
+    network : StochasticMuZeroNetwork
+        The neural network with parameters and apply functions.
+    opt_state : optax.OptState
+        Optimizer state.
+    step : int
         Current training step.
+    key : PRNGKey
+        Current random key.
     """
 
-    def __init__(
-        self,
-        config: StochasticMuZeroConfig,
-        network: StochasticNetwork | None = None,
-    ):
+    network: StochasticMuZeroNetwork
+    opt_state: Any
+    step: int
+    key: PRNGKey
+
+
+def create_optimizer(config: TrainConfig) -> optax.GradientTransformation:
+    """
+    Create the optimizer with learning rate schedule.
+
+    Parameters
+    ----------
+    config : TrainConfig
+        Training configuration.
+
+    Returns
+    -------
+    optax.GradientTransformation
+        Configured optimizer.
+    """
+    # ##>: Learning rate schedule with warmup.
+    warmup_fn = optax.linear_schedule(
+        init_value=0.0,
+        end_value=config.learning_rate,
+        transition_steps=config.warmup_steps,
+    )
+
+    # ##>: Constant after warmup.
+    constant_fn = optax.constant_schedule(config.learning_rate)
+
+    schedule = optax.join_schedules(
+        schedules=[warmup_fn, constant_fn],
+        boundaries=[config.warmup_steps],
+    )
+
+    # ##>: Optimizer chain: gradient clipping + Adam.
+    optimizer = optax.chain(
+        optax.clip_by_global_norm(config.max_grad_norm),
+        optax.adam(learning_rate=schedule),
+    )
+
+    return optimizer
+
+
+def create_train_state(config: TrainConfig, key: PRNGKey) -> TrainState:
+    """
+    Initialize training state.
+
+    Parameters
+    ----------
+    config : TrainConfig
+        Training configuration.
+    key : PRNGKey
+        Random key for initialization.
+
+    Returns
+    -------
+    TrainState
+        Initialized training state.
+    """
+    key, net_key = jax.random.split(key)
+
+    # ##>: Create network.
+    network = create_network(
+        key=net_key,
+        observation_shape=config.observation_shape,
+        hidden_size=config.hidden_size,
+        num_blocks=config.num_residual_blocks,
+        num_actions=config.action_size,
+        codebook_size=config.codebook_size,
+    )
+
+    # ##>: Create optimizer.
+    optimizer = create_optimizer(config)
+    opt_state = optimizer.init(network.params)
+
+    return TrainState(
+        network=network,
+        opt_state=opt_state,
+        step=0,
+        key=key,
+    )
+
+
+def train_step(
+    state: TrainState,
+    batch: TrainingTargets,
+    config: TrainConfig,
+) -> tuple[TrainState, LossOutput]:
+    """
+    Perform a single training step.
+
+    Parameters
+    ----------
+    state : TrainState
+        Current training state.
+    batch : TrainingTargets
+        Batch of training data.
+    config : TrainConfig
+        Training configuration.
+
+    Returns
+    -------
+    tuple[TrainState, LossOutput]
+        - Updated training state
+        - Loss metrics
+    """
+    optimizer = create_optimizer(config)
+
+    def loss_fn(params: NetworkParams) -> tuple[Array, LossOutput]:
+        return compute_loss(
+            params=params,
+            apply_fns=state.network.apply_fns,
+            batch=batch,
+            config=config,
+        )
+
+    # ##>: Compute gradients.
+    (loss, loss_output), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.network.params)
+
+    # ##>: Apply gradients.
+    updates, new_opt_state = optimizer.update(grads, state.opt_state, state.network.params)
+    new_params = optax.apply_updates(state.network.params, updates)
+
+    # ##>: Update network.
+    new_network = update_params(state.network, new_params)
+
+    # ##>: Update state.
+    new_state = TrainState(
+        network=new_network,
+        opt_state=new_opt_state,
+        step=state.step + 1,
+        key=state.key,
+    )
+
+    return new_state, loss_output
+
+
+@partial(jax.jit, static_argnums=(2,))
+def train_step_jit(
+    state: TrainState,
+    batch: TrainingTargets,
+    config: TrainConfig,
+) -> tuple[TrainState, LossOutput]:
+    """
+    JIT-compiled training step.
+
+    Same as train_step but with JIT compilation for maximum performance.
+    Note: config must be static (hashable) for this to work.
+    """
+    return train_step(state, batch, config)
+
+
+def compute_gradient_stats(grads: Any) -> dict:
+    """
+    Compute gradient statistics for logging.
+
+    Parameters
+    ----------
+    grads : Any
+        Gradient pytree.
+
+    Returns
+    -------
+    dict
+        Gradient statistics.
+    """
+    flat_grads = jax.tree.leaves(grads)
+    all_grads = jnp.concatenate([g.flatten() for g in flat_grads])
+
+    return {
+        'grad_norm': float(jnp.linalg.norm(all_grads)),
+        'grad_mean': float(jnp.mean(all_grads)),
+        'grad_std': float(jnp.std(all_grads)),
+        'grad_max': float(jnp.max(jnp.abs(all_grads))),
+    }
+
+
+class CheckpointManager:
+    """
+    Manager for saving and loading checkpoints.
+
+    Uses orbax for efficient checkpoint management with async saving.
+
+    Attributes
+    ----------
+    checkpoint_dir : Path
+        Directory for checkpoints.
+    max_to_keep : int
+        Maximum number of checkpoints to retain.
+    """
+
+    def __init__(self, checkpoint_dir: str | Path, max_to_keep: int = 5):
         """
-        Initialize the learner.
+        Initialize checkpoint manager.
 
         Parameters
         ----------
-        config : StochasticMuZeroConfig
+        checkpoint_dir : str | Path
+            Directory for checkpoints.
+        max_to_keep : int
+            Maximum checkpoints to keep.
+        """
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.max_to_keep = max_to_keep
+
+        # ##>: Create orbax checkpoint manager.
+        options = ocp.CheckpointManagerOptions(
+            max_to_keep=max_to_keep,
+            save_interval_steps=1,
+        )
+        self.manager = ocp.CheckpointManager(
+            self.checkpoint_dir,
+            options=options,
+        )
+
+    def save(self, state: TrainState, step: int) -> None:
+        """
+        Save a checkpoint.
+
+        Parameters
+        ----------
+        state : TrainState
+            Training state to save.
+        step : int
+            Training step number.
+        """
+        # ##>: Extract saveable parts.
+        checkpoint = {
+            'params': state.network.params,
+            'opt_state': state.opt_state,
+            'step': state.step,
+            'key': state.key,
+            'config': state.network.config,
+        }
+
+        self.manager.save(
+            step,
+            args=ocp.args.StandardSave(checkpoint),
+        )
+
+    def load(self, step: int | None = None) -> dict | None:
+        """
+        Load a checkpoint.
+
+        Parameters
+        ----------
+        step : int | None
+            Step to load. If None, loads latest.
+
+        Returns
+        -------
+        dict | None
+            Checkpoint data, or None if not found.
+        """
+        if step is None:
+            step = self.manager.latest_step()
+
+        if step is None:
+            return None
+
+        return self.manager.restore(step)
+
+    def restore_train_state(
+        self,
+        config: TrainConfig,
+        step: int | None = None,
+    ) -> TrainState | None:
+        """
+        Restore a TrainState from checkpoint.
+
+        Parameters
+        ----------
+        config : TrainConfig
             Training configuration.
-        network : StochasticNetwork | None
-            Network to train. Creates new if None.
+        step : int | None
+            Step to restore. If None, restores latest.
+
+        Returns
+        -------
+        TrainState | None
+            Restored training state, or None if no checkpoint found.
         """
-        self.config = config
+        checkpoint = self.load(step)
+        if checkpoint is None:
+            return None
 
-        if network is None:
-            network = create_stochastic_network(
-                observation_shape=config.observation_shape,
-                hidden_size=config.hidden_size,
-                codebook_size=config.codebook_size,
-            )
-        self.network = network
+        # ##>: Reconstruct network.
+        network = create_network(
+            key=checkpoint['key'],
+            observation_shape=config.observation_shape,
+            hidden_size=config.hidden_size,
+            num_blocks=config.num_residual_blocks,
+            num_actions=config.action_size,
+            codebook_size=config.codebook_size,
+        )
+        network = update_params(network, checkpoint['params'])
 
-        # ##>: Create optimizer.
-        self.optimizer = optimizers.Adam(
-            learning_rate=config.learning_rate,
-            weight_decay=config.weight_decay if config.weight_decay > 0 else None,
+        return TrainState(
+            network=network,
+            opt_state=checkpoint['opt_state'],
+            step=checkpoint['step'],
+            key=checkpoint['key'],
         )
 
-        self.training_step = 0
-        self._loss_history: list[dict[str, float]] = []
-
-    def _prepare_batch_data(
-        self,
-        samples: list[tuple[Trajectory, int]],
-    ) -> dict[str, Any]:
-        """
-        Prepare batch data for training.
-
-        Parameters
-        ----------
-        samples : list[tuple[Trajectory, int]]
-            List of (trajectory, start_position) pairs.
-
-        Returns
-        -------
-        dict[str, Any]
-            Batch data with observations, actions, targets.
-        """
-        batch_observations: list[list] = []
-        batch_actions: list[list[int]] = []
-        batch_policy_targets: list[list] = []
-        batch_value_targets: list[list[float]] = []
-        batch_reward_targets: list[list[float]] = []
-
-        for trajectory, start_pos in samples:
-            # ##>: Extract transitions for this sample.
-            transitions = trajectory.transitions[start_pos:]
-
-            # ##>: Compute value targets.
-            value_targets = compute_td_lambda_targets(
-                transitions,
-                n_steps=self.config.td_steps,
-                td_lambda=self.config.td_lambda,
-                discount=self.config.discount,
-            )
-
-            # ##>: Collect data for unroll steps.
-            sample_obs = []
-            sample_actions = []
-            sample_policies = []
-            sample_values = []
-            sample_rewards = []
-
-            for k in range(min(self.config.num_unroll_steps + 1, len(transitions))):
-                t = transitions[k]
-                sample_obs.append(t.observation)
-                sample_actions.append(t.action)
-                sample_policies.append(t.search_policy)
-                if k < len(value_targets):
-                    sample_values.append(value_targets[k])
-                else:
-                    sample_values.append(0.0)
-                sample_rewards.append(t.reward)
-
-            # ##>: Pad if needed.
-            while len(sample_obs) < self.config.num_unroll_steps + 1:
-                sample_obs.append(sample_obs[-1])
-                sample_actions.append(0)
-                sample_policies.append(zeros(self.config.action_size))
-                sample_values.append(0.0)
-                sample_rewards.append(0.0)
-
-            batch_observations.append(sample_obs)
-            batch_actions.append(sample_actions)
-            batch_policy_targets.append(sample_policies)
-            batch_value_targets.append(sample_values)
-            batch_reward_targets.append(sample_rewards)
-
-        return {
-            'observations': array(batch_observations, dtype=float32),
-            'actions': array(batch_actions, dtype=int),
-            'policy_targets': array(batch_policy_targets, dtype=float32),
-            'value_targets': array(batch_value_targets, dtype=float32),
-            'reward_targets': array(batch_reward_targets, dtype=float32),
-        }
-
-    def train_step(self, replay_buffer: ReplayBuffer) -> dict[str, float]:
-        """
-        Perform a single training step.
-
-        Parameters
-        ----------
-        replay_buffer : ReplayBuffer
-            Replay buffer to sample from.
-
-        Returns
-        -------
-        dict[str, float]
-            Dictionary of loss values.
-        """
-        # ##>: Sample batch.
-        samples, importance_weights = replay_buffer.sample_batch(
-            batch_size=self.config.batch_size,
-            unroll_steps=self.config.num_unroll_steps,
-            td_steps=self.config.td_steps,
-        )
-
-        # ##>: Prepare batch data.
-        batch_data = self._prepare_batch_data(samples)
-
-        # ##>: Compute losses for each sample in batch.
-        all_losses = self._compute_batch_losses(batch_data)
-
-        # ##>: Weight losses by importance sampling.
-        weighted_loss = mean(all_losses['total'] * importance_weights)
-
-        # ##>: Update training step.
-        self.training_step += 1
-
-        # ##>: Record losses.
-        loss_dict = {
-            'total': float(mean(all_losses['total'])),
-            'policy': float(mean(all_losses['policy'])),
-            'value': float(mean(all_losses['value'])),
-            'reward': float(mean(all_losses['reward'])),
-            'chance': float(mean(all_losses['chance'])),
-            'weighted_total': float(weighted_loss),
-        }
-        self._loss_history.append(loss_dict)
-
-        return loss_dict
-
-    def _compute_batch_losses(self, batch_data: dict[str, Any]) -> dict[str, ndarray]:
-        """
-        Compute losses for a batch of samples.
-
-        This implements the model unrolling from the paper's pseudocode.
-
-        Parameters
-        ----------
-        batch_data : dict[str, Any]
-            Batch data from _prepare_batch_data.
-
-        Returns
-        -------
-        dict[str, ndarray]
-            Losses for each sample.
-        """
-        batch_size = len(batch_data['observations'])
-        observations = batch_data['observations']
-        actions = batch_data['actions']
-        policy_targets = batch_data['policy_targets']
-        value_targets = batch_data['value_targets']
-        reward_targets = batch_data['reward_targets']
-
-        # ##>: Initialize loss arrays.
-        total_losses = zeros(batch_size, dtype=float32)
-        policy_losses = zeros(batch_size, dtype=float32)
-        value_losses = zeros(batch_size, dtype=float32)
-        reward_losses = zeros(batch_size, dtype=float32)
-        chance_losses = zeros(batch_size, dtype=float32)
-
-        for i in range(batch_size):
-            sample_policy_losses = []
-            sample_value_losses = []
-            sample_reward_losses = []
-            sample_q_losses = []
-            sample_chance_losses = []
-            sample_commitment_losses = []
-
-            # ##>: Initial step: representation + prediction.
-            obs_0 = observations[i, 0]
-            hidden_state = self.network.representation(obs_0)
-
-            pred_output = self.network.prediction(hidden_state)
-            assert pred_output.policy is not None, 'Policy should not be None from prediction network'
-            sample_policy_losses.append(compute_policy_loss(pred_output.policy, policy_targets[i, 0]))
-            sample_value_losses.append(
-                compute_value_loss(
-                    pred_output.value,
-                    value_targets[i, 0],
-                    use_categorical=False,  # Using scalar for simplicity
-                )
-            )
-
-            # ##>: Unroll for K steps.
-            for k in range(1, self.config.num_unroll_steps + 1):
-                # ##>: Afterstate dynamics: state + action -> afterstate.
-                action = actions[i, k - 1]
-                afterstate = self.network.afterstate_dynamics(hidden_state, action)
-
-                # ##>: Afterstate prediction: afterstate -> (Q, σ).
-                as_output = self.network.afterstate_prediction(afterstate)
-
-                # ##>: Get chance code from encoder for target.
-                obs_k = observations[i, k]
-                chance_code = self.network.encoder(obs_k)
-
-                # ##>: Q-value loss (trained towards previous value target).
-                sample_q_losses.append(
-                    compute_q_value_loss(
-                        as_output.value,
-                        value_targets[i, k - 1],
-                        use_categorical=False,
-                    )
-                )
-
-                # ##>: Chance distribution loss.
-                assert as_output.chance_probs is not None, 'Chance probs should not be None from afterstate prediction'
-                sample_chance_losses.append(compute_chance_loss(as_output.chance_probs, chance_code))
-
-                # ##>: Dynamics: afterstate + chance_code -> (next_state, reward).
-                hidden_state, pred_reward = self.network.dynamics(afterstate, chance_code)
-
-                # ##>: Reward loss.
-                sample_reward_losses.append(
-                    compute_reward_loss(
-                        pred_reward,
-                        reward_targets[i, k],
-                        use_categorical=False,
-                    )
-                )
-
-                # ##>: Prediction on new state.
-                pred_output = self.network.prediction(hidden_state)
-                assert pred_output.policy is not None, 'Policy should not be None from prediction network'
-                sample_policy_losses.append(compute_policy_loss(pred_output.policy, policy_targets[i, k]))
-                sample_value_losses.append(
-                    compute_value_loss(
-                        pred_output.value,
-                        value_targets[i, k],
-                        use_categorical=False,
-                    )
-                )
-
-            # ##>: Aggregate losses for this sample.
-            loss_dict = compute_total_loss(
-                policy_losses=sample_policy_losses,
-                value_losses=sample_value_losses,
-                reward_losses=sample_reward_losses,
-                q_value_losses=sample_q_losses,
-                chance_losses=sample_chance_losses,
-                commitment_losses=sample_commitment_losses,
-                commitment_weight=self.config.commitment_loss_weight,
-            )
-
-            total_losses[i] = loss_dict['total']
-            policy_losses[i] = loss_dict['policy']
-            value_losses[i] = loss_dict['value']
-            reward_losses[i] = loss_dict['reward']
-            chance_losses[i] = loss_dict['chance']
-
-        return {
-            'total': total_losses,
-            'policy': policy_losses,
-            'value': value_losses,
-            'reward': reward_losses,
-            'chance': chance_losses,
-        }
-
-    def get_network(self) -> StochasticNetwork:
-        """
-        Get the current network.
-
-        Returns
-        -------
-        StochasticNetwork
-            Current network.
-        """
-        return self.network
-
-    def save_checkpoint(self, checkpoint_dir: str | Path) -> None:
-        """
-        Save network checkpoint.
-
-        Parameters
-        ----------
-        checkpoint_dir : str | Path
-            Directory to save models.
-        """
-        checkpoint_dir = Path(checkpoint_dir)
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-
-        # ##>: Save each model.
-        self.network._representation.save(checkpoint_dir / 'representation')
-        self.network._prediction.save(checkpoint_dir / 'prediction')
-        self.network._afterstate_dynamics.save(checkpoint_dir / 'afterstate_dynamics')
-        self.network._afterstate_prediction.save(checkpoint_dir / 'afterstate_prediction')
-        self.network._dynamics.save(checkpoint_dir / 'dynamics')
-        self.network._encoder.save(checkpoint_dir / 'encoder')
-
-        # ##>: Save training state.
-        state = {
-            'training_step': self.training_step,
-            'codebook_size': self.network.codebook_size,
-        }
-        with open(checkpoint_dir / 'training_state.json', 'w') as f:
-            json.dump(state, f)
-
-    def load_checkpoint(self, checkpoint_dir: str | Path) -> None:
-        """
-        Load network checkpoint.
-
-        Parameters
-        ----------
-        checkpoint_dir : str | Path
-            Directory containing saved models.
-        """
-        checkpoint_dir = Path(checkpoint_dir)
-
-        # ##>: Load training state.
-        with open(checkpoint_dir / 'training_state.json') as f:
-            state = json.load(f)
-
-        self.training_step = state['training_step']
-
-        # ##>: Load network.
-        self.network = StochasticNetwork.from_path(
-            representation_path=str(checkpoint_dir / 'representation'),
-            prediction_path=str(checkpoint_dir / 'prediction'),
-            afterstate_dynamics_path=str(checkpoint_dir / 'afterstate_dynamics'),
-            afterstate_prediction_path=str(checkpoint_dir / 'afterstate_prediction'),
-            dynamics_path=str(checkpoint_dir / 'dynamics'),
-            encoder_path=str(checkpoint_dir / 'encoder'),
-            codebook_size=state['codebook_size'],
-        )
+    @property
+    def latest_step(self) -> int | None:
+        """Get the latest checkpoint step."""
+        return self.manager.latest_step()

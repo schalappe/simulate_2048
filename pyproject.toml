@@ -13,15 +13,15 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy>=1.0",
     "tqdm>=4.66.5",
-    "jupyterlab>=4.2.4",
-    "notebook>=7.2.1",
-    "networkx>=3.3",
-    "mpld3>=0.5.10",
-    "matplotlib>=3.8",
-    "keras>=3.5.0",
-    "tensorflow>=2.17.0,<2.19",
-    "pydot>=3.0.1",
-    "gymnasium>=0.29.1",
+    # JAX ecosystem for GPU-accelerated MCTS and training
+    "jax>=0.4.30",
+    "jaxlib>=0.4.26",
+    # "jax-metal>=0.1.0; sys_platform == 'darwin'",
+    "flax>=0.8.0",
+    "optax>=0.2.0",
+    "mctx>=0.0.5",
+    "chex>=0.1.86",
+    "orbax-checkpoint>=0.5.0",
 ]
 
 [dependency-groups]
@@ -29,8 +29,10 @@ dev = [
     "ruff>=0.8.0",
     "pyrefly>=0.16.0",
     "pytest>=8.0",
-    "tensorflow-metal>=1.2.0; sys_platform == 'darwin'",
     "vulture>=2.14",
+    # Optional visualization
+    "matplotlib>=3.8",
+    "jupyterlab>=4.2.4",
 ]
 
 [tool.ruff]

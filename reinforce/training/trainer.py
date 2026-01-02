@@ -1,344 +1,364 @@
 """
 Main training orchestrator for Stochastic MuZero.
 
-Coordinates self-play data generation and network training.
+This module provides the Trainer class that coordinates:
+- Self-play game generation
+- Replay buffer management
+- Training loop execution
+- Logging and checkpointing
+- Evaluation
 """
 
-from __future__ import annotations
-
-import logging
-from collections.abc import Callable
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
-from time import time
 
-from numpy import mean
+import jax
 from tqdm import tqdm
 
-from reinforce.mcts.stochastic_agent import StochasticMuZeroAgent
-from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
+from reinforce.training.config import TrainConfig, default_config
+from reinforce.training.learner import (
+    CheckpointManager,
+    TrainState,
+    create_train_state,
+    train_step,
+)
+from reinforce.training.replay_buffer import ReplayBuffer
+from reinforce.training.self_play import evaluate_games, generate_games
 
-from .config import StochasticMuZeroConfig, default_2048_config
-from .learner import StochasticMuZeroLearner
-from .replay_buffer import ReplayBuffer
-from .self_play import generate_games
-
-# ##>: Set up logging.
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# ##>: Type aliases.
+PRNGKey = jax.Array
 
 
-class StochasticMuZeroTrainer:
+@dataclass
+class TrainingMetrics:
+    """Container for training metrics."""
+
+    step: int = 0
+    total_loss: float = 0.0
+    policy_loss: float = 0.0
+    value_loss: float = 0.0
+    reward_loss: float = 0.0
+    chance_loss: float = 0.0
+    games_played: int = 0
+    avg_reward: float = 0.0
+    avg_max_tile: float = 0.0
+    steps_per_second: float = 0.0
+
+
+@dataclass
+class Trainer:
     """
-    Main training orchestrator.
+    Main training orchestrator for Stochastic MuZero.
 
-    Coordinates:
-    1. Self-play actors generating training data
-    2. Learner updating network weights
-    3. Checkpointing and logging
+    Coordinates self-play, training, logging, and checkpointing
+    into a unified training loop.
 
     Attributes
     ----------
-    config : StochasticMuZeroConfig
+    config : TrainConfig
         Training configuration.
-    learner : StochasticMuZeroLearner
-        Network trainer.
-    replay_buffer : ReplayBuffer
-        Experience storage.
+    checkpoint_dir : str | Path
+        Directory for saving checkpoints.
+    log_dir : str | Path | None
+        Directory for logs. If None, logging is disabled.
     """
 
-    def __init__(
-        self,
-        config: StochasticMuZeroConfig | None = None,
-        checkpoint_dir: str | Path | None = None,
-    ):
-        """
-        Initialize the trainer.
+    config: TrainConfig
+    checkpoint_dir: str | Path = 'checkpoints'
+    log_dir: str | Path | None = None
+    _state: TrainState | None = field(default=None, repr=False)
+    _buffer: ReplayBuffer | None = field(default=None, repr=False)
+    _checkpoint_manager: CheckpointManager | None = field(default=None, repr=False)
+    _metrics_history: list = field(default_factory=list, repr=False)
 
-        Parameters
-        ----------
-        config : StochasticMuZeroConfig | None
-            Configuration. Uses default if None.
-        checkpoint_dir : str | Path | None
-            Directory for checkpoints. Creates if doesn't exist.
-        """
-        if config is None:
-            config = default_2048_config()
-
-        self.config = config
-
-        # ##>: Initialize components.
-        self.learner = StochasticMuZeroLearner(config)
-        self.replay_buffer = ReplayBuffer(
-            max_size=config.replay_buffer_size,
-            alpha=config.priority_alpha,
-            beta=config.priority_beta,
-        )
-
-        # ##>: Set up checkpoint directory.
-        if checkpoint_dir is None:
-            checkpoint_dir = Path('checkpoints')
-        self.checkpoint_dir = Path(checkpoint_dir)
+    def __post_init__(self):
+        """Initialize trainer components."""
+        self.checkpoint_dir = Path(self.checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        # ##>: Training statistics.
-        self._episode_rewards: list[float] = []
-        self._episode_lengths: list[int] = []
-        self._max_tiles: list[int] = []
-        self._train_start_time: float | None = None
+        if self.log_dir is not None:
+            self.log_dir = Path(self.log_dir)
+            self.log_dir.mkdir(parents=True, exist_ok=True)
 
-    def _fill_replay_buffer(self, min_games: int = 100) -> None:
+        # ##>: Initialize checkpoint manager.
+        self._checkpoint_manager = CheckpointManager(self.checkpoint_dir)
+
+    def initialize(self, seed: int | None = None) -> None:
         """
-        Fill replay buffer with initial games.
+        Initialize training state and replay buffer.
 
         Parameters
         ----------
-        min_games : int
-            Minimum number of games to generate.
+        seed : int | None
+            Random seed. If None, uses config seed.
         """
-        logger.info(f'Filling replay buffer with {min_games} games...')
-        start_time = time()
+        if seed is None:
+            seed = self.config.seed
 
-        trajectories = generate_games(
-            config=self.config,
-            network=self.learner.get_network(),
-            num_games=min_games,
-            training_step=0,
-            show_progress=True,
-        )
+        key = jax.random.PRNGKey(seed)
 
-        for traj in trajectories:
-            self.replay_buffer.add(traj)
-            self._episode_rewards.append(traj.total_reward)
-            self._episode_lengths.append(len(traj))
-            self._max_tiles.append(traj.max_tile)
+        # ##>: Try to restore from checkpoint.
+        self._state = self._checkpoint_manager.restore_train_state(self.config)
 
-        elapsed = time() - start_time
-        recent_rewards = self._episode_rewards[-min_games:]
-        recent_lengths = self._episode_lengths[-min_games:]
-        recent_tiles = self._max_tiles[-min_games:]
-        logger.info(f'Generated {min_games} games in {elapsed:.1f}s ({min_games / elapsed:.1f} games/s)')
-        logger.info(f'  Reward: avg={mean(recent_rewards):.1f}, max={max(recent_rewards):.1f}')
-        logger.info(f'  Length: avg={mean(recent_lengths):.1f}, max={max(recent_lengths)}')
-        logger.info(f'  MaxTile: avg={mean(recent_tiles):.0f}, max={max(recent_tiles)}')
+        if self._state is None:
+            # ##>: Create fresh training state.
+            self._state = create_train_state(self.config, key)
+            print('Initialized new training state at step 0')
+        else:
+            print(f'Restored training state from step {self._state.step}')
 
-    def _generate_self_play_games(self, num_games: int) -> None:
+        # ##>: Initialize replay buffer.
+        self._buffer = ReplayBuffer(self.config)
+
+    def fill_buffer(self, num_games: int | None = None, show_progress: bool = True) -> None:
         """
-        Generate self-play games and add to replay buffer.
+        Fill the replay buffer with initial games.
 
         Parameters
         ----------
-        num_games : int
-            Number of games to generate.
+        num_games : int | None
+            Number of games to generate. If None, fills to min_buffer_size.
+        show_progress : bool
+            Whether to show progress bar.
         """
+        if self._state is None or self._buffer is None:
+            raise RuntimeError('Trainer not initialized. Call initialize() first.')
+
+        if num_games is None:
+            num_games = self.config.min_buffer_size
+
+        # ##>: Generate games.
+        key, subkey = jax.random.split(self._state.key)
+        self._state = self._state._replace(key=key)
+
         trajectories = generate_games(
+            params=self._state.network.params,
+            apply_fns=self._state.network.apply_fns,
+            key=subkey,
             config=self.config,
-            network=self.learner.get_network(),
             num_games=num_games,
-            training_step=self.learner.training_step,
+            training_step=self._state.step,
+            show_progress=show_progress,
         )
 
+        # ##>: Add to buffer.
         for traj in trajectories:
-            self.replay_buffer.add(traj)
-            self._episode_rewards.append(traj.total_reward)
-            self._episode_lengths.append(len(traj))
-            self._max_tiles.append(traj.max_tile)
+            self._buffer.add(traj)
+
+        stats = self._buffer.get_statistics()
+        print(f'Buffer filled: {stats["size"]} games, avg reward: {stats["avg_reward"]:.1f}')
 
     def train(
         self,
         num_steps: int | None = None,
-        log_interval: int = 100,
-        checkpoint_interval: int | None = None,
-        games_per_step: int = 1,
-        callback: Callable[[int, dict], None] | None = None,
-    ) -> dict[str, list[float]]:
+        show_progress: bool = True,
+    ) -> dict:
         """
         Run the main training loop.
 
         Parameters
         ----------
         num_steps : int | None
-            Number of training steps. Uses config default if None.
-        log_interval : int
-            Steps between logging.
-        checkpoint_interval : int | None
-            Steps between checkpoints. Uses config default if None.
-        games_per_step : int
-            Number of self-play games per training step.
-        callback : Callable | None
-            Optional callback function(step, metrics).
+            Number of training steps. If None, runs to config.training_steps.
+        show_progress : bool
+            Whether to show progress bar.
 
         Returns
         -------
-        dict[str, list[float]]
-            Training history.
+        dict
+            Final training statistics.
         """
+        if self._state is None or self._buffer is None:
+            raise RuntimeError('Trainer not initialized. Call initialize() first.')
+
         if num_steps is None:
-            num_steps = self.config.training_steps
-        if checkpoint_interval is None:
-            checkpoint_interval = self.config.export_network_every
+            num_steps = self.config.training_steps - self._state.step
 
-        # ##>: Fill replay buffer initially.
-        if len(self.replay_buffer) == 0:
-            self._fill_replay_buffer(min_games=max(100, self.config.batch_size))
+        start_step = self._state.step
+        end_step = start_step + num_steps
 
-        logger.info(f'Starting training for {num_steps:,} steps...')
-        logger.info(f'  Batch size: {self.config.batch_size}')
-        logger.info(f'  Log interval: {log_interval}')
-        logger.info(f'  Checkpoint interval: {checkpoint_interval}')
-        self._train_start_time = time()
+        # ##>: Ensure buffer has minimum samples.
+        if not self._buffer.is_ready():
+            print('Buffer not ready, generating initial games...')
+            self.fill_buffer()
 
-        history = {
-            'total_loss': [],
-            'policy_loss': [],
-            'value_loss': [],
-            'reward_loss': [],
-            'chance_loss': [],
-            'episode_reward': [],
-            'max_tile': [],
-        }
+        # ##>: Training loop.
+        pbar = tqdm(total=num_steps, desc='Training', unit='step', initial=0) if show_progress else None
 
-        # ##>: Create progress bar for training loop.
-        pbar = tqdm(range(num_steps), desc='Training', unit='step')
+        start_time = time.time()
+        last_log_time = start_time
 
-        for step in pbar:
-            # ##>: Generate self-play games.
-            if step % 10 == 0:  # Generate games periodically
-                self._generate_self_play_games(games_per_step)
+        while self._state.step < end_step:
+            step = self._state.step
 
-            # ##>: Training step.
-            losses = self.learner.train_step(self.replay_buffer)
+            # ##>: Generate new games periodically.
+            if step > 0 and step % 100 == 0:
+                self._generate_games(1)
 
-            # ##>: Record history.
-            history['total_loss'].append(losses['total'])
-            history['policy_loss'].append(losses['policy'])
-            history['value_loss'].append(losses['value'])
-            history['reward_loss'].append(losses['reward'])
-            history['chance_loss'].append(losses['chance'])
-
-            if len(self._episode_rewards) > 0:
-                history['episode_reward'].append(self._episode_rewards[-1])
-                history['max_tile'].append(self._max_tiles[-1])
-
-            # ##>: Update progress bar with key metrics.
-            recent_rewards = self._episode_rewards[-100:] if self._episode_rewards else [0]
-            recent_tiles = self._max_tiles[-100:] if self._max_tiles else [0]
-            pbar.set_postfix(
-                loss=f'{losses["total"]:.3f}',
-                reward=f'{mean(recent_rewards):.0f}',
-                tile=max(recent_tiles),
-            )
+            # ##>: Sample batch and train.
+            batch, weights = self._buffer.sample_batch(self.config.batch_size)
+            self._state, loss_output = train_step(self._state, batch, self.config)
 
             # ##>: Logging.
-            if step > 0 and step % log_interval == 0:
-                self._log_progress(step, losses)
+            if step > 0 and step % self.config.log_interval == 0:
+                current_time = time.time()
+                steps_per_sec = self.config.log_interval / (current_time - last_log_time)
+                last_log_time = current_time
+
+                metrics = TrainingMetrics(
+                    step=step,
+                    total_loss=float(loss_output.total_loss),
+                    policy_loss=float(loss_output.policy_loss),
+                    value_loss=float(loss_output.value_loss),
+                    reward_loss=float(loss_output.reward_loss),
+                    chance_loss=float(loss_output.chance_loss),
+                    steps_per_second=steps_per_sec,
+                )
+                self._metrics_history.append(metrics)
+
+                if pbar is not None:
+                    pbar.set_postfix(
+                        loss=f'{metrics.total_loss:.4f}',
+                        p=f'{metrics.policy_loss:.4f}',
+                        v=f'{metrics.value_loss:.4f}',
+                        sps=f'{steps_per_sec:.1f}',
+                    )
 
             # ##>: Checkpointing.
-            if step > 0 and step % checkpoint_interval == 0:
-                self._save_checkpoint(step)
+            if step > 0 and step % self.config.checkpoint_interval == 0:
+                self._checkpoint_manager.save(self._state, step)
 
-            # ##>: Callback.
-            if callback is not None:
-                metrics = {
-                    'step': step,
-                    'losses': losses,
-                    'buffer_size': len(self.replay_buffer),
-                    'avg_reward': mean(self._episode_rewards[-100:]) if self._episode_rewards else 0,
-                }
-                callback(step, metrics)
+            # ##>: Evaluation.
+            if step > 0 and step % self.config.eval_interval == 0:
+                eval_results = self.evaluate()
+                if pbar is not None:
+                    pbar.write(
+                        f'Step {step}: mean_reward={eval_results["mean_reward"]:.1f}, '
+                        f'max_tile={eval_results["max_tile"]}'
+                    )
 
-        pbar.close()
+            if pbar is not None:
+                pbar.update(1)
+
+        if pbar is not None:
+            pbar.close()
 
         # ##>: Final checkpoint.
-        self._save_checkpoint(num_steps)
-        logger.info('Training complete!')
+        self._checkpoint_manager.save(self._state, self._state.step)
 
-        return history
+        total_time = time.time() - start_time
+        return {
+            'total_steps': num_steps,
+            'total_time_seconds': total_time,
+            'steps_per_second': num_steps / total_time,
+            'final_step': self._state.step,
+        }
 
-    def _log_progress(self, step: int, losses: dict[str, float]) -> None:
-        """Log training progress."""
-        elapsed = time() - self._train_start_time if self._train_start_time else 0
-        steps_per_sec = step / elapsed if elapsed > 0 else 0
+    def _generate_games(self, num_games: int) -> None:
+        """Generate and add games to buffer."""
+        key, subkey = jax.random.split(self._state.key)
+        self._state = self._state._replace(key=key)
 
-        recent_rewards = self._episode_rewards[-100:] if self._episode_rewards else [0]
-        recent_lengths = self._episode_lengths[-100:] if self._episode_lengths else [0]
-        recent_tiles = self._max_tiles[-100:] if self._max_tiles else [0]
-
-        # ##>: Use tqdm.write to avoid interfering with progress bar.
-        tqdm.write(
-            f'\n[Step {step:,}] '
-            f'Loss: {losses["total"]:.4f} (p={losses["policy"]:.3f}, v={losses["value"]:.3f}, r={losses["reward"]:.3f}) | '
-            f'Reward: {mean(recent_rewards):.1f} | '
-            f'Length: {mean(recent_lengths):.0f} | '
-            f'MaxTile: {max(recent_tiles)} | '
-            f'Buffer: {len(self.replay_buffer):,} | '
-            f'{steps_per_sec:.1f} steps/s'
+        trajectories = generate_games(
+            params=self._state.network.params,
+            apply_fns=self._state.network.apply_fns,
+            key=subkey,
+            config=self.config,
+            num_games=num_games,
+            training_step=self._state.step,
+            show_progress=False,
         )
 
-    def _save_checkpoint(self, step: int) -> None:
-        """Save a training checkpoint."""
-        checkpoint_path = self.checkpoint_dir / f'step_{step}'
-        self.learner.save_checkpoint(checkpoint_path)
-        logger.info(f'Saved checkpoint to {checkpoint_path}')
+        for traj in trajectories:
+            self._buffer.add(traj)
 
-    def load_checkpoint(self, checkpoint_path: str | Path) -> None:
+    def evaluate(self, num_games: int | None = None) -> dict:
         """
-        Load a training checkpoint.
+        Evaluate current agent performance.
 
         Parameters
         ----------
-        checkpoint_path : str | Path
-            Path to checkpoint directory.
-        """
-        self.learner.load_checkpoint(checkpoint_path)
-        logger.info(f'Loaded checkpoint from {checkpoint_path}')
-
-    def evaluate(self, num_games: int = 100) -> dict[str, float]:
-        """
-        Evaluate the current network.
-
-        Parameters
-        ----------
-        num_games : int
-            Number of games to evaluate.
+        num_games : int | None
+            Number of evaluation games. If None, uses config.eval_games.
 
         Returns
         -------
-        dict[str, float]
-            Evaluation metrics.
+        dict
+            Evaluation statistics.
         """
-        agent = StochasticMuZeroAgent(
-            network=self.learner.get_network(),
-            num_simulations=self.config.num_simulations,
-            exploration_weight=self.config.exploration_weight,
-            temperature=0.0,  # Greedy for evaluation
-            add_noise=False,
+        if self._state is None:
+            raise RuntimeError('Trainer not initialized. Call initialize() first.')
+
+        if num_games is None:
+            num_games = self.config.eval_games
+
+        key, subkey = jax.random.split(self._state.key)
+        self._state = self._state._replace(key=key)
+
+        return evaluate_games(
+            params=self._state.network.params,
+            apply_fns=self._state.network.apply_fns,
+            key=subkey,
+            config=self.config,
+            num_games=num_games,
         )
 
-        env = TwentyFortyEight(encoded=False, normalize=False)
-        rewards: list[float] = []
-        max_tiles: list[int] = []
-        lengths: list[int] = []
+    def get_metrics_history(self) -> list[TrainingMetrics]:
+        """Return the metrics history."""
+        return self._metrics_history
 
-        for _ in range(num_games):
-            env.reset()
-            total_reward = 0.0
-            steps = 0
+    def get_buffer_stats(self) -> dict:
+        """Return replay buffer statistics."""
+        if self._buffer is None:
+            return {}
+        return self._buffer.get_statistics()
 
-            while not env.is_finished:
-                state = env._current_state
-                action = agent.choose_action(state)
-                _, reward, _ = env.step(action)
-                total_reward += reward
-                steps += 1
+    @property
+    def current_step(self) -> int:
+        """Return current training step."""
+        if self._state is None:
+            return 0
+        return self._state.step
 
-            rewards.append(total_reward)
-            max_tiles.append(int(env._current_state.max()))
-            lengths.append(steps)
+    @property
+    def network(self):
+        """Return current network."""
+        if self._state is None:
+            return None
+        return self._state.network
 
-        return {
-            'mean_reward': float(mean(rewards)),
-            'max_reward': float(max(rewards)),
-            'mean_max_tile': float(mean(max_tiles)),
-            'max_tile': int(max(max_tiles)),
-            'mean_length': float(mean(lengths)),
-        }
+
+def train_muzero(
+    config: TrainConfig | None = None,
+    checkpoint_dir: str = 'checkpoints',
+    num_steps: int | None = None,
+    seed: int = 42,
+) -> Trainer:
+    """
+    Convenience function to run full Stochastic MuZero training.
+
+    Parameters
+    ----------
+    config : TrainConfig | None
+        Training configuration. If None, uses default.
+    checkpoint_dir : str
+        Directory for checkpoints.
+    num_steps : int | None
+        Number of training steps. If None, uses config.training_steps.
+    seed : int
+        Random seed.
+
+    Returns
+    -------
+    Trainer
+        The trained trainer instance.
+    """
+    if config is None:
+        config = default_config()
+
+    trainer = Trainer(config=config, checkpoint_dir=checkpoint_dir)
+    trainer.initialize(seed=seed)
+    trainer.train(num_steps=num_steps)
+
+    return trainer
