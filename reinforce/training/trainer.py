@@ -38,7 +38,32 @@ PRNGKey = jax.Array
 
 @dataclass
 class TrainingMetrics:
-    """Container for training metrics."""
+    """
+    Container for training metrics at a given step.
+
+    Attributes
+    ----------
+    step : int
+        Training step number.
+    total_loss : float
+        Combined weighted loss.
+    policy_loss : float
+        Policy cross-entropy loss.
+    value_loss : float
+        Value MSE loss.
+    reward_loss : float
+        Reward prediction loss.
+    chance_loss : float
+        Chance distribution loss.
+    games_played : int
+        Number of games in the latest evaluation (0 if no evaluation yet).
+    avg_reward : float
+        Mean reward from latest evaluation.
+    avg_max_tile : float
+        Mean max tile from latest evaluation.
+    steps_per_second : float
+        Training throughput.
+    """
 
     step: int = 0
     total_loss: float = 0.0
@@ -84,6 +109,7 @@ class Trainer:
     _checkpoint_manager: CheckpointManager | None = field(default=None, repr=False)
     _metrics_history: list = field(default_factory=list, repr=False)
     _async_loader: AsyncBatchLoader | None = field(default=None, repr=False)
+    _last_eval_results: dict | None = field(default=None, repr=False)
 
     def __post_init__(self):
         """Initialize trainer components."""
@@ -271,6 +297,15 @@ class Trainer:
                     steps_per_sec = self.config.log_interval / (current_time - last_log_time)
                     last_log_time = current_time
 
+                    # ##>: Include latest evaluation results if available.
+                    eval_games = 0
+                    eval_avg_reward = 0.0
+                    eval_avg_max_tile = 0.0
+                    if self._last_eval_results is not None:
+                        eval_games = self.config.eval_games
+                        eval_avg_reward = self._last_eval_results['mean_reward']
+                        eval_avg_max_tile = self._last_eval_results['mean_max_tile']
+
                     metrics = TrainingMetrics(
                         step=step,
                         total_loss=float(loss_output.total_loss),
@@ -278,6 +313,9 @@ class Trainer:
                         value_loss=float(loss_output.value_loss),
                         reward_loss=float(loss_output.reward_loss),
                         chance_loss=float(loss_output.chance_loss),
+                        games_played=eval_games,
+                        avg_reward=eval_avg_reward,
+                        avg_max_tile=eval_avg_max_tile,
                         steps_per_second=steps_per_sec,
                     )
                     self._metrics_history.append(metrics)
@@ -297,6 +335,7 @@ class Trainer:
                 # ##>: Evaluation.
                 if step > 0 and step % self.config.eval_interval == 0:
                     eval_results = self.evaluate()
+                    self._last_eval_results = eval_results
                     if pbar is not None:
                         pbar.write(
                             f'Step {step}: mean_reward={eval_results["mean_reward"]:.1f}, '
