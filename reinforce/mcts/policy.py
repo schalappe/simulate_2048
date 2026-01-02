@@ -48,8 +48,10 @@ def get_policy_target(policy_output: mctx.PolicyOutput, legal_mask: Array, tempe
 
     # ##>: Apply temperature.
     def with_temperature(w: Array) -> Array:
-        # ##>: Raise to power of 1/temperature for sharpening/softening.
-        powered = jnp.power(w + 1e-8, 1.0 / temperature)
+        # ##>: Use max to prevent division by zero during JAX tracing.
+        # ##&: JAX's lax.cond traces both branches, so this must be safe even when temperature=0.
+        safe_temp = jnp.maximum(temperature, 0.01)
+        powered = jnp.power(w + 1e-8, 1.0 / safe_temp)
         return powered / jnp.sum(powered)
 
     def without_temperature(w: Array) -> Array:
