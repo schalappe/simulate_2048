@@ -9,7 +9,7 @@ description = "Explore reinforcement learning with 2048 Game"
 authors = [{ name = "Kone Abdallah Hakim", email = "konehakim@gmail.com" }]
 license = { text = "MIT" }
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.0,<3.0",
     "tqdm>=4.66.5",
