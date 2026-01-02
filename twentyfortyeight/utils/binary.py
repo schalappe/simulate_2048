@@ -80,7 +80,7 @@ def encode_flatten(state: ndarray, encodage_size: int) -> ndarray:
     >>> import numpy as np
     >>> state = np.array([[1, 2], [4, 8]])
     >>> encode_flatten(state, encodage_size=4)
-    array([0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
     """
     obs = state.ravel().astype('float64')
     return encode(obs, encodage_size).ravel()
