@@ -56,7 +56,6 @@ train: train-small
 # --- Evaluation (JAX) ---
 
 # Evaluate Stochastic MuZero agent
-# Usage: make eval CHECKPOINT=checkpoints
 eval:
 	uv run python -m reinforce.evaluate --games 10 --simulations 50
 
