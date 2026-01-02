@@ -263,7 +263,7 @@ class Trainer:
                 else:
                     batch, weights = self._buffer.sample_batch_vectorized(self.config.batch_size)
 
-                self._state, loss_output = train_fn(self._state, batch, self.config)
+                self._state, loss_output = train_fn(self._state, batch, self.config, weights)
 
                 # ##>: Logging.
                 if step > 0 and step % self.config.log_interval == 0:

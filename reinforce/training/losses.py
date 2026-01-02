@@ -225,6 +225,7 @@ def compute_loss(
     apply_fns: NetworkApplyFns,
     batch: TrainingTargets,
     config: TrainConfig,
+    weights: Array | None = None,
 ) -> tuple[Array, LossOutput]:
     """
     Compute total loss for a batch of training samples.
@@ -244,6 +245,9 @@ def compute_loss(
         Batch of training targets.
     config : TrainConfig
         Training configuration.
+    weights : Array | None
+        Importance-sampling weights for prioritized experience replay.
+        Shape (batch_size,). If None, uniform weighting is used.
 
     Returns
     -------
@@ -347,12 +351,22 @@ def compute_loss(
     # ##>: Vectorize over batch.
     batch_losses = jax.vmap(single_sample_loss)(batch)
 
-    # ##>: Average over batch.
-    mean_p = jnp.mean(batch_losses.policy_loss)
-    mean_v = jnp.mean(batch_losses.value_loss)
-    mean_r = jnp.mean(batch_losses.reward_loss)
-    mean_c = jnp.mean(batch_losses.chance_loss)
-    mean_commit = jnp.mean(batch_losses.commitment_loss)
+    # ##>: Apply importance-sampling weights for prioritized replay correction.
+    if weights is not None:
+        # ##>: Normalize weights so they sum to batch_size (preserves gradient scale).
+        weights = weights / jnp.sum(weights) * weights.shape[0]
+        mean_p = jnp.sum(weights * batch_losses.policy_loss) / weights.shape[0]
+        mean_v = jnp.sum(weights * batch_losses.value_loss) / weights.shape[0]
+        mean_r = jnp.sum(weights * batch_losses.reward_loss) / weights.shape[0]
+        mean_c = jnp.sum(weights * batch_losses.chance_loss) / weights.shape[0]
+        mean_commit = jnp.sum(weights * batch_losses.commitment_loss) / weights.shape[0]
+    else:
+        # ##>: Uniform weighting.
+        mean_p = jnp.mean(batch_losses.policy_loss)
+        mean_v = jnp.mean(batch_losses.value_loss)
+        mean_r = jnp.mean(batch_losses.reward_loss)
+        mean_c = jnp.mean(batch_losses.chance_loss)
+        mean_commit = jnp.mean(batch_losses.commitment_loss)
 
     # ##>: Weighted total loss.
     total = (

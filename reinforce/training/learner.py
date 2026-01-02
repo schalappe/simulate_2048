@@ -134,6 +134,7 @@ def train_step(
     state: TrainState,
     batch: TrainingTargets,
     config: TrainConfig,
+    weights: Array | None = None,
 ) -> tuple[TrainState, LossOutput]:
     """
     Perform a single training step (legacy version, recreates optimizer).
@@ -146,6 +147,9 @@ def train_step(
         Batch of training data.
     config : TrainConfig
         Training configuration.
+    weights : Array | None
+        Importance-sampling weights for prioritized experience replay.
+        Shape (batch_size,). If None, uniform weighting is used.
 
     Returns
     -------
@@ -166,6 +170,7 @@ def train_step(
             apply_fns=state.network.apply_fns,
             batch=batch,
             config=config,
+            weights=weights,
         )
 
     # ##>: Compute gradients.
@@ -213,6 +218,7 @@ def _train_step_core(
     batch: TrainingTargets,
     config: TrainConfig,
     optimizer: optax.GradientTransformation,
+    weights: Array | None = None,
 ) -> tuple[NetworkParams, Any, LossOutput]:
     """
     Core training computation (JIT-friendly).
@@ -221,7 +227,7 @@ def _train_step_core(
     """
 
     def loss_fn(p: NetworkParams) -> tuple[Array, LossOutput]:
-        return compute_loss(params=p, apply_fns=apply_fns, batch=batch, config=config)
+        return compute_loss(params=p, apply_fns=apply_fns, batch=batch, config=config, weights=weights)
 
     # ##>: Compute gradients.
     (loss, loss_output), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
@@ -242,6 +248,7 @@ def train_step_optimized(
     state: TrainState,
     batch: TrainingTargets,
     config: TrainConfig,
+    weights: Array | None = None,
 ) -> tuple[TrainState, LossOutput]:
     """
     Optimized training step with JIT compilation and optimizer reuse.
@@ -259,6 +266,9 @@ def train_step_optimized(
         Batch of training data.
     config : TrainConfig
         Training configuration.
+    weights : Array | None
+        Importance-sampling weights for prioritized experience replay.
+        Shape (batch_size,). If None, uniform weighting is used.
 
     Returns
     -------
@@ -274,6 +284,7 @@ def train_step_optimized(
         batch,
         config,
         state.optimizer,
+        weights,
     )
 
     # ##>: Update network with new params.
