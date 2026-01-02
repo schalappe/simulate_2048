@@ -1,83 +1,57 @@
 # 2048 AI Agent
 
-AI agent that plays 2048 using Monte Carlo Tree Search guided by neural networks, inspired by AlphaZero and Stochastic MuZero. Implements strategies from "Planning in Stochastic Environments with a Learned Model."
-
-## Overview
-
-**Goal**: Train an agent to play 2048 effectively using learned models and MCTS planning.
-
-**Key Components**:
-- Game environment (Gymnasium interface)
-- MCTS planning algorithm with stochastic branching
-- Neural networks for state evaluation and transition modeling
+MuZero-inspired reinforcement learning agent for 2048. Uses Monte Carlo Tree Search with neural networks for planning in stochastic environments.
 
 ## Architecture
 
 ### Data Flow
 
 ```text
-Observation (4x4 board) → Encoder → Hidden State → Predictor → (Policy, Value)
-                                         ↓
-                         Action + State → Dynamic → (Next State, Reward)
+Board (4×4) → Representation → Hidden State → Prediction → (Policy, Value)
+                                     ↓
+                   Hidden State + Action → Dynamics → (Next State, Reward)
 ```
 
-### Module Structure
+**Three-network architecture:**
+- **Representation**: Encodes board observation to latent state
+- **Dynamics**: Predicts next latent state and reward from action
+- **Prediction**: Outputs policy (action preferences) and value (expected return)
 
-**`twentyfortyeight/`** - Game implementation
-- `core/gameboard.py`: Board state and operations (numpy rotations for movement)
-- `core/gamemove.py`: Move validation and application
-- `envs/twentyfortyeight.py`: Gymnasium environment interface
+### Modules
 
-**`monte_carlo/`** - MCTS planning
-- `actor.py`: Action selection from search results
-- `node.py`: Decision and Chance nodes with progressive widening
-- `search.py`: PUCT selection, adaptive simulation, backpropagation
+**`twentyfortyeight/`** - Game engine (NumPy-based)
+- `core/gameboard.py` - Board operations via rotation transforms
+- `core/gamemove.py` - Move validation
+- `envs/twentyfortyeight.py` - Gymnasium environment
 
-**`neurals/`** - Neural network models
-- `models.py`: Representation, Dynamics, and Prediction networks
-- `network.py`: Unified interface for all three models
+**`reinforce/`** - RL components (JAX-based)
+- `game/core.py` - JAX game logic with `latent_state()` and `after_state()`
+- `mcts/stochastic_mctx.py` - MCTS with chance nodes and progressive widening
+- `neural/network.py` - Three-network model interface
+- `training/` - Self-play, replay buffer, loss functions
 
-**`notebooks/`** - Analysis and visualization
-- `test_network.ipynb`: Network debugging
-- `visualize_model.ipynb`: State representation visualization
-- `visualize_trees.ipynb`: MCTS tree exploration
+**`tests/`** - Unit tests for board logic, environment, JAX game
 
-**`tests/`** - Unit tests
-- `test_board.py`: Game board logic
-- `test_encoded.py`: State encoding
-- `test_move.py`: Move application
-- `test_perf_utils.py`: Utility performance
+**`notebooks/`** - Visualization and debugging
+
+**`scripts/`** - Benchmarking and profiling tools
 
 ## Key Concepts
 
-### Stochastic State Handling
+### Stochastic Transitions
 
-The codebase distinguishes between deterministic and stochastic transitions:
+2048 has deterministic player actions (slide) and stochastic environment responses (tile spawn). The code models this explicitly:
 
-- `latent_state()`: Deterministic - applies action without adding new tile
-- `after_state()`: Stochastic - generates all possible states after tile spawn with probabilities
-- `next_state()`: Full transition including random tile placement
+- `latent_state(state, action)` - Deterministic: slide without new tile
+- `after_state(state)` - Stochastic: all possible tile spawns with probabilities
+- `next_state(state, action)` - Full transition: slide + random tile
 
-### Critical Implementation Patterns
+MCTS uses **chance nodes** for stochastic branching with **progressive widening** to limit tree growth.
 
-**Board Rotation**: All movement operations (left/up/right/down) are implemented by rotating the board, applying a left-slide, then rotating back. See `gameboard.py:119`.
+### Implementation Details
 
-**Reward Normalization**: Log-scale normalization compresses the reward range for stable learning. Maximum theoretical tile is 2^16.
+**Board Rotation** (`gameboard.py:119`): Movement in any direction is rotation + left-slide + inverse rotation. This reduces all four moves to a single primitive.
 
-**Progressive Widening**: Chance nodes in MCTS use progressive widening to manage the stochastic branching factor efficiently.
+**Reward Normalization** (`utils/normalize.py`): Log-scale normalization compresses exponential tile values (2→2^16) to stable learning range.
 
-## Quick Start
-
-```bash
-# Install dependencies
-uv sync
-
-# Play manually
-uv run python manuals_control.py
-
-# Evaluate MCTS agent
-uv run python evaluate.py --method mcts
-
-# Run tests
-uv run pytest tests/
-```
+**JAX Optimization**: Training uses JIT compilation (`@jax.jit`) for fast vectorized game execution and gradient computation.
