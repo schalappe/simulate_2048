@@ -1,2 +1,0 @@
-"""..."""
-from .gameboard import GameBoard

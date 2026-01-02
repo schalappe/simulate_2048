@@ -1,2 +1,0 @@
-"""..."""
-from .windows import WindowBoard

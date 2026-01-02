@@ -141,5 +141,12 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+# VS Code
+.vscode/
+
 # Model path
 zoo/
+checkpoints/
+
+# Specific files
+CLAUDE.md
