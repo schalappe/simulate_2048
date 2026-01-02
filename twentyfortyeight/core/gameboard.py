@@ -218,7 +218,7 @@ def generate_outcome(state: ndarray, cell: tuple[int, int], value: int, num_empt
     value : int
         Tile value to place (2 or 4).
     num_empty : int
-        Total number of empty cells for probability calculation.
+        Total number of empty cells for probability calculation. Must be > 0.
 
     Returns
     -------
@@ -226,11 +226,19 @@ def generate_outcome(state: ndarray, cell: tuple[int, int], value: int, num_empt
         - new_state : ndarray - A new board state with the tile added.
         - probability : float - The probability of this outcome.
 
+    Raises
+    ------
+    ValueError
+        If num_empty <= 0 (no empty cells to place a tile).
+
     Notes
     -----
     - The original state is NOT modified.
     - Probability = P(value) / num_empty, where P(2)=0.9 and P(4)=0.1.
     """
+    if num_empty <= 0:
+        raise ValueError(f'num_empty must be > 0, got {num_empty}')
+
     new_state = state.copy()
     new_state[cell] = value
     return new_state, TILE_SPAWN_PROBS[value] / num_empty
