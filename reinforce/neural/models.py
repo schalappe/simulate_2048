@@ -8,21 +8,23 @@ This module provides Flax Linen implementations of the six Stochastic MuZero mod
 - Representation (h): Converts observations to hidden states
 - Prediction (f): Outputs policy and value from hidden state
 - Afterstate Dynamics (φ): Predicts afterstate given state and action
-- Afterstate Prediction (ψ): Outputs Q-value and chance distribution from afterstate
+- Afterstate Prediction (ψ): Outputs afterstate value and chance distribution from afterstate
 - Dynamics (g): Predicts next state and reward given afterstate and chance code
-- Encoder (e): Encodes observation to chance code (VQ-VAE style)
+- Encoder (e): Encodes a transition to chance code logits (VQ-VAE style)
 
-Architecture follows the paper exactly:
+Architecture follows the paper (Appendix C):
 - 10 ResNet v2 style pre-activation residual blocks
 - 256 hidden units per layer
 - Layer Normalization + ReLU activations
+- Categorical value, reward, and afterstate value heads (601 bins, see reinforce.neural.support)
 
 Reference: "Planning in Stochastic Environments with a Learned Model" (ICLR 2022)
 """
 
 import flax.linen as nn
 import jax
-import jax.numpy as jnp
+
+from reinforce.neural.support import SUPPORT_SIZE
 
 # ##>: Type alias.
 Array = jax.Array
@@ -183,7 +185,7 @@ class Prediction(nn.Module):
         -------
         tuple[Array, Array]
             - policy_logits: Logits for each action, shape (..., action_size)
-            - value: Value estimate, shape (..., 1)
+            - value_logits: Categorical value logits, shape (..., 601)
         """
         # ##>: Initial projection.
         x = nn.Dense(self.hidden_size)(state)
@@ -198,11 +200,10 @@ class Prediction(nn.Module):
         # ##>: Policy head (logits, not probabilities).
         policy_logits = nn.Dense(self.action_size, name='policy_logits')(x)
 
-        # ##>: Value head.
-        value = nn.Dense(1, name='value')(x)
-        value = jnp.squeeze(value, axis=-1)
+        # ##>: Categorical value head (see reinforce.neural.support).
+        value_logits = nn.Dense(SUPPORT_SIZE, name='value')(x)
 
-        return policy_logits, value
+        return policy_logits, value_logits
 
 
 class AfterstateDynamics(nn.Module):
@@ -294,7 +295,7 @@ class AfterstatePrediction(nn.Module):
         Returns
         -------
         tuple[Array, Array]
-            - q_value: Q-value estimate, shape (...,)
+            - q_logits: Categorical afterstate value logits, shape (..., 601)
             - chance_logits: Logits for chance outcomes, shape (..., codebook_size)
         """
         # ##>: Initial projection.
@@ -307,14 +308,13 @@ class AfterstatePrediction(nn.Module):
         x = nn.LayerNorm()(x)
         x = nn.relu(x)
 
-        # ##>: Q-value head.
-        q_value = nn.Dense(1, name='q_value')(x)
-        q_value = jnp.squeeze(q_value, axis=-1)
+        # ##>: Categorical afterstate value head.
+        q_logits = nn.Dense(SUPPORT_SIZE, name='q_value')(x)
 
         # ##>: Chance distribution head (logits).
         chance_logits = nn.Dense(self.codebook_size, name='chance_logits')(x)
 
-        return q_value, chance_logits
+        return q_logits, chance_logits
 
 
 class Dynamics(nn.Module):
@@ -354,7 +354,7 @@ class Dynamics(nn.Module):
         -------
         tuple[Array, Array]
             - next_state: Next hidden state, shape (..., hidden_size)
-            - reward: Predicted reward, shape (...,)
+            - reward_logits: Categorical reward logits, shape (..., 601)
         """
         # ##>: Project and combine inputs.
         afterstate_proj = nn.Dense(self.hidden_size)(afterstate)
@@ -371,20 +371,19 @@ class Dynamics(nn.Module):
         # ##>: Next state head.
         next_state = nn.Dense(self.hidden_size, name='next_state')(x)
 
-        # ##>: Reward head.
-        reward = nn.Dense(1, name='reward')(x)
-        reward = jnp.squeeze(reward, axis=-1)
+        # ##>: Categorical reward head.
+        reward_logits = nn.Dense(SUPPORT_SIZE, name='reward')(x)
 
-        return next_state, reward
+        return next_state, reward_logits
 
 
 class Encoder(nn.Module):
     """
-    Encoder model (e): observation -> chance_code.
+    Encoder model (e): consecutive observations -> chance code logits.
 
-    Encodes an observation into a discrete chance code using
-    straight-through gradient estimation for differentiable
-    discrete selection.
+    The encoder reads the observation before and after a transition, so it can tell which tile spawned.
+    The loss turns its logits into a one-hot code with a straight-through estimator
+    (`reinforce.training.losses.straight_through_code`).
 
     Attributes
     ----------
@@ -401,24 +400,22 @@ class Encoder(nn.Module):
     num_blocks: int = NUM_RESIDUAL_BLOCKS
 
     @nn.compact
-    def __call__(self, observation: Array, deterministic: bool = True) -> Array:
+    def __call__(self, observation_pair: Array) -> Array:
         """
-        Encode observation to chance code.
+        Encode a transition into chance code logits.
 
         Parameters
         ----------
-        observation : Array
-            Flattened observation, shape (..., observation_dim).
-        deterministic : bool
-            If True, use argmax (discrete). If False, use Gumbel-Softmax.
+        observation_pair : Array
+            Observations at t and t+1, concatenated, shape (..., 2 * observation_dim).
 
         Returns
         -------
         Array
-            One-hot chance code, shape (..., codebook_size).
+            Chance code logits, shape (..., codebook_size).
         """
         # ##>: Initial projection.
-        x = nn.Dense(self.hidden_size)(observation)
+        x = nn.Dense(self.hidden_size)(observation_pair)
 
         # ##>: Stack of residual blocks.
         x = ResidualStack(self.num_blocks, self.hidden_size)(x)
@@ -427,17 +424,4 @@ class Encoder(nn.Module):
         x = nn.LayerNorm()(x)
         x = nn.relu(x)
 
-        # ##>: Output logits for chance code selection.
-        logits = nn.Dense(self.codebook_size, name='chance_logits')(x)
-
-        # ##>: Straight-through argmax: forward uses argmax, backward uses identity.
-        # ##>: This enables gradient flow through discrete selection.
-        if deterministic:
-            one_hot = jax.nn.one_hot(jnp.argmax(logits, axis=-1), self.codebook_size)
-            # ##>: Straight-through estimator: gradients flow through logits.
-            chance_code = logits - jax.lax.stop_gradient(logits) + jax.lax.stop_gradient(one_hot)
-        else:
-            # ##>: Soft version for exploration during training.
-            chance_code = jax.nn.softmax(logits)
-
-        return chance_code
+        return nn.Dense(self.codebook_size, name='chance_logits')(x)

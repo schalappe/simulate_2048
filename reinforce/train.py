@@ -2,87 +2,83 @@
 """
 Train Stochastic MuZero to play 2048 using JAX.
 
+Training requires a GPU and stops at startup when JAX cannot see one, because JAX otherwise falls back
+to the CPU silently and a paid GPU pod would sit idle. Pass `--allow-cpu` for local runs.
+
+Rerunning with the same `--run-dir` resumes the run: network, optimizer, step, and replay buffer.
+
 Usage:
-    # Quick test with tiny config (debugging)
-    python train.py --mode tiny --steps 100
+    # Quick test with tiny config on a laptop CPU (debugging)
+    python -m reinforce.train --mode tiny --steps 100 --run-dir /tmp/run --allow-cpu
 
-    # Small config for experimentation
-    python train.py --mode small --steps 10000
-
-    # Full training (paper configuration)
-    python train.py --mode full --steps 1000000
+    # Full training (paper configuration) on a GPU pod
+    python -m reinforce.train --mode full --run-dir /workspace/runs/full
 """
 
+import sys
 from argparse import ArgumentParser
 
+import jax
+
+from reinforce.neural.network import count_parameters
 from reinforce.training.config import default_config, small_config, tiny_config
 from reinforce.training.trainer import Trainer
 
+CONFIGS = {'tiny': tiny_config, 'small': small_config, 'full': default_config}
 
-def main():
-    """Run Stochastic MuZero training with JAX."""
+
+def require_gpu(allow_cpu: bool) -> None:
+    """
+    Stop the process unless JAX runs on a GPU.
+
+    Parameters
+    ----------
+    allow_cpu : bool
+        If True, accept the CPU backend (local debugging runs).
+    """
+    backend = jax.default_backend()
+    print(f'JAX backend: {backend}, devices: {jax.devices()}')
+    if backend != 'gpu' and not allow_cpu:
+        sys.exit(
+            f'No GPU visible to JAX (backend: {backend}). Install the CUDA wheels with `uv sync --extra gpu` '
+            'and check the pod driver, or pass --allow-cpu for a local run.'
+        )
+
+
+def main() -> None:
+    """Run or resume Stochastic MuZero training."""
     parser = ArgumentParser(description='Train Stochastic MuZero for 2048 (JAX)')
     parser.add_argument(
         '--mode',
-        type=str,
         default='small',
-        choices=['tiny', 'small', 'full'],
-        help='Training mode: tiny (debugging), small (experimentation), or full (paper config)',
+        choices=sorted(CONFIGS),
+        help='Configuration: tiny (debugging), small (experiments), or full (paper)',
     )
-    parser.add_argument('--steps', type=int, default=None, help='Number of training steps (overrides mode default)')
-    parser.add_argument('--checkpoint-dir', type=str, default='checkpoints', help='Checkpoint directory')
-    parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--no-progress', action='store_true', help='Disable progress bar')
+    parser.add_argument('--steps', type=int, default=None, help='Training steps to run (default: up to the preset)')
+    parser.add_argument('--run-dir', default='runs/default', help='Run directory: checkpoints, buffer, metrics')
+    parser.add_argument('--allow-cpu', action='store_true', help='Allow training without a GPU (local runs)')
     args = parser.parse_args()
 
-    # ##>: Create configuration based on mode.
-    if args.mode == 'tiny':
-        config = tiny_config()
-        print('Using tiny configuration (for debugging)')
-    elif args.mode == 'small':
-        config = small_config()
-        print('Using small configuration (for experimentation)')
-    else:
-        config = default_config()
-        print('Using full paper configuration')
+    require_gpu(args.allow_cpu)
+    config = CONFIGS[args.mode]()
+    print(f'Configuration: {args.mode}')
 
-    # ##>: Create trainer.
-    trainer = Trainer(config=config, checkpoint_dir=args.checkpoint_dir)
+    trainer = Trainer(config=config, run_dir=args.run_dir)
+    trainer.initialize()
+    print(f'Network parameters: {count_parameters(trainer.state.params):,}')
 
-    # ##>: Initialize training state.
-    trainer.initialize(seed=args.seed)
+    num_steps = args.steps if args.steps is not None else max(0, config.training_steps - trainer.step)
+    print(f'Training for {num_steps} steps from step {trainer.step}; run directory: {args.run_dir}')
+    results = trainer.train(num_steps)
+    print(
+        f'Training done: {results["steps"]} steps in {results["seconds"]:.1f}s '
+        f'({results["steps_per_second"]:.2f} steps/s)'
+    )
 
-    # ##>: Fill buffer with initial games.
-    print('\nGenerating initial games for replay buffer...')
-    trainer.fill_buffer(show_progress=not args.no_progress)
-
-    # ##>: Determine number of steps.
-    num_steps = args.steps if args.steps is not None else config.training_steps
-
-    # ##>: Run training.
-    print(f'\nStarting training for {num_steps} steps...')
-    print(f'Checkpoints will be saved to: {args.checkpoint_dir}')
-    print()
-
-    results = trainer.train(num_steps=num_steps, show_progress=not args.no_progress)
-
-    # ##>: Print training summary.
-    print('\n' + '=' * 50)
-    print('Training Complete')
-    print('=' * 50)
-    print(f'Total steps: {results["total_steps"]}')
-    print(f'Total time: {results["total_time_seconds"]:.1f}s')
-    print(f'Steps/second: {results["steps_per_second"]:.2f}')
-
-    # ##>: Final evaluation.
-    print('\n' + '=' * 50)
-    print('Final Evaluation (10 games)')
-    print('=' * 50)
-    final_eval = trainer.evaluate(num_games=10)
-    print(f'Mean Reward: {final_eval["mean_reward"]:.1f}')
-    print(f'Max Reward: {final_eval["max_reward"]:.1f}')
-    print(f'Mean Max Tile: {final_eval["mean_max_tile"]:.1f}')
-    print(f'Best Tile Achieved: {final_eval["max_tile"]}')
+    # ##>: train() already evaluated if it stopped on an evaluation step.
+    if trainer.step % config.eval_interval != 0:
+        trainer.evaluate()
+    trainer.close()
 
 
 if __name__ == '__main__':

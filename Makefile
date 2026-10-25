@@ -1,4 +1,4 @@
-.PHONY: install dev lint format check test clean play train train-tiny train-small train-full eval typecheck test-cov eval-checkpoint
+.PHONY: install dev lint format check test clean play train train-tiny train-small train-full eval typecheck test-cov eval-run
 
 # Install dependencies
 install:
@@ -37,32 +37,33 @@ play:
 	uv run python manuals_control.py
 
 # --- Training (JAX) ---
+# Each target trains in its own run directory under runs/ and resumes it when rerun.
 
-# Train with tiny config (for debugging, ~1 minute)
+# Train with tiny config on the local CPU (debugging, about 10 seconds for 100 steps)
 train-tiny:
-	uv run python -m reinforce.train --mode tiny --steps 100
+	uv run python -m reinforce.train --mode tiny --steps 100 --run-dir runs/tiny --allow-cpu
 
-# Train with small config (for experimentation, ~10 minutes)
+# Train with small config (needs a GPU; see docs/runpod.md)
 train-small:
-	uv run python -m reinforce.train --mode small --steps 10000
+	uv run python -m reinforce.train --mode small --run-dir runs/small
 
-# Train with full paper configuration (~hours/days)
+# Train with full paper configuration (needs a GPU; runs for days, see docs/runpod.md)
 train-full:
-	uv run python -m reinforce.train --mode full
+	uv run python -m reinforce.train --mode full --run-dir runs/full
 
 # Default training target
-train: train-small
+train: train-tiny
 
 # --- Evaluation (JAX) ---
 
-# Evaluate Stochastic MuZero agent
+# Evaluate an untrained network (smoke check of the search)
 eval:
-	uv run python -m reinforce.evaluate --games 10 --simulations 50
+	uv run python -m reinforce.evaluate --mode tiny --games 2 --simulations 8
 
-# Evaluate with custom checkpoint
-# Usage: make eval-checkpoint CHECKPOINT=checkpoints/step_10000
-eval-checkpoint:
-	uv run python -m reinforce.evaluate --games 10 --checkpoint $(CHECKPOINT)
+# Evaluate a training run
+# Usage: make eval-run RUN_DIR=runs/full
+eval-run:
+	uv run python -m reinforce.evaluate --run-dir $(RUN_DIR) --games 10
 
 # Clean up cache files
 clean:
