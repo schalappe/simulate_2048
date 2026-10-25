@@ -38,6 +38,9 @@ git checkout fix/stochastic-muzero-training   # until it is merged into main
 
 # ##>: Keep the virtual environment on the container disk: imports from a network volume are slow.
 export UV_PROJECT_ENVIRONMENT=/root/venv
+# ##!: RunPod PyTorch images set LD_LIBRARY_PATH=/usr/local/cuda/lib64. JAX's pip cuSPARSE then links the
+# ##!: image's older libnvJitLink and fails to load, and JAX falls back to the CPU. Unset it in every shell.
+unset LD_LIBRARY_PATH
 uv sync --extra gpu
 uv run python -c "import jax; print(jax.default_backend(), jax.devices())"   # must print gpu
 ```
@@ -55,7 +58,9 @@ nohup uv run python -m reinforce.train --mode full --run-dir /workspace/runs/ful
 - **The first line of `train.log` must read `JAX backend: gpu`.** Without a GPU, training stops at once with
   `No GPU visible to JAX`. That guard exists because JAX otherwise falls back to the CPU with only a warning, and
   the pod would bill GPU time for CPU speed. If it fires, check that `uv sync --extra gpu` ran and that the pod
-  has the CUDA floor above.
+  has the CUDA floor above. On RunPod PyTorch images the usual cause is `LD_LIBRARY_PATH`: run
+  `unset LD_LIBRARY_PATH` in the shell that starts training (see First start). Observed on
+  `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404`: `Unable to load cuSPARSE`, then `BACKEND cpu`.
 - `tail -f /workspace/runs/full/train.log`: one line per `log_interval` steps with the loss, training steps per
   second, self-play moves per second, buffer size, and games played. Evaluation lines start with `[eval]`.
 - `/workspace/runs/full/metrics.jsonl`: the same numbers as JSON, one record per line (`"kind": "train"` or
@@ -72,6 +77,34 @@ A run directory refuses a different `--mode`, so a resume cannot silently change
 Saves happen every `checkpoint_interval` steps and on Ctrl-C. The replay buffer is written to a temporary file
 and then renamed, and orbax writes checkpoints the same way, so a pod that dies in the middle of a save keeps
 the previous save.
+
+## Measured speed and cost
+
+Smoke test on 2026-10-25: one NVIDIA A40 (48 GB), Secure Cloud, EU-SE-1, image
+`runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404`, host CUDA 13.2, catalog price $0.59/h.
+
+| Measurement (`--mode full`) | Value |
+|---|---|
+| Tests (`pytest`, on GPU) | 86 passed in 2 min 25 s |
+| Self-play chunk (256 games × 50 moves, 100 simulations) | about 7 s, about 1,800 moves/s |
+| Buffer fill to 1,000 sequences | 71 s, after about 35 s of compilation |
+| Training, steady state (self-play included) | 0.44 steps/s (100 steps in 229 s) |
+| Checkpoint + replay buffer save | about 7 s; checkpoint 112 MB, buffer 1.3 GB |
+| Evaluation, 16 greedy games | about 2.5 min |
+| Resume after a pod restart | restored step 300 and 3,862 sequences, then trained on |
+
+Cost of a run on that A40 at 0.44 steps/s (1,584 steps per hour), GPU only; the volume bills separately:
+
+| Training steps | GPU time | Cost |
+|---|---|---|
+| 100,000 | 63 h (2.6 days) | about $37 |
+| 300,000 (end of the temperature schedule) | 189 h (7.9 days) | about $112 |
+| 1,000,000 | 631 h (26 days) | about $372 |
+| 20,000,000 (paper) | 12,626 h (526 days) | about $7,450 |
+
+The paper's 20M steps are out of reach on one GPU: the authors used 1 TPU for training and 4 for acting
+during 80 hours (Appendix G). The measured step is far slower than the arithmetic of the network suggests,
+so profile one train step and one self-play chunk before committing to a long run.
 
 ## Bring a run back and evaluate it locally
 

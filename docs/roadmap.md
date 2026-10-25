@@ -78,8 +78,13 @@ The paper is `docs/4498_planning_in_stochastic_environ.pdf`; "paper C" means its
 - [x] Metrics go to `metrics.jsonl` in the run directory (`"kind": "train"` and `"kind": "eval"`).
 - [x] `tiny` and `small` presets have their own temperature thresholds.
 - [x] Pod setup documented in `docs/runpod.md`.
-- [ ] Prove on a pod: `JAX backend: gpu`, a short run, then resume after a restart. Measure steps per
-      second and self-play moves per second, then tune `num_parallel_games` and `generation_interval`.
+- [x] Prove on a pod: on one A40 the 86 tests pass on GPU, tiny and full runs train with
+      `JAX backend: gpu`, and a full run resumes after a pod restart (step 300, 3,862 sequences). Found and
+      documented `unset LD_LIBRARY_PATH` for RunPod PyTorch images. Measured 0.44 steps/s in full mode
+      (`docs/runpod.md`, "Measured speed and cost").
+- [ ] Profile one full train step and one self-play chunk on a GPU (JAX profiler). The network needs about
+      0.24 TFLOP per train step, a few ms on an A40, yet the measured loop spends seconds per step; find where
+      the time goes before a long run, then tune `num_parallel_games` and `generation_interval`.
 
 ## 5. Evaluation
 

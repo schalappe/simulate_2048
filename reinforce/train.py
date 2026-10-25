@@ -40,8 +40,9 @@ def require_gpu(allow_cpu: bool) -> None:
     print(f'JAX backend: {backend}, devices: {jax.devices()}')
     if backend != 'gpu' and not allow_cpu:
         sys.exit(
-            f'No GPU visible to JAX (backend: {backend}). Install the CUDA wheels with `uv sync --extra gpu` '
-            'and check the pod driver, or pass --allow-cpu for a local run.'
+            f'No GPU visible to JAX (backend: {backend}). Install the CUDA wheels with `uv sync --extra gpu`. '
+            'On images that set LD_LIBRARY_PATH to their own CUDA (RunPod PyTorch images), run '
+            '`unset LD_LIBRARY_PATH` first. Pass --allow-cpu for a local run.'
         )
 
 
