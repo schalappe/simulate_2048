@@ -161,6 +161,7 @@ def play_moves(
             dirichlet_fraction=dirichlet_fraction,
             pb_c_init=config.pb_c_init,
             pb_c_base=config.pb_c_base,
+            max_depth=config.max_search_depth,
         )
         action_weights = jnp.asarray(output.action_weights)
         actions = select_action(action_key, action_weights, temperature)

@@ -102,27 +102,40 @@ class Trainer:
             self._play_chunk(self.step)
             print(f'Filling buffer: {len(self.buffer)}/{self.config.min_buffer_size} sequences')
 
-    def train(self, num_steps: int) -> dict:
+    def train(self, num_steps: int, stop_at_tile: int | None = None, max_seconds: float | None = None) -> dict:
         """
-        Train for `num_steps` steps, then save. Ctrl-C stops early and still saves.
+        Train until a stop condition, then save. Ctrl-C stops early and still saves.
 
         Parameters
         ----------
         num_steps : int
-            Number of training steps to run.
+            Maximum number of training steps to run.
+        stop_at_tile : int | None
+            Stop after an evaluation in which at least one game reaches this tile. A fresh run first evaluates
+            its untrained network as a "baseline" record, because search alone already plays better than the
+            network, and only evaluations after training count toward the target.
+        max_seconds : float | None
+            Stop once this much time has passed since the call, buffer filling included. A budget guard: the
+            check runs between steps, so the overshoot is at most one step, one self-play chunk, or one
+            evaluation.
 
         Returns
         -------
         dict
-            Steps run, elapsed seconds, and steps per second.
+            Steps run, elapsed seconds, steps per second, and why training stopped: "steps", "tile",
+            "time", or "interrupted".
         """
         config = self.config
+        start_time = time.time()
+        deadline = start_time + max_seconds if max_seconds is not None else None
+        if stop_at_tile is not None and self.step == 0:
+            self.evaluate(kind='baseline')
         self.fill_buffer()
         step = self.step
         end_step = step + num_steps
-        start_time = time.time()
-        log_time = start_time
+        log_time = time.time()
         start_step = step
+        reason = 'steps'
         try:
             # ##>: JAX dispatches train_step asynchronously, so sampling the next batch on the host overlaps
             # ##>: with the device computing the current step. Nothing in this loop may block on device
@@ -140,8 +153,17 @@ class Trainer:
                 if step % config.checkpoint_interval == 0:
                     self.save()
                 if step % config.eval_interval == 0:
-                    self.evaluate()
+                    summary = self.evaluate()
+                    if stop_at_tile is not None and summary['max_tile'] >= stop_at_tile:
+                        reason = 'tile'
+                        print(f'Target tile {stop_at_tile} reached at step {step}.')
+                        break
+                if deadline is not None and time.time() >= deadline:
+                    reason = 'time'
+                    print(f'Time limit reached at step {step}.')
+                    break
         except KeyboardInterrupt:
+            reason = 'interrupted'
             print(f'Interrupted at step {step}; saving.')
         self.save()
         self._checkpoints.wait()
@@ -151,9 +173,10 @@ class Trainer:
             'steps': steps_run,
             'seconds': elapsed,
             'steps_per_second': steps_run / elapsed if elapsed > 0 else 0.0,
+            'reason': reason,
         }
 
-    def evaluate(self, num_games: int | None = None) -> dict:
+    def evaluate(self, num_games: int | None = None, kind: str = 'eval') -> dict:
         """
         Play greedy games without root noise, log them, and return their summary.
 
@@ -161,6 +184,8 @@ class Trainer:
         ----------
         num_games : int | None
             Number of games; `config.eval_games` if None.
+        kind : str
+            Record kind in metrics.jsonl: "eval", or "baseline" for the untrained network.
 
         Returns
         -------
@@ -171,10 +196,11 @@ class Trainer:
         self.state = self.state._replace(key=key)
         games = evaluate_games(self.state.params, eval_key, self.config, num_games or self.config.eval_games)
         summary = {'step': self.step, **summarize_games(games)}
-        self._write_metrics('eval', summary)
+        self._write_metrics(kind, summary)
         print(
-            f'[eval] step {summary["step"]}: mean score {summary["mean_score"]:.0f}, '
-            f'best tile {summary["max_tile"]}, mean length {summary["mean_length"]:.0f}'
+            f'[{kind}] step {summary["step"]}: mean score {summary["mean_score"]:.0f}, '
+            f'best tile {summary["max_tile"]}, games reaching 2048: {summary["reached_2048"]}/{summary["games"]}, '
+            f'mean length {summary["mean_length"]:.0f}'
         )
         return summary
 

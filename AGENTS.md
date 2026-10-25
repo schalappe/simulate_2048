@@ -38,7 +38,7 @@ uv run python -m reinforce.train --mode tiny --steps 20 --run-dir "$TMPDIR/run" 
 uv run python -m reinforce.evaluate --run-dir "$TMPDIR/run" --games 1                       # evaluate that run, about 5 seconds
 ```
 
-`make train-small` and `make train-full` need a GPU and run for hours to days, on RunPod (`docs/runpod.md`). Do not use either as a check. Training stops at startup without a GPU unless you pass `--allow-cpu`. `uv run python manuals_control.py` opens a window and never exits on its own; drive it with `.agents/skills/verify-simulate-2048/scripts/drive_manual_play.py` instead.
+`--mode budget` is the cheap preset for reaching tile 2048 (`docs/runpod.md`, "Budget run"). `make train-small` and `make train-full` need a GPU and run for hours to days, on RunPod (`docs/runpod.md`). Do not use either as a check. Training stops at startup without a GPU unless you pass `--allow-cpu`. `uv run python manuals_control.py` opens a window and never exits on its own; drive it with `.agents/skills/verify-simulate-2048/scripts/drive_manual_play.py` instead.
 
 ## Architecture
 

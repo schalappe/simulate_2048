@@ -82,9 +82,15 @@ The paper is `docs/4498_planning_in_stochastic_environ.pdf`; "paper C" means its
       `JAX backend: gpu`, and a full run resumes after a pod restart (step 300, 3,862 sequences). Found and
       documented `unset LD_LIBRARY_PATH` for RunPod PyTorch images. Measured 0.44 steps/s in full mode
       (`docs/runpod.md`, "Measured speed and cost").
-- [ ] Profile one full train step and one self-play chunk on a GPU (JAX profiler). The network needs about
-      0.24 TFLOP per train step, a few ms on an A40, yet the measured loop spends seconds per step; find where
-      the time goes before a long run, then tune `num_parallel_games` and `generation_interval`.
+- [x] Profile the loop on a GPU. The train step is 66 ms (paper model, A40); self-play takes about 95% of the
+      loop, and gets 2.5 to 3 times slower as training deepens the search tree. Added `max_search_depth`.
+
+## 8. Budget run: prove the model reaches 2048 (26 $ cap)
+
+- [x] `--mode budget` preset, `--stop-at-tile`, `--max-hours`, an untrained baseline evaluation, and
+      `scripts/runpod_budget_run.sh` (time budget kept across restarts, pod stops itself). Evidence: tests for
+      both stops and the baseline record; `runpodctl stop pod $RUNPOD_POD_ID` stopped a test pod (EXITED).
+- [ ] Run it on one A40 and report: baseline versus best evaluation, steps, hours, and cost.
 
 ## 5. Evaluation
 

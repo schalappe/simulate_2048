@@ -297,6 +297,28 @@ class TestCheckpoints:
         with pytest.raises(ValueError, match='different configuration'):
             Trainer(micro_config(hidden_size=16), tmp_path)
 
+    def test_stops_when_an_evaluation_reaches_the_target_tile(self, tmp_path: Path):
+        trainer = Trainer(micro_config(eval_interval=2), tmp_path)
+        trainer.initialize()
+        # ##>: Every game reaches tile 2, so the first evaluation (step 2) meets the target.
+        result = trainer.train(10, stop_at_tile=2)
+        trainer.close()
+
+        assert result['reason'] == 'tile'
+        assert trainer.step == 2
+        # ##>: The untrained baseline also reaches tile 2 but never stops the run.
+        assert (tmp_path / 'metrics.jsonl').read_text().count('"kind": "baseline"') == 1
+
+    def test_stops_at_the_time_limit_and_saves(self, tmp_path: Path):
+        trainer = Trainer(micro_config(), tmp_path)
+        trainer.initialize()
+        result = trainer.train(10, max_seconds=0.0)
+        trainer.close()
+
+        assert result['reason'] == 'time'
+        assert trainer.step == 1
+        assert CheckpointManager(tmp_path / 'checkpoints').latest_step == 1
+
     def test_evaluate_loads_the_run(self, tmp_path: Path):
         config = micro_config()
         trainer = Trainer(config, tmp_path)

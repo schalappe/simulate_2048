@@ -18,11 +18,18 @@ from pathlib import Path
 
 import jax
 
-from reinforce.training.config import TrainConfig, default_config, load_config, small_config, tiny_config
+from reinforce.training.config import (
+    TrainConfig,
+    budget_config,
+    default_config,
+    load_config,
+    small_config,
+    tiny_config,
+)
 from reinforce.training.learner import CheckpointManager, create_train_state
 from reinforce.training.self_play import evaluate_games, summarize_games
 
-CONFIGS = {'tiny': tiny_config, 'small': small_config, 'full': default_config}
+CONFIGS = {'tiny': tiny_config, 'small': small_config, 'budget': budget_config, 'full': default_config}
 
 
 def evaluate(

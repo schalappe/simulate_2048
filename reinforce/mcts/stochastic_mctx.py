@@ -33,6 +33,7 @@ def run_mcts(
     dirichlet_fraction: float,
     pb_c_init: float,
     pb_c_base: float,
+    max_depth: int | None = None,
 ) -> mctx.PolicyOutput:
     """
     Run Stochastic MuZero search on a batch of observations.
@@ -63,6 +64,8 @@ def run_mcts(
         PUCT exploration constant.
     pb_c_base : float
         PUCT exploration base.
+    max_depth : int | None
+        Maximum search depth; None lets mctx go as deep as `num_simulations`.
 
     Returns
     -------
@@ -116,6 +119,7 @@ def run_mcts(
         chance_recurrent_fn=chance_recurrent_fn,  # pyrefly: ignore[bad-argument-type]
         num_simulations=num_simulations,
         invalid_actions=~legal_mask,
+        max_depth=max_depth,
         dirichlet_fraction=dirichlet_fraction,
         dirichlet_alpha=dirichlet_alpha,
         pb_c_init=pb_c_init,

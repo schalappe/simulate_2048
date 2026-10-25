@@ -36,6 +36,9 @@ class TrainConfig:
     dirichlet_fraction: float = 0.1  # Noise fraction at root
     pb_c_init: float = 1.25  # PUCT exploration constant
     pb_c_base: float = 19652.0  # PUCT base
+    # ##>: Cap on search depth; None means up to num_simulations (mctx default). A trained chance distribution
+    # ##>: concentrates on few codes, paths grow, and self-play slows down with depth (measured 3x on an A40).
+    max_search_depth: int | None = None
 
     # ##>: Temperature schedule for action selection, as (training_step, temperature) pairs.
     temperature_schedule: tuple[tuple[int, float], ...] = (
@@ -152,6 +155,34 @@ def default_config() -> TrainConfig:
         Configuration matching paper's Appendix C.
     """
     return TrainConfig()
+
+
+def budget_config() -> TrainConfig:
+    """
+    Create the configuration for proving, on one GPU and a small budget, that the model reaches tile 2048.
+
+    Smaller models, fewer simulations, and a capped search depth than the paper: measured on an A40, the
+    paper model runs at 0.44 steps/s while this one is about 5x faster. Pair it with
+    `--stop-at-tile 2048 --max-hours H`.
+
+    Returns
+    -------
+    TrainConfig
+        Budget configuration.
+    """
+    return TrainConfig(
+        hidden_size=128,
+        num_residual_blocks=4,
+        num_simulations=50,
+        max_search_depth=10,
+        temperature_schedule=((0, 1.0), (100_000, 0.5), (200_000, 0.25), (300_000, 0.1)),
+        batch_size=512,
+        training_steps=1_000_000,
+        checkpoint_interval=5_000,
+        log_interval=500,
+        eval_interval=5_000,
+        eval_games=16,
+    )
 
 
 def small_config() -> TrainConfig:

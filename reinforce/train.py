@@ -21,10 +21,10 @@ from argparse import ArgumentParser
 import jax
 
 from reinforce.neural.network import count_parameters
-from reinforce.training.config import default_config, small_config, tiny_config
+from reinforce.training.config import budget_config, default_config, small_config, tiny_config
 from reinforce.training.trainer import Trainer
 
-CONFIGS = {'tiny': tiny_config, 'small': small_config, 'full': default_config}
+CONFIGS = {'tiny': tiny_config, 'small': small_config, 'budget': budget_config, 'full': default_config}
 
 
 def require_gpu(allow_cpu: bool) -> None:
@@ -53,11 +53,17 @@ def main() -> None:
         '--mode',
         default='small',
         choices=sorted(CONFIGS),
-        help='Configuration: tiny (debugging), small (experiments), or full (paper)',
+        help='Configuration: tiny (debugging), small (experiments), budget (reach 2048 cheaply), or full (paper)',
     )
     parser.add_argument('--steps', type=int, default=None, help='Training steps to run (default: up to the preset)')
     parser.add_argument('--run-dir', default='runs/default', help='Run directory: checkpoints, buffer, metrics')
     parser.add_argument('--allow-cpu', action='store_true', help='Allow training without a GPU (local runs)')
+    parser.add_argument(
+        '--stop-at-tile', type=int, default=None, help='Stop once an evaluation game reaches this tile (e.g. 2048)'
+    )
+    parser.add_argument(
+        '--max-hours', type=float, default=None, help='Stop and save after this many hours of training (budget guard)'
+    )
     args = parser.parse_args()
 
     require_gpu(args.allow_cpu)
@@ -70,14 +76,15 @@ def main() -> None:
 
     num_steps = args.steps if args.steps is not None else max(0, config.training_steps - trainer.step)
     print(f'Training for {num_steps} steps from step {trainer.step}; run directory: {args.run_dir}')
-    results = trainer.train(num_steps)
+    max_seconds = args.max_hours * 3600 if args.max_hours is not None else None
+    results = trainer.train(num_steps, stop_at_tile=args.stop_at_tile, max_seconds=max_seconds)
     print(
-        f'Training done: {results["steps"]} steps in {results["seconds"]:.1f}s '
+        f'Training done ({results["reason"]}): {results["steps"]} steps in {results["seconds"]:.1f}s '
         f'({results["steps_per_second"]:.2f} steps/s)'
     )
 
-    # ##>: train() already evaluated if it stopped on an evaluation step.
-    if trainer.step % config.eval_interval != 0:
+    # ##>: train() already evaluated if it stopped on an evaluation step; a time stop skips it to stay in budget.
+    if trainer.step % config.eval_interval != 0 and results['reason'] != 'time':
         trainer.evaluate()
     trainer.close()
 

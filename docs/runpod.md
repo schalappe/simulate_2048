@@ -106,6 +106,29 @@ The paper's 20M steps are out of reach on one GPU: the authors used 1 TPU for tr
 during 80 hours (Appendix G). The measured step is far slower than the arithmetic of the network suggests,
 so profile one train step and one self-play chunk before committing to a long run.
 
+## Budget run: prove the model reaches 2048
+
+Goal: show that a Stochastic MuZero model reaches tile 2048 within a fixed budget, not reproduce the paper.
+`--mode budget` uses 128 × 4 models, 50 simulations, and a search depth capped at 10.
+
+`scripts/runpod_budget_run.sh` is the pod's start command. It trains with `--stop-at-tile 2048` and a time limit,
+then stops the pod itself with `runpodctl stop pod $RUNPOD_POD_ID`, whether the target was reached, the time ran
+out, or training crashed. The time budget (`BUDGET_HOURS`) counts from the first boot, stored in
+`/workspace/start_epoch`, so a restarted pod only gets the time that is left. Create the pod with a persistent
+`/workspace` and this start command, pinned to a commit:
+
+```bash
+bash -c "curl -fsSL https://raw.githubusercontent.com/schalappe/simulate_2048/<commit>/scripts/runpod_budget_run.sh | bash"
+```
+
+Reading the result: the run first evaluates its untrained network (`[baseline]`), because search alone already
+plays better than the network. The proof is an `[eval]` line, after training, with `games reaching 2048` above 0
+while the baseline had none. Everything is in `/workspace/run.log` and `runs/budget/metrics.jsonl`.
+
+Measured on the A40 (2026-10-25) with the loop instrumented phase by phase: self-play is about 95% of the loop.
+Search depth grows as the chance distribution sharpens (mean node depth 2.3 untrained, 10.9 after 400 tiny steps),
+which made a self-play chunk 2.5 to 3 times slower than with an untrained network; `max_search_depth` caps it.
+
 ## Bring a run back and evaluate it locally
 
 Copy the run directory from the volume (for example with `runpodctl send` / `runpodctl receive`, or the S3
