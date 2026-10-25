@@ -25,7 +25,7 @@ Board (4×4) → Representation → Hidden State → Prediction → (Policy, Val
 - `envs/twentyfortyeight.py` - Gymnasium environment
 
 **`reinforce/`** - RL components (JAX-based)
-- `game/core.py` - JAX game logic with `latent_state()` and `after_state()`
+- `game/core.py` - JAX game logic (`latent_state()`, `next_state()`); tile spawns are MCTS chance nodes
 - `mcts/stochastic_mctx.py` - MCTS with chance nodes and progressive widening
 - `neural/network.py` - Three-network model interface
 - `training/` - Self-play, replay buffer, loss functions

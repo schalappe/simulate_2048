@@ -1,6 +1,5 @@
 """
-Python implementation of the 2048 game.
+Gymnasium-style 2048 environment.
 
-This module provides the `TwentyFortyEight` class, which represents the game board and logic for
-playing the 2048 game.
+Import `TwentyFortyEight` from `twentyfortyeight.envs.twentyfortyeight`; this package re-exports nothing.
 """
