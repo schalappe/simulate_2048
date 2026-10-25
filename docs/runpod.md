@@ -115,7 +115,8 @@ Goal: show that a Stochastic MuZero model reaches tile 2048 within a fixed budge
 then stops the pod itself with `runpodctl stop pod $RUNPOD_POD_ID`, whether the target was reached, the time ran
 out, or training crashed. The time budget (`BUDGET_HOURS`) counts from the first boot, stored in
 `/workspace/start_epoch`, so a restarted pod only gets the time that is left. Create the pod with a persistent
-`/workspace` and this start command, pinned to a commit:
+`/workspace`, the environment variable `SIMULATE_2048_COMMIT=<commit>` (the code version to train), and this start
+command pinned to the same commit:
 
 ```bash
 bash -c "curl -fsSL https://raw.githubusercontent.com/schalappe/simulate_2048/<commit>/scripts/runpod_budget_run.sh | bash"

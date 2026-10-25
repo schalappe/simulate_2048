@@ -14,7 +14,8 @@ fi
 unset LD_LIBRARY_PATH
 curl -LsSf https://astral.sh/uv/install.sh | sh > /dev/null 2>&1; source "$HOME/.local/bin/env"
 cd /root && [ -d simulate_2048 ] || git clone -q --branch fix/stochastic-muzero-training https://github.com/schalappe/simulate_2048.git
-cd /root/simulate_2048 && git log --oneline -1
+# ##>: SIMULATE_2048_COMMIT pins the code, so a restart mid-run never resumes with newer code.
+cd /root/simulate_2048 && git fetch -q origin && git checkout -q "${SIMULATE_2048_COMMIT:-HEAD}" && git log --oneline -1
 export UV_PROJECT_ENVIRONMENT=/root/venv
 uv sync --extra gpu -q && echo "=== SYNCED"
 uv run python -u -m reinforce.train --mode budget --run-dir /workspace/runs/budget \
