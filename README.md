@@ -6,10 +6,10 @@ MuZero-inspired reinforcement learning agent that learns to play 2048 through se
 
 ## Features
 
-- **JAX-based training**: Fast, GPU-accelerated self-play and learning
-- **Stochastic MCTS**: Handles random tile spawns with chance nodes and progressive widening
-- **Three-network architecture**: Representation, Dynamics, and Prediction networks (MuZero-style)
-- **Vectorized game engine**: High-performance 2048 implementation with batch operations
+- **Stochastic MuZero, as in the paper**: learned chance codes for tile spawns, categorical values, TD(λ) targets, and prioritized replay (Appendix C)
+- **Self-play compiled on the GPU**: games, search, and action selection run in one JAX program
+- **Resumable runs**: a run directory holds checkpoints, the replay buffer, and metrics, so a restarted GPU pod continues where it stopped
+- **Vectorized game engine**: 2048 rules in JAX, batched with `vmap`
 
 ## Quick Start
 
@@ -20,12 +20,15 @@ uv sync
 # Play manually
 uv run python manuals_control.py
 
-# Train agent
-uv run python -m reinforce.train
+# Train a tiny agent on the local CPU (smoke run)
+uv run python -m reinforce.train --mode tiny --steps 100 --run-dir runs/tiny --allow-cpu
 
-# Evaluate trained agent
-uv run python -m reinforce.evaluate --checkpoint checkpoints/latest.ckpt
+# Evaluate that run
+uv run python -m reinforce.evaluate --run-dir runs/tiny --games 10
 ```
+
+Real training (`--mode small` or `--mode full`) needs a GPU: see [docs/runpod.md](docs/runpod.md). Without a
+GPU, training stops at startup unless you pass `--allow-cpu`.
 
 ## Installation
 
@@ -43,7 +46,7 @@ uv sync
 uv sync --group dev
 ```
 
-**GPU Support (Optional)**: For faster training, install JAX with CUDA support following [JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html).
+**GPU support**: on a Linux machine with an NVIDIA GPU, install the CUDA 12 wheels with `uv sync --extra gpu`.
 
 ## Project Structure
 
@@ -51,9 +54,9 @@ uv sync --group dev
 twentyfortyeight/   # Game engine (NumPy-based)
 reinforce/          # RL components (JAX-based)
   ├── game/         # JAX game logic
-  ├── mcts/         # Stochastic MCTS implementation
-  ├── neural/       # Three-network model
-  └── training/     # Self-play, replay buffer, losses
+  ├── mcts/         # Stochastic MCTS on top of mctx
+  ├── neural/       # Six Flax models and the categorical value support
+  └── training/     # Config, self-play, replay buffer, losses, learner, trainer
 tests/              # Unit tests
 notebooks/          # Visualization and analysis
 docs/               # Architecture documentation
@@ -64,25 +67,23 @@ See [docs/project.md](docs/project.md) for detailed architecture documentation.
 ## Development
 
 ```bash
-# Run tests
-uv run pytest tests/
-
-# Lint and format
-uv run ruff check .
-uv run ruff format .
-
-# Type check
-uv run pyrefly check .
+make test     # full test suite
+make check    # ruff lint, then pyrefly type check (scoped to reinforce/, tests/, twentyfortyeight/)
+make format   # ruff format, then ruff check --fix
 ```
 
 ## Architecture
 
-The agent uses three neural networks:
-- **Representation**: Encodes 4×4 board to latent state
-- **Dynamics**: Predicts next state and reward from action
-- **Prediction**: Outputs policy and value estimates
+The agent learns six models, as in Stochastic MuZero:
+- **Representation**: encodes the board (16 tiles × 31 bits) into a latent state
+- **Prediction**: policy and value from a latent state
+- **Afterstate dynamics and prediction**: the state after a move, before the tile spawn, with its value and the
+  distribution of chance codes
+- **Dynamics**: next latent state and reward from an afterstate and a chance code
+- **Encoder**: the chance code of a real transition, learned without supervision (VQ-VAE style)
 
-MCTS explores the game tree using these networks, handling stochastic tile spawns through chance nodes. Training uses self-play data with policy and value targets from MCTS.
+MCTS plans with these models, sampling tile spawns at chance nodes. Training unrolls the models along real
+games toward search policies, TD(λ) value targets, rewards, and the encoder's chance codes.
 
 See [docs/project.md](docs/project.md) for implementation details.
 
