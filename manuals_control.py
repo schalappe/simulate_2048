@@ -4,8 +4,8 @@ from typing import Any
 
 import numpy as np
 
-from twentyfortyeight.envs import TwentyFortyEight
-from twentyfortyeight.utils import WindowBoard
+from twentyfortyeight.envs.twentyfortyeight import TwentyFortyEight
+from twentyfortyeight.utils.windows import WindowBoard
 
 
 def redraw(window: WindowBoard, board: np.ndarray):
