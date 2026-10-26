@@ -124,7 +124,24 @@ bash -c "curl -fsSL https://raw.githubusercontent.com/schalappe/simulate_2048/<c
 
 Reading the result: the run first evaluates its untrained network (`[baseline]`), because search alone already
 plays better than the network. The proof is an `[eval]` line, after training, with `games reaching 2048` above 0
-while the baseline had none. Everything is in `/workspace/run.log` and `runs/budget/metrics.jsonl`.
+while the baseline had none. Everything is in `/workspace/run.log` and `runs/budget/metrics.jsonl`. Once the pod
+stops, its container log is no longer readable through the RunPod API; read `/workspace/run.log` instead, for
+example by starting the pod with a command that only prints the file.
+
+### Result (2026-10-25)
+
+One A40, Secure Cloud, EU-SE-1, commit `edba2f6`. Training stopped on the target tile at step 75,000, after
+24,406 s (6.8 h, 3.07 steps/s), for about $4 of GPU at $0.59/h.
+
+| Evaluation (16 greedy games) | Mean score | Best tile | Games reaching 2048 | Mean length |
+|---|---|---|---|---|
+| Baseline (untrained network + search) | 2,616 | 512 | 0/16 | 221 |
+| Step 20,000 | 5,712 | 512 | 0/16 | 416 |
+| Step 40,000 | 7,714 | 1024 | 0/16 | 520 |
+| Step 65,000 | 10,624 | 1024 | 0/16 | 675 |
+| Step 75,000 | 13,446 | 2048 | 2/16 | 804 |
+
+The trained model was not kept: the pod and its volume were deleted after the run.
 
 Measured on the A40 (2026-10-25) with the loop instrumented phase by phase: self-play is about 95% of the loop.
 Search depth grows as the chance distribution sharpens (mean node depth 2.3 untrained, 10.9 after 400 tiny steps),

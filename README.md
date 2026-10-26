@@ -27,8 +27,14 @@ uv run python -m reinforce.train --mode tiny --steps 100 --run-dir runs/tiny --a
 uv run python -m reinforce.evaluate --run-dir runs/tiny --games 10
 ```
 
-Real training (`--mode small` or `--mode full`) needs a GPU: see [docs/runpod.md](docs/runpod.md). Without a
-GPU, training stops at startup unless you pass `--allow-cpu`.
+Real training (`--mode small`, `--mode budget`, or `--mode full`) needs a GPU: see [docs/runpod.md](docs/runpod.md).
+Without a GPU, training stops at startup unless you pass `--allow-cpu`.
+
+## Results
+
+`--mode budget` reached tile 2048 on one NVIDIA A40 in 6.8 hours (75,000 training steps, about $4): 2 of 16
+greedy evaluation games reached 2048, with a mean score of 13,446. The untrained network with the same search
+scored 2,616 and never passed 512. Details in [docs/runpod.md](docs/runpod.md#result-2026-10-25).
 
 ## Installation
 

@@ -34,8 +34,8 @@ The paper is `docs/4498_planning_in_stochastic_environ.pdf`; "paper C" means its
       a warning and a paid GPU pod would sit idle. `--allow-cpu` opts in for local runs; the Makefile tiny
       and small targets, AGENTS.md, and the verify skill pass it. Evidence: without the flag the CLI prints
       the error and exits 1; with it the tiny run completes.
-- [ ] Prove `jax.devices()` lists the GPU on a RunPod pod, and watch the startup line `JAX backend: gpu`
-      in every pod log (step 4).
+- [x] Prove `jax.devices()` lists the GPU on a RunPod pod, and watch the startup line `JAX backend: gpu`
+      in every pod log (step 4). Evidence: the A40 smoke test and the budget run (sections 4 and 8).
 
 ## 2. Model, targets, and replay buffer (paper C)
 
@@ -90,7 +90,10 @@ The paper is `docs/4498_planning_in_stochastic_environ.pdf`; "paper C" means its
 - [x] `--mode budget` preset, `--stop-at-tile`, `--max-hours`, an untrained baseline evaluation, and
       `scripts/runpod_budget_run.sh` (time budget kept across restarts, pod stops itself). Evidence: tests for
       both stops and the baseline record; `runpodctl stop pod $RUNPOD_POD_ID` stopped a test pod (EXITED).
-- [ ] Run it on one A40 and report: baseline versus best evaluation, steps, hours, and cost.
+- [x] Run it on one A40 and report: baseline versus best evaluation, steps, hours, and cost.
+      Evidence (pod log, 2026-10-25, commit edba2f6): baseline mean score 2616, best tile 512, 0/16 at 2048;
+      step 75,000 mean score 13,446, best tile 2048, **2/16 games reached 2048**, mean length 804 (baseline 221).
+      Training stopped on the target tile after 24,406 s (6.8 h, 3.07 steps/s), about $4.01 of GPU at $0.59/h.
 
 ## 5. Evaluation
 
@@ -121,6 +124,7 @@ The paper is `docs/4498_planning_in_stochastic_environ.pdf`; "paper C" means its
       evaluation step.
 - [x] Chance loss target keeps its straight-through gradient and the 0.5 gradient scale sits on the state
       carried to the next unroll step, as in the paper's pseudocode (Appendix H) and MuZero.
-- [ ] Untrained value heads read about 57,000 (uniform logits put the expected bin at 300 of 600), and early
+- [x] Untrained value heads read about 57,000 (uniform logits put the expected bin at 300 of 600), and early
       TD targets bootstrap from these values. Watch the first RunPod run; if early learning stalls, initialize
-      the value and reward heads toward bin 0.
+      the value and reward heads toward bin 0. Not needed: the budget run doubled the baseline score by step
+      20,000 and reached 2048 at step 75,000.
