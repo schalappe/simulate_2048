@@ -1,19 +1,18 @@
 """
-Unified network wrapper for Stochastic MuZero models.
+Stochastic MuZero network container: parameters and apply functions for the six models.
 
-This module provides a high-level interface for working with all six Stochastic MuZero networks,
-handling initialization, parameter management, and inference.
+`make_apply_fns` is cached per architecture, so every caller gets the same function objects and
+jitted code that takes them as static arguments compiles once.
 """
 
-from typing import NamedTuple
+from functools import cache
+from typing import Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
 
-from reinforce.mcts.stochastic_mctx import NetworkApplyFns, NetworkParams
+from reinforce.game.core import OBSERVATION_SIZE
 from reinforce.neural.models import (
-    HIDDEN_UNITS,
-    NUM_RESIDUAL_BLOCKS,
     AfterstateDynamics,
     AfterstatePrediction,
     Dynamics,
@@ -26,309 +25,161 @@ from reinforce.neural.models import (
 Array = jax.Array
 PRNGKey = jax.Array
 
-# ##>: Default configuration.
-NUM_ACTIONS = 4
-DEFAULT_CODEBOOK_SIZE = 32
 
-
-class StochasticMuZeroNetwork(NamedTuple):
+class NetworkParams(NamedTuple):
     """
-    Container for all Stochastic MuZero network components.
+    Parameters of the six models.
+
+    Every trainable parameter must live here: the optimizer only updates this tree.
+    """
+
+    representation: Any
+    prediction: Any
+    afterstate_dynamics: Any
+    afterstate_prediction: Any
+    dynamics: Any
+    encoder: Any
+
+
+class NetworkApplyFns(NamedTuple):
+    """
+    Apply functions of the six models. Each takes the model parameters first.
 
     Attributes
     ----------
-    params : NetworkParams
-        Parameters for all six models.
-    apply_fns : NetworkApplyFns
-        Functions to apply each model.
-    config : dict
-        Network configuration (hidden_size, codebook_size, etc.).
+    representation : (params, observation) -> hidden_state
+    prediction : (params, hidden_state) -> (policy_logits, value_logits)
+    afterstate_dynamics : (params, hidden_state, action_onehot) -> afterstate
+    afterstate_prediction : (params, afterstate) -> (q_logits, chance_logits)
+    dynamics : (params, afterstate, chance_code) -> (next_hidden_state, reward_logits)
+    encoder : (params, observation_pair) -> chance_logits
     """
 
-    params: NetworkParams
-    apply_fns: NetworkApplyFns
-    config: dict
+    representation: Any
+    prediction: Any
+    afterstate_dynamics: Any
+    afterstate_prediction: Any
+    dynamics: Any
+    encoder: Any
 
 
-def create_network(
+class _Models(NamedTuple):
+    """Flax module instances for one architecture."""
+
+    representation: Representation
+    prediction: Prediction
+    afterstate_dynamics: AfterstateDynamics
+    afterstate_prediction: AfterstatePrediction
+    dynamics: Dynamics
+    encoder: Encoder
+
+
+@cache
+def _make_models(hidden_size: int, num_blocks: int, num_actions: int, codebook_size: int) -> _Models:
+    """Build the Flax modules for one architecture."""
+    return _Models(
+        representation=Representation(hidden_size=hidden_size, num_blocks=num_blocks),
+        prediction=Prediction(action_size=num_actions, hidden_size=hidden_size, num_blocks=num_blocks),
+        afterstate_dynamics=AfterstateDynamics(hidden_size=hidden_size, action_size=num_actions, num_blocks=num_blocks),
+        afterstate_prediction=AfterstatePrediction(
+            codebook_size=codebook_size, hidden_size=hidden_size, num_blocks=num_blocks
+        ),
+        dynamics=Dynamics(hidden_size=hidden_size, codebook_size=codebook_size, num_blocks=num_blocks),
+        encoder=Encoder(codebook_size=codebook_size, hidden_size=hidden_size, num_blocks=num_blocks),
+    )
+
+
+@cache
+def make_apply_fns(hidden_size: int, num_blocks: int, num_actions: int, codebook_size: int) -> NetworkApplyFns:
+    """
+    Get the apply functions for one architecture.
+
+    Parameters
+    ----------
+    hidden_size : int
+        Size of hidden states and layers.
+    num_blocks : int
+        Residual blocks per model.
+    num_actions : int
+        Number of actions.
+    codebook_size : int
+        Number of chance codes.
+
+    Returns
+    -------
+    NetworkApplyFns
+        The same object for the same architecture, safe to pass as a static jit argument.
+    """
+    models = _make_models(hidden_size, num_blocks, num_actions, codebook_size)
+    return NetworkApplyFns(
+        representation=models.representation.apply,
+        prediction=models.prediction.apply,
+        afterstate_dynamics=models.afterstate_dynamics.apply,
+        afterstate_prediction=models.afterstate_prediction.apply,
+        dynamics=models.dynamics.apply,
+        encoder=models.encoder.apply,
+    )
+
+
+def init_params(
     key: PRNGKey,
-    observation_shape: tuple[int, ...] = (16,),
-    hidden_size: int = HIDDEN_UNITS,
-    num_blocks: int = NUM_RESIDUAL_BLOCKS,
-    num_actions: int = NUM_ACTIONS,
-    codebook_size: int = DEFAULT_CODEBOOK_SIZE,
-) -> StochasticMuZeroNetwork:
+    hidden_size: int,
+    num_blocks: int,
+    num_actions: int,
+    codebook_size: int,
+) -> NetworkParams:
     """
-    Create and initialize a complete Stochastic MuZero network.
+    Initialize the parameters of the six models.
 
     Parameters
     ----------
     key : PRNGKey
-        JAX random key for parameter initialization.
-    observation_shape : tuple[int, ...]
-        Shape of the input observation.
+        Random key for initialization.
     hidden_size : int
-        Size of hidden state representations.
+        Size of hidden states and layers.
     num_blocks : int
-        Number of residual blocks in each network.
+        Residual blocks per model.
     num_actions : int
-        Number of possible actions.
+        Number of actions.
     codebook_size : int
-        Number of possible chance codes.
+        Number of chance codes.
 
     Returns
     -------
-    StochasticMuZeroNetwork
-        Initialized network with parameters and apply functions.
+    NetworkParams
+        Fresh parameters.
     """
-    # ##>: Split key for each model.
+    models = _make_models(hidden_size, num_blocks, num_actions, codebook_size)
     keys = jax.random.split(key, 6)
 
-    # ##>: Create model instances.
-    representation = Representation(hidden_size=hidden_size, num_blocks=num_blocks)
-    prediction = Prediction(action_size=num_actions, hidden_size=hidden_size, num_blocks=num_blocks)
-    afterstate_dynamics = AfterstateDynamics(hidden_size=hidden_size, action_size=num_actions, num_blocks=num_blocks)
-    afterstate_prediction = AfterstatePrediction(
-        codebook_size=codebook_size, hidden_size=hidden_size, num_blocks=num_blocks
-    )
-    dynamics = Dynamics(hidden_size=hidden_size, codebook_size=codebook_size, num_blocks=num_blocks)
-    encoder = Encoder(codebook_size=codebook_size, hidden_size=hidden_size, num_blocks=num_blocks)
-
-    # ##>: Create dummy inputs for initialization.
-    dummy_obs = jnp.zeros((1, *observation_shape))
+    dummy_obs = jnp.zeros((1, OBSERVATION_SIZE))
+    dummy_pair = jnp.zeros((1, 2 * OBSERVATION_SIZE))
     dummy_state = jnp.zeros((1, hidden_size))
     dummy_action = jnp.zeros((1, num_actions))
     dummy_chance = jnp.zeros((1, codebook_size))
 
-    # ##>: Initialize parameters.
-    representation_params = representation.init(keys[0], dummy_obs)
-    prediction_params = prediction.init(keys[1], dummy_state)
-    afterstate_dynamics_params = afterstate_dynamics.init(keys[2], dummy_state, dummy_action)
-    afterstate_prediction_params = afterstate_prediction.init(keys[3], dummy_state)
-    dynamics_params = dynamics.init(keys[4], dummy_state, dummy_chance)
-    encoder_params = encoder.init(keys[5], dummy_obs)
-
-    # ##>: Package parameters.
-    params = NetworkParams(
-        representation=representation_params,
-        prediction=prediction_params,
-        afterstate_dynamics=afterstate_dynamics_params,
-        afterstate_prediction=afterstate_prediction_params,
-        dynamics=dynamics_params,
-        encoder=encoder_params,
+    return NetworkParams(
+        representation=models.representation.init(keys[0], dummy_obs),
+        prediction=models.prediction.init(keys[1], dummy_state),
+        afterstate_dynamics=models.afterstate_dynamics.init(keys[2], dummy_state, dummy_action),
+        afterstate_prediction=models.afterstate_prediction.init(keys[3], dummy_state),
+        dynamics=models.dynamics.init(keys[4], dummy_state, dummy_chance),
+        encoder=models.encoder.init(keys[5], dummy_pair),
     )
 
-    # ##>: Create apply functions.
-    apply_fns = NetworkApplyFns(
-        representation=lambda p, x: representation.apply(p, x),
-        prediction=lambda p, x: prediction.apply(p, x),
-        afterstate_dynamics=lambda p, s, a: afterstate_dynamics.apply(p, s, a),
-        afterstate_prediction=lambda p, x: afterstate_prediction.apply(p, x),
-        dynamics=lambda p, s, c: dynamics.apply(p, s, c),
-        encoder=lambda p, x: encoder.apply(p, x),
-    )
 
-    # ##>: Configuration dict.
-    config = {
-        'observation_shape': observation_shape,
-        'hidden_size': hidden_size,
-        'num_blocks': num_blocks,
-        'num_actions': num_actions,
-        'codebook_size': codebook_size,
-    }
-
-    return StochasticMuZeroNetwork(params=params, apply_fns=apply_fns, config=config)
-
-
-@jax.jit
-def representation_forward(network: StochasticMuZeroNetwork, observation: Array) -> Array:
+def count_parameters(params: NetworkParams) -> int:
     """
-    Encode observation to hidden state.
+    Count trainable parameters.
 
     Parameters
     ----------
-    network : StochasticMuZeroNetwork
-        The network wrapper.
-    observation : Array
-        Input observation.
-
-    Returns
-    -------
-    Array
-        Hidden state representation.
-    """
-    return network.apply_fns.representation(network.params.representation, observation)
-
-
-@jax.jit
-def prediction_forward(network: StochasticMuZeroNetwork, state: Array) -> tuple[Array, Array]:
-    """
-    Predict policy and value from hidden state.
-
-    Parameters
-    ----------
-    network : StochasticMuZeroNetwork
-        The network wrapper.
-    state : Array
-        Hidden state.
-
-    Returns
-    -------
-    tuple[Array, Array]
-        (policy_logits, value)
-    """
-    return network.apply_fns.prediction(network.params.prediction, state)
-
-
-@jax.jit
-def afterstate_dynamics_forward(network: StochasticMuZeroNetwork, state: Array, action: Array) -> Array:
-    """
-    Predict afterstate from state and action.
-
-    Parameters
-    ----------
-    network : StochasticMuZeroNetwork
-        The network wrapper.
-    state : Array
-        Hidden state.
-    action : Array
-        One-hot encoded action.
-
-    Returns
-    -------
-    Array
-        Afterstate.
-    """
-    return network.apply_fns.afterstate_dynamics(network.params.afterstate_dynamics, state, action)
-
-
-@jax.jit
-def afterstate_prediction_forward(network: StochasticMuZeroNetwork, afterstate: Array) -> tuple[Array, Array]:
-    """
-    Predict Q-value and chance distribution from afterstate.
-
-    Parameters
-    ----------
-    network : StochasticMuZeroNetwork
-        The network wrapper.
-    afterstate : Array
-        Afterstate.
-
-    Returns
-    -------
-    tuple[Array, Array]
-        (q_value, chance_logits)
-    """
-    return network.apply_fns.afterstate_prediction(network.params.afterstate_prediction, afterstate)
-
-
-@jax.jit
-def dynamics_forward(network: StochasticMuZeroNetwork, afterstate: Array, chance_code: Array) -> tuple[Array, Array]:
-    """
-    Predict next state and reward from afterstate and chance code.
-
-    Parameters
-    ----------
-    network : StochasticMuZeroNetwork
-        The network wrapper.
-    afterstate : Array
-        Afterstate.
-    chance_code : Array
-        One-hot encoded chance outcome.
-
-    Returns
-    -------
-    tuple[Array, Array]
-        (next_state, reward)
-    """
-    return network.apply_fns.dynamics(network.params.dynamics, afterstate, chance_code)
-
-
-@jax.jit
-def encoder_forward(network: StochasticMuZeroNetwork, observation: Array) -> Array:
-    """
-    Encode observation to chance code.
-
-    Parameters
-    ----------
-    network : StochasticMuZeroNetwork
-        The network wrapper.
-    observation : Array
-        Input observation.
-
-    Returns
-    -------
-    Array
-        One-hot chance code.
-    """
-    return network.apply_fns.encoder(network.params.encoder, observation)
-
-
-def get_all_params(network: StochasticMuZeroNetwork) -> dict:
-    """
-    Get all network parameters as a flat dictionary.
-
-    Parameters
-    ----------
-    network : StochasticMuZeroNetwork
-        The network wrapper.
-
-    Returns
-    -------
-    dict
-        Dictionary containing all model parameters.
-    """
-    return {
-        'representation': network.params.representation,
-        'prediction': network.params.prediction,
-        'afterstate_dynamics': network.params.afterstate_dynamics,
-        'afterstate_prediction': network.params.afterstate_prediction,
-        'dynamics': network.params.dynamics,
-        'encoder': network.params.encoder,
-    }
-
-
-def count_parameters(network: StochasticMuZeroNetwork) -> int:
-    """
-    Count total number of trainable parameters.
-
-    Parameters
-    ----------
-    network : StochasticMuZeroNetwork
-        The network wrapper.
+    params : NetworkParams
+        Network parameters.
 
     Returns
     -------
     int
-        Total parameter count.
+        Total number of scalars.
     """
-    all_params = get_all_params(network)
-
-    def count_leaves(pytree):
-        leaves = jax.tree.leaves(pytree)
-        return sum(leaf.size for leaf in leaves)
-
-    return sum(count_leaves(params) for params in all_params.values())
-
-
-def update_params(network: StochasticMuZeroNetwork, new_params: NetworkParams) -> StochasticMuZeroNetwork:
-    """
-    Create a new network with updated parameters.
-
-    Parameters
-    ----------
-    network : StochasticMuZeroNetwork
-        Original network.
-    new_params : NetworkParams
-        New parameters.
-
-    Returns
-    -------
-    StochasticMuZeroNetwork
-        Network with updated parameters.
-    """
-    return StochasticMuZeroNetwork(
-        params=new_params,
-        apply_fns=network.apply_fns,
-        config=network.config,
-    )
+    return sum(leaf.size for leaf in jax.tree.leaves(params))

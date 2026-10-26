@@ -11,28 +11,27 @@ license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "numpy>=2.0,<3.0",
-    "tqdm>=4.66.5",
-    # JAX ecosystem for GPU-accelerated MCTS and training
-    "jax>=0.4.30",
-    "jaxlib>=0.4.26",
-    # "jax-metal>=0.1.0; sys_platform == 'darwin'",
-    "flax>=0.8.0",
-    "optax>=0.2.0",
-    "mctx>=0.0.5",
-    "chex>=0.1.86",
-    "orbax-checkpoint>=0.5.0",
+    "numpy>=2.5",
+    # JAX ecosystem for MCTS and training. CPU wheels by default; see the `gpu` extra.
+    "jax>=0.12",
+    "flax>=0.12.10",
+    "optax>=0.2.8",
+    "mctx>=0.0.71",
+    "orbax-checkpoint>=0.12.8",
 ]
+
+[project.optional-dependencies]
+# CUDA 12 wheels for RunPod GPU pods: `uv sync --extra gpu`.
+gpu = ["jax[cuda12]>=0.12; sys_platform == 'linux'"]
 
 [dependency-groups]
 dev = [
-    "ruff>=0.8.0",
-    "pyrefly>=0.16.0",
-    "pytest>=8.0",
-    "vulture>=2.14",
-    # Optional visualization
-    "matplotlib>=3.8",
-    "jupyterlab>=4.2.4",
+    "ruff>=0.17",
+    "pyrefly>=1.4",
+    "pytest>=9.1",
+    # Manual play window and notebooks.
+    "matplotlib>=3.11",
+    "jupyterlab>=4.6",
 ]
 
 [tool.ruff]
