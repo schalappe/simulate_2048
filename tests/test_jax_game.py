@@ -8,24 +8,18 @@ import jax
 import jax.numpy as jnp
 
 from reinforce.game.core import (
-    count_empty,
+    OBSERVATION_SIZE,
+    TILE_BITS,
+    board_to_exponents,
+    create_initial_board,
     encode_observation,
     fill_cells,
     is_done,
     latent_state,
     legal_actions_mask,
-    max_tile,
     merge_row,
     next_state,
     slide_and_merge,
-)
-from reinforce.game.env import (
-    GameState,
-    batched_reset,
-    get_legal_actions,
-    get_observation,
-    reset,
-    step,
 )
 
 
@@ -225,96 +219,46 @@ class TestNextState:
         assert reward == 4
 
 
-class TestEnvironment:
-    """Tests for environment wrapper."""
+class TestInitialBoard:
+    """Tests for create_initial_board."""
 
-    def test_reset(self):
-        """Reset should create valid initial state."""
-        key = jax.random.PRNGKey(42)
-        state = reset(key)
+    def test_two_tiles(self):
+        """A new board holds exactly two tiles of value 2 or 4."""
+        board = create_initial_board(jax.random.PRNGKey(42))
 
-        assert isinstance(state, GameState)
-        assert state.board.shape == (4, 4)
-        assert jnp.sum(state.board != 0) == 2  # Two initial tiles
-        assert state.step_count == 0
-        assert not state.done
-        assert state.total_reward == 0
-
-    def test_step(self):
-        """Step should update state correctly."""
-        key = jax.random.PRNGKey(42)
-        state = reset(key)
-
-        key, step_key = jax.random.split(key)
-        new_state, reward, done, info = step(state, 0, step_key)
-
-        assert new_state.step_count == 1
-        assert 'max_tile' in info
-
-    def test_get_observation(self):
-        """Get observation should return flattened encoded board."""
-        key = jax.random.PRNGKey(42)
-        state = reset(key)
-        obs = get_observation(state)
-
-        assert obs.shape == (16,)
-        assert obs.dtype == jnp.float32
-
-    def test_get_legal_actions(self):
-        """Get legal actions should return valid mask."""
-        key = jax.random.PRNGKey(42)
-        state = reset(key)
-        mask = get_legal_actions(state)
-
-        assert mask.shape == (4,)
-        assert mask.dtype == jnp.bool_
+        assert board.shape == (4, 4)
+        assert jnp.sum(board != 0) == 2
+        assert jnp.all(jnp.isin(board[board != 0], jnp.array([2, 4])))
 
 
 class TestEncodeObservation:
-    """Tests for observation encoding."""
+    """Tests for the binary observation (paper, Appendix C)."""
 
     def test_empty_board(self):
         """Empty board should encode to zeros."""
         board = jnp.zeros((4, 4), dtype=jnp.int32)
         obs = encode_observation(board)
-        assert jnp.allclose(obs, jnp.zeros(16))
+        assert obs.shape == (OBSERVATION_SIZE,)
+        assert jnp.allclose(obs, 0.0)
 
     def test_known_values(self):
-        """Test encoding of known tile values."""
-        board = jnp.array([[2, 4, 8, 16], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], dtype=jnp.int32)
-        obs = encode_observation(board)
+        """Tile 2^k sets bit k of its cell and nothing else."""
+        board = jnp.array([[2, 4, 8, 2048], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], dtype=jnp.int32)
+        bits = encode_observation(board).reshape(16, TILE_BITS)
 
-        # ##>: log2(2)/16 = 1/16, log2(4)/16 = 2/16, etc.
-        assert jnp.isclose(obs[0], 1 / 16)
-        assert jnp.isclose(obs[1], 2 / 16)
-        assert jnp.isclose(obs[2], 3 / 16)
-        assert jnp.isclose(obs[3], 4 / 16)
+        for cell, exponent in enumerate([1, 2, 3, 11]):
+            assert bits[cell, exponent] == 1.0
+            assert jnp.sum(bits[cell]) == 1.0
+        assert jnp.sum(bits[4:]) == 0.0
 
+    def test_exponents_round_trip(self):
+        """Stored exponents give back the board values."""
+        board = jnp.array([[0, 2, 4, 8], [16, 32, 64, 128], [256, 512, 1024, 2048], [4096, 8192, 16384, 32768]])
+        exponents = board_to_exponents(board)
 
-class TestMaxTile:
-    """Tests for max_tile function."""
-
-    def test_max_tile(self):
-        """Should return maximum tile value."""
-        board = jnp.array(
-            [[2, 4, 8, 16], [32, 64, 128, 256], [0, 0, 0, 0], [0, 0, 0, 2048]],
-            dtype=jnp.int32,
-        )
-        assert max_tile(board) == 2048
-
-
-class TestCountEmpty:
-    """Tests for count_empty function."""
-
-    def test_empty_board(self):
-        """Empty board should have 16 empty cells."""
-        board = jnp.zeros((4, 4), dtype=jnp.int32)
-        assert count_empty(board) == 16
-
-    def test_partial_board(self):
-        """Partial board should count correctly."""
-        board = jnp.array([[2, 0, 0, 0], [0, 4, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], dtype=jnp.int32)
-        assert count_empty(board) == 14
+        assert exponents.dtype == jnp.uint8
+        restored = jnp.where(exponents > 0, 2 ** exponents.astype(jnp.int32), 0).reshape(4, 4)
+        assert jnp.array_equal(restored, board)
 
 
 class TestJITCompilation:
@@ -364,11 +308,10 @@ class TestVectorization:
         assert jnp.array_equal(results[1], jnp.array([8, 0, 0, 0]))
         assert jnp.array_equal(results[2], jnp.array([2, 4, 2, 4]))
 
-    def test_batched_reset(self):
-        """reset should work with vmap."""
+    def test_batched_initial_board(self):
+        """create_initial_board should work with vmap."""
         keys = jax.random.split(jax.random.PRNGKey(42), 10)
-        states = batched_reset(keys)
+        boards = jax.vmap(create_initial_board)(keys)
 
-        assert states.board.shape == (10, 4, 4)
-        assert states.step_count.shape == (10,)
-        assert states.done.shape == (10,)
+        assert boards.shape == (10, 4, 4)
+        assert jnp.all(jnp.sum(boards != 0, axis=(1, 2)) == 2)

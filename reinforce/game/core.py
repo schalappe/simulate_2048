@@ -10,8 +10,6 @@ Key design principles:
 3. Explicit random state management via PRNGKey
 """
 
-from functools import partial
-
 import jax
 import jax.numpy as jnp
 from jax import lax
@@ -27,6 +25,10 @@ TILE_VALUES = jnp.array([2, 4])
 # ##>: Board dimensions.
 BOARD_SIZE = 4
 NUM_ACTIONS = 4
+
+# ##>: Binary observation from the paper (Appendix C): 31 bits per tile, 16 tiles.
+TILE_BITS = 31
+OBSERVATION_SIZE = BOARD_SIZE * BOARD_SIZE * TILE_BITS
 
 
 def _compact_row(row: Array) -> Array:
@@ -344,117 +346,60 @@ def create_initial_board(key: PRNGKey) -> Array:
 
 
 @jax.jit
+def board_to_exponents(board: Array) -> Array:
+    """
+    Compress a board to tile exponents for storage.
+
+    Parameters
+    ----------
+    board : Array
+        Game boards with tile values, shape (..., 4, 4).
+
+    Returns
+    -------
+    Array
+        Flattened exponents as uint8, shape (..., 16). Empty cells are 0 and tile 2^k is k.
+    """
+    exponents = jnp.where(board > 0, jnp.log2(jnp.maximum(board, 1).astype(jnp.float32)), 0.0)
+    flat = jnp.round(exponents).astype(jnp.uint8)
+    return flat.reshape(*board.shape[:-2], BOARD_SIZE * BOARD_SIZE)
+
+
+@jax.jit
+def encode_exponents(exponents: Array) -> Array:
+    """
+    Encode stored tile exponents as the binary network input of the paper (Appendix C).
+
+    Each tile becomes 31 bits where bit k is set for tile 2^k. Empty cells are all zeros.
+
+    Parameters
+    ----------
+    exponents : Array
+        Tile exponents, shape (..., 16).
+
+    Returns
+    -------
+    Array
+        Observation as float32, shape (..., 496).
+    """
+    exponents = exponents.astype(jnp.int32)
+    bits = jax.nn.one_hot(exponents, TILE_BITS, dtype=jnp.float32) * (exponents > 0)[..., None]
+    return bits.reshape(*exponents.shape[:-1], OBSERVATION_SIZE)
+
+
+@jax.jit
 def encode_observation(board: Array) -> Array:
     """
-    Encode a board state for neural network input.
-
-    Uses log2 encoding: each tile value is converted to log2(value), normalized
-    to approximately [0, 1] range.
+    Encode boards for neural network input.
 
     Parameters
     ----------
     board : Array
-        The game board, shape (4, 4).
+        Game boards with tile values, shape (..., 4, 4).
 
     Returns
     -------
     Array
-        Flattened encoded observation, shape (16,).
-
-    Notes
-    -----
-    - Empty cells (0) encode to 0
-    - Tile value 2 encodes to 1/16 = 0.0625
-    - Tile value 2048 encodes to 11/16 = 0.6875
-    - Max theoretical tile 2^16 encodes to 1.0
+        Observation as float32, shape (..., 496). See `encode_exponents`.
     """
-    # ##>: Handle zeros: log2(0) is undefined, so mask them.
-    log_board = jnp.where(board > 0, jnp.log2(board.astype(jnp.float32)), 0.0)
-
-    # ##>: Normalize by theoretical max (2^16 = 65536, log2 = 16).
-    normalized = log_board / 16.0
-
-    return normalized.flatten()
-
-
-@partial(jax.jit, static_argnums=(1,))
-def sample_action(key: PRNGKey, temperature: float, policy: Array, legal_mask: Array) -> Array:
-    """
-    Sample an action from a policy distribution.
-
-    Parameters
-    ----------
-    key : PRNGKey
-        JAX random key.
-    temperature : float
-        Temperature for sampling (0 = greedy, 1 = proportional).
-    policy : Array
-        Policy probabilities, shape (4,).
-    legal_mask : Array
-        Boolean mask of legal actions, shape (4,).
-
-    Returns
-    -------
-    Array
-        Selected action (scalar int).
-    """
-    # ##>: Mask illegal actions.
-    masked_policy = jnp.where(legal_mask, policy, 0.0)
-
-    # ##>: Renormalize, falling back to uniform over legal actions if sum is near zero.
-    policy_sum = jnp.sum(masked_policy)
-    num_legal = jnp.sum(legal_mask.astype(jnp.float32))
-    uniform_policy = legal_mask.astype(jnp.float32) / jnp.maximum(num_legal, 1.0)
-    masked_policy = jnp.where(policy_sum < 1e-8, uniform_policy, masked_policy / policy_sum)
-
-    # ##>: Apply temperature.
-    def apply_temperature(p: Array) -> Array:
-        log_p = jnp.log(p + 1e-8)
-        scaled = log_p / temperature
-        return jax.nn.softmax(scaled)
-
-    def greedy_select(p: Array) -> Array:
-        return jax.nn.one_hot(jnp.argmax(p), 4)
-
-    # ##>: Use greedy if temperature is very low.
-    is_greedy = temperature < 0.01
-    final_policy = lax.cond(is_greedy, greedy_select, apply_temperature, masked_policy)
-
-    # ##>: Sample from distribution.
-    return jax.random.choice(key, 4, p=final_policy)
-
-
-@jax.jit
-def max_tile(board: Array) -> Array:
-    """
-    Get the maximum tile value on the board.
-
-    Parameters
-    ----------
-    board : Array
-        The game board, shape (4, 4).
-
-    Returns
-    -------
-    Array
-        Maximum tile value (scalar).
-    """
-    return jnp.max(board)
-
-
-@jax.jit
-def count_empty(board: Array) -> Array:
-    """
-    Count the number of empty cells on the board.
-
-    Parameters
-    ----------
-    board : Array
-        The game board, shape (4, 4).
-
-    Returns
-    -------
-    Array
-        Number of empty cells (scalar).
-    """
-    return jnp.sum(board == 0)
+    return encode_exponents(board_to_exponents(board))

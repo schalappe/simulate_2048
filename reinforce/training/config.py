@@ -5,7 +5,9 @@ Hyperparameters follow the paper "Planning in Stochastic Environments with a Lea
 (ICLR 2022), specifically Appendix C for 2048 experiments.
 """
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -20,7 +22,6 @@ class TrainConfig:
     """
 
     # ##>: Environment parameters.
-    observation_shape: tuple[int, ...] = (16,)  # Flattened 4x4 board
     action_size: int = 4  # left, up, right, down
     codebook_size: int = 32  # Number of chance codes (paper default)
 
@@ -35,20 +36,28 @@ class TrainConfig:
     dirichlet_fraction: float = 0.1  # Noise fraction at root
     pb_c_init: float = 1.25  # PUCT exploration constant
     pb_c_base: float = 19652.0  # PUCT base
+    # ##>: Cap on search depth; None means up to num_simulations (mctx default). A trained chance distribution
+    # ##>: concentrates on few codes, paths grow, and self-play slows down with depth (measured 3x on an A40).
+    max_search_depth: int | None = None
 
-    # ##>: Temperature schedule for action selection.
-    # ##>: Format: [(step, temperature), ...]
+    # ##>: Temperature schedule for action selection, as (training_step, temperature) pairs.
     temperature_schedule: tuple[tuple[int, float], ...] = (
-        (0, 1.0),  # Steps 0-100k: temperature 1.0
-        (100_000, 0.5),  # Steps 100k-200k: temperature 0.5
-        (200_000, 0.1),  # Steps 200k-300k: temperature 0.1
-        (300_000, 0.0),  # Steps 300k+: greedy
+        (0, 1.0),
+        (100_000, 0.5),
+        (200_000, 0.1),
+        (300_000, 0.0),  # Greedy afterwards
     )
 
-    # ##>: Replay buffer parameters.
-    replay_buffer_size: int = 125_000  # Max trajectories in buffer
-    min_buffer_size: int = 1000  # Minimum before training starts
-    max_trajectory_length: int = 200  # Max steps per game
+    # ##>: Self-play. Games run to their end; `max_game_moves` only guards against runaway games.
+    num_parallel_games: int = 256  # Games played side by side on the device
+    moves_per_generation: int = 50  # Moves per game in one compiled self-play chunk
+    generation_interval: int = 10  # Training steps between self-play chunks
+    max_game_moves: int = 100_000  # Safety limit; a game stopped here is truncated, not terminal
+
+    # ##>: Replay buffer (paper: 125k sequences of up to 200 steps).
+    replay_buffer_size: int = 125_000  # Max sequences in buffer
+    sequence_length: int = 200  # Steps per stored sequence
+    min_buffer_size: int = 1000  # Sequences required before training starts
 
     # ##>: Training parameters.
     batch_size: int = 1024  # Training batch size
@@ -56,39 +65,28 @@ class TrainConfig:
     td_steps: int = 10  # n-step returns
     td_lambda: float = 0.5  # TD(λ) parameter
 
-    # ##>: Prioritized replay (paper: α=1, β=1).
+    # ##>: Prioritized replay (paper: priority |search value - value target|, α=1, β=1).
     priority_alpha: float = 1.0  # Priority exponent
     priority_beta: float = 1.0  # Importance sampling exponent
 
     # ##>: Optimization parameters.
     learning_rate: float = 3e-4  # Adam learning rate
-    weight_decay: float = 0.0  # L2 regularization
     max_grad_norm: float = 5.0  # Gradient clipping
     warmup_steps: int = 1000  # Learning rate warmup
 
     # ##>: Training schedule.
     training_steps: int = 20_000_000  # Total training steps
-    games_per_iteration: int = 1  # Games to generate per training iteration
-    train_steps_per_iteration: int = 1  # Training steps per iteration
-    checkpoint_interval: int = 1000  # Save checkpoint every N steps
+    checkpoint_interval: int = 1000  # Save checkpoint and replay buffer every N steps
     log_interval: int = 100  # Log metrics every N steps
-    eval_interval: int = 1000  # Evaluate every N steps
-    eval_games: int = 10  # Number of games for evaluation
-
-    # ##>: Parallel self-play parameters.
-    num_parallel_games: int = 8  # Number of games to run in parallel
-    generation_interval: int = 100  # Generate games every N training steps
-
-    # ##>: Value scaling (paper: invertible transform for large rewards).
-    # ##>: h(x) = sign(x) * (sqrt(|x| + 1) - 1 + ε*x), ε = 0.001
-    value_epsilon: float = 0.001
+    eval_interval: int = 10_000  # Evaluate every N steps
+    eval_games: int = 16  # Number of games for evaluation
 
     # ##>: Loss weights.
     policy_loss_weight: float = 1.0
-    value_loss_weight: float = 0.25
+    value_loss_weight: float = 0.25  # Also weights the afterstate value loss
     reward_loss_weight: float = 1.0
     chance_loss_weight: float = 1.0
-    commitment_loss_weight: float = 0.25  # VQ-VAE commitment loss
+    commitment_loss_weight: float = 0.25  # VQ-VAE commitment cost β
 
     # ##>: Random seed.
     seed: int = 42
@@ -114,6 +112,39 @@ class TrainConfig:
         return temperature
 
 
+def save_config(config: TrainConfig, path: Path) -> None:
+    """
+    Write a configuration as JSON, so evaluation can rebuild the network a run was trained with.
+
+    Parameters
+    ----------
+    config : TrainConfig
+        Configuration to save.
+    path : Path
+        Destination file.
+    """
+    path.write_text(json.dumps(asdict(config), indent=2))
+
+
+def load_config(path: Path) -> TrainConfig:
+    """
+    Read a configuration written by `save_config`.
+
+    Parameters
+    ----------
+    path : Path
+        JSON file.
+
+    Returns
+    -------
+    TrainConfig
+        The saved configuration. Unknown fields raise a TypeError.
+    """
+    data = json.loads(path.read_text())
+    data['temperature_schedule'] = tuple(tuple(pair) for pair in data['temperature_schedule'])
+    return TrainConfig(**data)
+
+
 def default_config() -> TrainConfig:
     """
     Create default configuration for 2048.
@@ -126,11 +157,37 @@ def default_config() -> TrainConfig:
     return TrainConfig()
 
 
+def budget_config() -> TrainConfig:
+    """
+    Create the configuration for proving, on one GPU and a small budget, that the model reaches tile 2048.
+
+    Smaller models, fewer simulations, and a capped search depth than the paper: measured on an A40, the
+    paper model runs at 0.44 steps/s while this one is about 5x faster. Pair it with
+    `--stop-at-tile 2048 --max-hours H`.
+
+    Returns
+    -------
+    TrainConfig
+        Budget configuration.
+    """
+    return TrainConfig(
+        hidden_size=128,
+        num_residual_blocks=4,
+        num_simulations=50,
+        max_search_depth=10,
+        temperature_schedule=((0, 1.0), (100_000, 0.5), (200_000, 0.25), (300_000, 0.1)),
+        batch_size=512,
+        training_steps=1_000_000,
+        checkpoint_interval=5_000,
+        log_interval=500,
+        eval_interval=5_000,
+        eval_games=16,
+    )
+
+
 def small_config() -> TrainConfig:
     """
-    Create a smaller configuration for faster experimentation.
-
-    Reduces network size and training parameters for quick testing.
+    Create a smaller configuration for experiments on one GPU.
 
     Returns
     -------
@@ -141,21 +198,22 @@ def small_config() -> TrainConfig:
         hidden_size=128,
         num_residual_blocks=5,
         num_simulations=50,
+        temperature_schedule=((0, 1.0), (10_000, 0.5), (20_000, 0.1), (30_000, 0.0)),
+        num_parallel_games=64,
         replay_buffer_size=10_000,
         min_buffer_size=100,
         batch_size=256,
         training_steps=100_000,
-        checkpoint_interval=100,
-        log_interval=10,
-        eval_interval=100,
-        num_parallel_games=4,
-        generation_interval=50,
+        checkpoint_interval=1000,
+        log_interval=50,
+        eval_interval=2000,
+        eval_games=8,
     )
 
 
 def tiny_config() -> TrainConfig:
     """
-    Create a tiny configuration for debugging.
+    Create a tiny configuration for local debugging on a CPU.
 
     Returns
     -------
@@ -163,17 +221,21 @@ def tiny_config() -> TrainConfig:
         Minimal configuration for testing.
     """
     return TrainConfig(
-        hidden_size=64,
-        num_residual_blocks=2,
-        num_simulations=10,
+        hidden_size=32,
+        num_residual_blocks=1,
+        num_simulations=8,
+        temperature_schedule=((0, 1.0), (100, 0.5), (200, 0.1), (300, 0.0)),
+        num_parallel_games=4,
+        moves_per_generation=20,
+        generation_interval=5,
         replay_buffer_size=1_000,
-        min_buffer_size=10,
+        sequence_length=50,
+        min_buffer_size=2,
         batch_size=32,
+        warmup_steps=10,
         training_steps=1_000,
-        checkpoint_interval=100,
-        log_interval=1,
-        eval_interval=50,
+        checkpoint_interval=50,
+        log_interval=10,
+        eval_interval=500,
         eval_games=2,
-        num_parallel_games=2,
-        generation_interval=20,
     )
